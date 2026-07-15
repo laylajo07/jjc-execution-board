@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&family=Nanum+Gothic+Coding:wght@400;700&display=swap" rel="stylesheet">
+<title>조정치 · 회의록 실행보드 (B · 직접설계)</title>
+<script type="text/plain" id="sys-prompt">당신은 테크핀레이팅스의 회의 후속 조정 에이전트 "조정치"다.
+형식이 일정하지 않은 회의록(녹취본·급히 쓴 메모·카톡 붙여넣기 등)을 입력받아,
+참석 부서·구성원별로 후속 실행에 필요한 모든 것을 구조화하고, 부서별 공유 메시지까지 만든다.
+
+================================================================
+[핵심 원칙] — 반드시 지킨다
+================================================================
+1) 지어내지 않는다(No Fabrication). 회의록에 없는 담당자·기한·수치·결정은 창작하지 않는다.
+   - 명시됨 → status "확정"
+   - 문맥상 강하게 추론 가능(예: "PM이 총괄"에서 PM=작성자) → status "추정" + 근거 1줄
+   - 불명확/누락 → status "확인필요" 로 두고, 값은 "미정" 또는 "[미상]"
+2) 사실과 추론을 분리한다. 추정·가정은 반드시 assumptions에, 빠진 정보는 gaps에 따로 모은다.
+3) 원문 용어를 존중한다. 부서·사람 이름은 회의록 표현을 우선 쓰되, 아래 표준 본부로 매핑한다.
+4) 한국어로 출력한다. 간결하고 실행 가능한 동사형으로 쓴다("~작성", "~검토 요청").
+
+================================================================
+[부서 표준화] — 테크핀레이팅스 본부 체계로 정규화
+================================================================
+- 고객솔루션본부(영업)  ← 영업, 세일즈, 영업팀
+- 사업성장본부(마케팅)  ← 마케팅, 브랜드
+- CB본부(신용평가·모형) ← 평가본부, 데사팀(데이터사이언스), 모형, 리스크
+- ICT본부(데이터·개발)  ← 개발, 플랫폼, 데이터엔지니어링, 인프라
+- 경영본부(경영지원)    ← 경영지원, 재무, 회계, 인사, PMO/PM
+- 법무실               ← 법무, 컴플라이언스(준법감시)
+* 매핑이 불확실하면 원문 표기 + "[본부 확인필요]"를 병기한다. 사람↔부서가 불명확하면 [미상] 부서로 둔다.
+
+================================================================
+[처리 절차]
+================================================================
+STEP 1. 메타 추출: 회의 제목·일시·참석자(이름/원소속/표준본부). 없으면 "[미상]".
+STEP 2. 참석자를 표준 본부로 매핑. 발언·논의를 부서 단위로 귀속.
+STEP 3. 각 부서에 대해 아래 4가지를 추출:
+   (1) 할 일(action_items): 무엇을 | 담당 | 기한 | status(확정/추정/확인필요)
+   (2) 작성 문서(documents): 문서명 | 담당 | 기한 | 목적/포함내용(있으면)
+   (3) 의사결정 필요(decisions_needed): 안건 | 결정자 | 기한 | 선행조건(무엇이 정해져야 결정 가능)
+   (4) 진행 순서(dependencies): "A 완료/결정 전에는 B 불가" 형태의 선행-후행 관계
+STEP 4. 전체 선후행을 위상정렬해 "권장 진행 순서(sequence)"를 1,2,3… 으로 제시.
+        각 단계에 blocked_by(선행)·blocks(후행)를 표기. 병목·순환의존은 경고로 표시.
+STEP 5. 날짜 정규화: 상대표현(이달 말/다음주 화요일 등)은 회의일 기준 해석을 시도하되,
+        회의일이 불명확하면 원문 그대로 두고 status "확인필요".
+STEP 6. 부서별 공유 메시지 초안 작성:
+        - chat: 메신저용 3~5줄, 이모지 최소, 담당·기한·요청사항 명확. 확인필요 항목은 질문형으로.
+        - email: 정식 인사말+본문+마무리. 제목 포함.
+STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단정한 항목이 없는지 자기점검.
+
+================================================================
+[출력 형식] — 아래 순서로 정확히 두 블록을 출력
+================================================================
+### A. 실행보드 (사람이 읽는 마크다운)
+- 맨 위: 📌 한 줄 요약 + ▶ 지금 당장 할 일 Top 3 (담당·기한)
+- 이어서 부서별 섹션(## 부서명)마다: 할 일 / 작성 문서 / 의사결정 필요 (각 표)
+- 🔁 진행 순서(의존관계): 1. X → 2. Y(선행: X) → …, 병목은 ⚠️
+- ❓ 확인 필요(gaps) 와 🧩 가정(assumptions) 를 각각 목록으로
+- 부서별 공유 메시지: [메신저]/[이메일] 각각 코드블록으로
+
+### B. JSON (아래 스키마를 정확히 따르고, 유효한 JSON만 출력)
+{
+  "meeting": {"title": "", "datetime": "", "attendees": [{"name":"","raw_dept":"","dept":"","role":""}]},
+  "headline": "",
+  "top_actions": [{"what":"","owner":"","due":"","dept":""}],
+  "by_department": [
+    {
+      "dept": "",
+      "action_items": [{"what":"","owner":"","due":"","status":"확정|추정|확인필요","basis":""}],
+      "documents": [{"doc":"","owner":"","due":"","purpose":"","status":"확정|추정|확인필요"}],
+      "decisions_needed": [{"topic":"","decider":"","due":"","precondition":"","status":"확정|추정|확인필요"}]
+    }
+  ],
+  "sequence": [{"step":1,"task":"","dept":"","blocked_by":[],"blocks":[],"bottleneck":false}],
+  "share_messages": [{"dept":"","chat":"","email_subject":"","email_body":""}],
+  "assumptions": [""],
+  "gaps": [""]
+}
+규칙: 값이 없으면 빈 문자열/빈 배열. status는 세 값 중 하나. 마크다운(A)과 JSON(B)의 내용은 일치해야 한다.
+입력이 비어 있거나 회의 내용이 없으면 headline에 "처리할 회의 내용이 없습니다"를 넣고 빈 구조를 반환한다.</script>
+<script type="application/json" id="app-meta">{"approach":"B · 클로드에게 직접 설계"}</script>
+<style>
+  :root{
+    --paper:#eef1f6; --surface:#ffffff; --surface2:#f4f6fa; --inset:#eaeef4;
+    --ink:#0e1a2b; --ink2:#33465f; --muted:#69788f; --faint:#93a1b5;
+    --line:#dde3ec; --line2:#e8ecf3;
+    --primary:#2947cc; --primary-ink:#1b34a3; --primary-soft:#e7ebfb; --flow:#0aa3c2;
+    --ok:#0c8f63; --ok-bg:#e2f4ec; --est:#a45b12; --est-bg:#f8ecd8; --chk:#c53a52; --chk-bg:#fbe6ea;
+    --radius:16px; --radius-sm:10px;
+    --shadow-sm:0 1px 2px rgba(14,26,43,.05);
+    --shadow:0 2px 6px rgba(14,26,43,.06),0 12px 32px rgba(14,26,43,.07);
+    --sans:"Nanum Gothic","나눔고딕","Malgun Gothic","Apple SD Gothic Neo",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+    --mono:"Nanum Gothic Coding","나눔고딕코딩",ui-monospace,SFMono-Regular,Consolas,"D2Coding",monospace;
+  }
+  :root[data-theme="dark"], html[data-theme="dark"]{
+    --paper:#0a101c; --surface:#111a2b; --surface2:#0e1626; --inset:#16203400;
+    --ink:#e8edf6; --ink2:#c2ccdc; --muted:#8f9db5; --faint:#61708a;
+    --line:#22304a; --line2:#1b2740;
+    --primary:#6f8dff; --primary-ink:#a9baff; --primary-soft:#17203a; --flow:#3ecbe0;
+    --ok:#3fc389; --ok-bg:#10281d; --est:#e0a441; --est-bg:#2a2110; --chk:#f0788a; --chk-bg:#2c1620;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+    --shadow:0 2px 6px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.4);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --paper:#0a101c; --surface:#111a2b; --surface2:#0e1626;
+      --ink:#e8edf6; --ink2:#c2ccdc; --muted:#8f9db5; --faint:#61708a;
+      --line:#22304a; --line2:#1b2740;
+      --primary:#6f8dff; --primary-ink:#a9baff; --primary-soft:#17203a; --flow:#3ecbe0;
+      --ok:#3fc389; --ok-bg:#10281d; --est:#e0a441; --est-bg:#2a2110; --chk:#f0788a; --chk-bg:#2c1620;
+      --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+      --shadow:0 2px 6px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.4);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:
+      radial-gradient(1200px 500px at 100% -10%, color-mix(in srgb,var(--primary) 8%,transparent), transparent 60%),
+      var(--paper);
+    color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  ::selection{background:color-mix(in srgb,var(--primary) 24%,transparent)}
+
+  /* ── Header ── */
+  .top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    padding:12px clamp(16px,3vw,40px);border-bottom:1px solid var(--line);
+    background:color-mix(in srgb,var(--surface) 82%,transparent);backdrop-filter:saturate(1.4) blur(10px)}
+  .brand{display:flex;align-items:center;gap:11px;min-width:0}
+  .glyph{width:34px;height:34px;border-radius:10px;flex:none;display:grid;place-items:center;color:#fff;font-weight:800;font-size:16px;
+    background:linear-gradient(150deg,var(--primary),var(--flow));box-shadow:0 4px 14px color-mix(in srgb,var(--primary) 40%,transparent)}
+  .brand b{font-size:18px;font-weight:800;letter-spacing:-.03em;display:block;line-height:1.1}
+  .brand span{font-size:11.5px;color:var(--muted);letter-spacing:.01em;font-weight:600}
+  .top .spacer{margin-left:auto}
+  .ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .pill{font-size:11.5px;font-weight:700;border-radius:999px;padding:5px 11px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .pill.on{color:var(--ok);background:var(--ok-bg);border-color:transparent}
+  .pill.off{color:var(--est);background:var(--est-bg);border-color:transparent}
+  .selwrap{position:relative;display:inline-flex;align-items:center}
+  .selwrap::after{content:"▾";position:absolute;right:9px;color:var(--muted);font-size:10px;pointer-events:none}
+  select.model{appearance:none;font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--ink);
+    background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 26px 6px 10px;cursor:pointer}
+  select.model:disabled{opacity:.5;cursor:not-allowed}
+  .iconbtn{width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);
+    cursor:pointer;font-size:15px;display:grid;place-items:center}
+  .iconbtn:hover{border-color:var(--primary)}
+  .approach{font-size:11px;font-weight:700;color:var(--primary-ink);background:var(--primary-soft);border-radius:999px;padding:5px 11px;white-space:nowrap}
+
+  /* ── Shell ── */
+  .app{max-width:1460px;margin:0 auto;padding:clamp(16px,2.4vw,30px) clamp(16px,3vw,40px);
+    display:grid;grid-template-columns:minmax(330px,390px) minmax(0,1fr);gap:clamp(16px,2vw,26px);align-items:start}
+  @media(max-width:1000px){.app{grid-template-columns:1fr}}
+
+  /* ── Console (left) ── */
+  .console{position:sticky;top:78px;display:flex;flex-direction:column;gap:14px}
+  @media(max-width:1000px){.console{position:static}}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm)}
+  .card.pad{padding:18px}
+  .eyebrow{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--flow)}
+  .console h1{margin:6px 0 3px;font-size:16px;letter-spacing:-.01em}
+  .console .lead{margin:0 0 14px;font-size:12.5px;color:var(--muted)}
+  .field-label{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;font-weight:700;color:var(--ink2);margin:14px 0 6px}
+  .field-label .hint{font-weight:500;color:var(--faint)}
+  select.note, textarea, .paste{width:100%;font-family:var(--sans);font-size:13.5px;color:var(--ink);
+    background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:11px}
+  select.note{appearance:none;cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
+    background-position:calc(100% - 16px) 16px,calc(100% - 11px) 16px;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:30px}
+  textarea{min-height:300px;resize:vertical;line-height:1.55}
+  textarea.paste{min-height:160px;font-family:var(--mono);font-size:12px}
+  .row{display:flex;gap:8px}
+  .btn{font-family:var(--sans);font-size:13.5px;font-weight:700;border-radius:var(--radius-sm);border:1px solid var(--line);
+    background:var(--surface);color:var(--ink);padding:11px 14px;cursor:pointer;transition:.13s;white-space:nowrap}
+  .btn:hover{border-color:var(--primary)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.primary{background:linear-gradient(150deg,var(--primary),color-mix(in srgb,var(--primary) 72%,var(--flow)));
+    border-color:transparent;color:#fff;box-shadow:0 6px 18px color-mix(in srgb,var(--primary) 32%,transparent)}
+  .btn.primary:hover{filter:brightness(1.05)}
+  .btn.block{width:100%;justify-content:center;display:inline-flex;align-items:center;gap:7px}
+  .btn.icon{width:44px;padding:11px 0;justify-content:center;flex:none}
+  .flow{margin-top:16px;border-top:1px dashed var(--line);padding-top:14px}
+  .flow ol{margin:0 0 12px;padding:0;list-style:none;counter-reset:s}
+  .flow li{position:relative;padding:0 0 9px 26px;font-size:12px;color:var(--muted)}
+  .flow li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:-1px;width:18px;height:18px;border-radius:6px;
+    background:var(--primary-soft);color:var(--primary-ink);font-family:var(--mono);font-weight:700;font-size:10px;display:grid;place-items:center}
+  .flow li b{color:var(--ink2)}
+
+  /* ── Board (right) ── */
+  .board{min-height:70vh}
+  .board-tools{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-bottom:12px}
+  .board-tools .btn{font-size:12.5px;padding:8px 12px}
+  .empty{background:var(--surface);border:1px dashed var(--line);border-radius:var(--radius);
+    display:grid;place-items:center;min-height:56vh;text-align:center;color:var(--muted);padding:40px}
+  .empty .art{width:74px;height:74px;border-radius:20px;display:grid;place-items:center;margin:0 auto 16px;font-size:32px;
+    background:var(--surface2);border:1px solid var(--line);color:var(--faint)}
+  .empty h3{margin:0 0 6px;color:var(--ink2);font-size:16px}
+  .empty p{margin:0;font-size:13px;max-width:460px;line-height:1.6}
+  .empty .dots{display:inline-flex;gap:5px;margin-bottom:14px}
+  .empty .dots i{width:8px;height:8px;border-radius:50%;background:var(--primary);opacity:.4;animation:blink 1.2s infinite}
+  .empty .dots i:nth-child(2){animation-delay:.2s}.empty .dots i:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+  .streaming{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow-sm)}
+  .stream-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-weight:700;color:var(--ink2);margin-bottom:12px;font-size:14px}
+  .stream-head .dots{display:inline-flex;gap:5px}
+  .stream-head .dots i{width:7px;height:7px;border-radius:50%;background:var(--primary);animation:blink 1.2s infinite}
+  .stream-head .dots i:nth-child(2){animation-delay:.2s}.stream-head .dots i:nth-child(3){animation-delay:.4s}
+  .stream-head .stream-sub{font-weight:500;color:var(--muted);font-size:12px}
+  .stream-pre{margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--mono);font-size:11.5px;line-height:1.5;color:var(--ink2);
+    min-height:120px;max-height:62vh;overflow:auto;background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:12px}
+
+  /* summary strip */
+  .summary{background:
+      linear-gradient(135deg,color-mix(in srgb,var(--primary) 12%,transparent),transparent 62%),var(--surface);
+    border:1px solid var(--line);border-left:3px solid var(--primary);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow-sm)}
+  .summary .eyebrow{color:var(--primary-ink)}
+  .summary h2{margin:8px 0 14px;font-size:18px;line-height:1.4;letter-spacing:-.01em}
+  .top3{display:grid;gap:9px}
+  @media(min-width:620px){.top3{grid-template-columns:1fr 1fr 1fr}}
+  .top3 .it{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px}
+  .top3 .rk{font-family:var(--mono);font-weight:800;color:#fff;background:var(--primary);border-radius:6px;min-width:20px;height:20px;
+    display:grid;place-items:center;font-size:11px;flex:none;margin-top:1px}
+  .top3 .wt{font-size:12.5px;font-weight:600;line-height:1.35}
+  .top3 .mt{font-size:11px;color:var(--muted);margin-top:4px}
+
+  /* section heading */
+  .sec-h{display:flex;align-items:center;gap:10px;margin:22px 2px 12px}
+  .sec-h .n{font-family:var(--mono);font-size:11px;color:var(--flow);letter-spacing:.1em}
+  .sec-h h3{margin:0;font-size:14.5px;letter-spacing:-.01em}
+  .sec-h .rule{flex:1;height:1px;background:var(--line)}
+
+  /* dept grid */
+  .depts{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
+  .dept{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow-sm)}
+  .dept__h{display:flex;align-items:center;gap:8px;padding:12px 15px;border-bottom:1px solid var(--line2);
+    background:linear-gradient(180deg,var(--surface2),transparent)}
+  .dept__h .dot{width:9px;height:9px;border-radius:3px;background:var(--primary);flex:none}
+  .dept__h .nm{font-weight:800;font-size:13.5px;letter-spacing:-.01em}
+  .dept__b{padding:6px 15px 15px}
+  .block{margin-top:12px}
+  .block__l{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:5px}
+  table.t{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.t th{text-align:left;font-size:10.5px;font-weight:600;color:var(--faint);padding:4px 8px 4px 0;border-bottom:1px solid var(--line2)}
+  table.t td{padding:7px 8px 7px 0;border-bottom:1px solid var(--line2);vertical-align:top}
+  table.t tr:last-child td{border-bottom:0}
+  td.who,td.when{white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--ink2)}
+  .basis{color:var(--muted);font-size:11px;margin-top:2px}
+  .tag{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;border-radius:5px;padding:2px 6px;white-space:nowrap}
+  .tag.ok{color:var(--ok);background:var(--ok-bg)} .tag.est{color:var(--est);background:var(--est-bg)} .tag.chk{color:var(--chk);background:var(--chk-bg)}
+
+  /* signature: critical-path rail */
+  .rail{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px 18px 18px;box-shadow:var(--shadow-sm)}
+  .track{list-style:none;margin:8px 0 0;padding:0;position:relative}
+  .track::before{content:"";position:absolute;left:13px;top:10px;bottom:10px;width:2px;
+    background:linear-gradient(var(--flow),color-mix(in srgb,var(--primary) 60%,transparent))}
+  .node{position:relative;padding:0 0 14px 40px}
+  .node:last-child{padding-bottom:2px}
+  .node .dot{position:absolute;left:6px;top:2px;width:16px;height:16px;border-radius:50%;background:var(--surface);
+    border:3px solid var(--primary);z-index:1}
+  .node.bott .dot{border-color:var(--chk);box-shadow:0 0 0 4px var(--chk-bg)}
+  .node .nc{background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:9px 12px}
+  .node.bott .nc{border-color:color-mix(in srgb,var(--chk) 50%,var(--line));background:color-mix(in srgb,var(--chk-bg) 60%,var(--surface2))}
+  .node .tk{font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .node .flag{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--chk);background:var(--chk-bg);border-radius:5px;padding:1px 6px}
+  .node .dep{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px}
+  .node .dchip{color:var(--primary-ink)}
+
+  /* gaps / assumptions */
+  .cols2{display:grid;gap:14px}
+  @media(min-width:640px){.cols2{grid-template-columns:1fr 1fr}}
+  .panelbox{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px}
+  .panelbox .block__l{margin-bottom:8px}
+  .chips{display:flex;flex-direction:column;gap:6px}
+  .chip{font-size:12px;line-height:1.4;border-left:3px solid var(--line);padding:4px 0 4px 10px;color:var(--ink2)}
+  .chip.gap{border-color:var(--chk)} .chip.asm{border-color:var(--flow)}
+
+  /* share messages */
+  .msg{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);margin-bottom:10px;overflow:hidden}
+  .msg .mh{display:flex;align-items:center;gap:8px;padding:9px 13px;font-size:12.5px;font-weight:700;background:var(--surface2);border-bottom:1px solid var(--line2)}
+  .msg .mh .kind{font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .msg .mh .cp{margin-left:auto}
+  .msg pre{margin:0;padding:12px 13px;white-space:pre-wrap;word-break:break-word;font-family:var(--sans);font-size:12.5px;color:var(--ink2);line-height:1.5}
+  .btn.mini{font-size:11px;padding:4px 9px;border-radius:7px}
+
+  details.raw{margin-top:18px}
+  details.raw summary{cursor:pointer;color:var(--muted);font-size:12px;font-family:var(--mono)}
+  details.raw pre{white-space:pre-wrap;font-family:var(--mono);font-size:11.5px;background:var(--surface);border:1px solid var(--line);
+    border-radius:var(--radius-sm);padding:14px;max-height:360px;overflow:auto;margin-top:8px}
+
+  .spin{width:16px;height:16px;border:2px solid color-mix(in srgb,var(--primary) 30%,transparent);border-top-color:var(--primary);
+    border-radius:50%;display:inline-block;animation:sp .8s linear infinite;vertical-align:-3px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,20px);opacity:0;background:var(--ink);color:var(--paper);
+    padding:10px 18px;border-radius:10px;font-size:13px;font-weight:700;transition:.22s;pointer-events:none;z-index:40;box-shadow:var(--shadow)}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  :focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:6px}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="glyph">조</span>
+    <span><b>조정치</b><span>회의록 → 부서별 실행보드</span></span>
+  </div>
+  <div class="spacer"></div>
+  <div class="ctl">
+    <span id="mode" class="pill">모드 확인 중…</span>
+    <span class="selwrap"><select class="model" id="modelSel" title="자동 모드에서 사용할 모델">
+      <option value="">모델: 러너 기본</option>
+      <option value="claude-haiku-4-5-20251001">Haiku 4.5 · 최속</option>
+      <option value="claude-sonnet-5">Sonnet 5 · 균형</option>
+      <option value="claude-opus-4-8">Opus 4.8 · 정밀</option>
+    </select></span>
+    <button class="iconbtn" id="themeBtn" title="라이트/다크 전환">◐</button>
+    <span class="approach" id="approachTag">산출물</span>
+  </div>
+</header>
+
+<div class="app">
+  <!-- 콘솔 -->
+  <aside class="console">
+    <section class="card pad">
+      <div class="eyebrow">INPUT · 회의록</div>
+      <h1>회의록을 넣고 분석</h1>
+      <p class="lead" id="lead">형식은 자유입니다. 녹취본·메모·카톡 붙여넣기 모두 됩니다.</p>
+
+      <div id="autoBox" style="display:none">
+        <div class="field-label">공용 폴더에서 선택 <span class="hint">회의록/</span></div>
+        <div class="row">
+          <select class="note" id="noteSelect" style="flex:1"></select>
+          <button class="btn icon" id="reloadNotes" title="목록 새로고침">↻</button>
+        </div>
+      </div>
+
+      <div class="field-label">직접 붙여넣기</div>
+      <textarea id="noteText" placeholder="여기에 회의록을 붙여넣으세요…"></textarea>
+
+      <div class="row" style="margin-top:14px">
+        <button class="btn primary block" id="analyzeBtn">회의록 분석</button>
+      </div>
+
+      <div class="flow" id="copyFlow" style="display:none">
+        <div class="eyebrow" style="color:var(--muted)">복붙 모드 · 러너 없이 바로 사용</div>
+        <ol style="margin-top:10px">
+          <li><b>[프롬프트 복사]</b> 를 눌러 로그인된 Claude(Claude Code·데스크톱·웹)에 붙여넣고 실행하세요.</li>
+          <li>Claude가 출력한 결과(마크다운 + JSON)를 전체 복사합니다.</li>
+          <li>아래 칸에 붙여넣고 <b>[보드 렌더링]</b> 을 누르면 실행보드가 나타납니다.</li>
+        </ol>
+        <button class="btn primary block" id="copyPromptBtn">프롬프트 복사</button>
+        <div class="field-label">결과 붙여넣기</div>
+        <textarea class="paste" id="pasteResult" placeholder="Claude 응답 전체 (JSON 블록 포함)"></textarea>
+        <div class="row" style="margin-top:8px"><button class="btn primary block" id="renderPasteBtn">보드 렌더링</button></div>
+      </div>
+    </section>
+  </aside>
+
+  <!-- 보드 -->
+  <main class="board">
+    <div class="board-tools">
+      <button class="btn" id="copyMdBtn" disabled>마크다운 복사</button>
+      <button class="btn" id="dlJsonBtn" disabled>JSON 저장</button>
+      <button class="btn" id="printBtn" disabled>인쇄 · PDF</button>
+    </div>
+    <div id="result">
+      <div class="empty">
+        <div>
+          <div class="art">▤</div>
+          <h3>실행보드가 여기에 나타납니다</h3>
+          <p>왼쪽에서 회의록을 넣고 <b>분석</b>하면 부서별 할 일·문서·의사결정과 진행 순서가 정리됩니다.</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const SYS = $('#sys-prompt').textContent.trim();
+const META = JSON.parse($('#app-meta').textContent);
+$('#approachTag').textContent = META.approach;
+let lastData=null, lastMarkdown='', AUTO=false;
+
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1700);}
+function esc(s){return (s??'').toString().replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+async function copy(text){try{await navigator.clipboard.writeText(text);toast('복사됐습니다');}catch(e){
+  const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('복사됐습니다');}}
+const sc = st => ({'확정':'ok','추정':'est','확인필요':'chk'}[st]||'chk');
+
+/* theme toggle */
+(function(){const saved=localStorage.getItem('jjc-theme');if(saved)document.documentElement.setAttribute('data-theme',saved);})();
+$('#themeBtn').onclick=()=>{const cur=document.documentElement.getAttribute('data-theme');
+  const next=cur==='dark'?'light':(cur==='light'?'dark':(matchMedia('(prefers-color-scheme:dark)').matches?'light':'dark'));
+  document.documentElement.setAttribute('data-theme',next);localStorage.setItem('jjc-theme',next);};
+
+/* mode detect + 수동 토글 */
+let runnerUp=false;
+async function probeRunner(){try{const r=await fetch('/api/health',{cache:'no-store'});runnerUp=!!r.ok;}catch(e){runnerUp=false;}return runnerUp;}
+function applyMode(auto){
+  AUTO=auto;
+  if(auto){
+    $('#mode').className='pill on';$('#mode').textContent='⚡ 자동 모드';
+    $('#autoBox').style.display='block';$('#copyFlow').style.display='none';$('#analyzeBtn').style.display='';
+    $('#lead').textContent='러너가 로컬에 로그인된 Claude를 대신 실행합니다. API 키가 필요 없습니다.';
+    $('#modelSel').disabled=false;loadNotes();
+  }else{
+    $('#mode').className='pill off';$('#mode').textContent='📋 복붙 모드';
+    $('#autoBox').style.display='none';$('#copyFlow').style.display='block';$('#analyzeBtn').style.display='none';
+    $('#lead').textContent='러너 없이 바로 쓰는 방식입니다. 아래에서 프롬프트를 복사해 로그인된 Claude에 붙여넣어 실행한 뒤, 나온 결과를 다시 붙여넣으면 실행보드가 만들어집니다.';
+    $('#modelSel').disabled=true;
+  }
+}
+$('#mode').style.cursor='pointer';$('#mode').title='클릭해서 자동/복붙 모드 전환';
+$('#mode').onclick=async()=>{
+  if(AUTO){applyMode(false);return;}
+  if(await probeRunner())applyMode(true);
+  else toast('러너가 실행 중이 아니어서 자동 모드를 켤 수 없습니다. 러너를 켜거나 복붙 모드로 진행하세요.');
+};
+function initMode(){ applyMode(false); }  // 기본은 복붙 모드. 러너가 있으면 헤더 표시등 클릭으로 자동 전환.
+async function loadNotes(){
+  try{const list=await (await fetch('/api/notes',{cache:'no-store'})).json();
+    $('#noteSelect').innerHTML='<option value="">— 회의록 선택 —</option>'+list.map(n=>`<option>${esc(n.name)}</option>`).join('');
+  }catch(e){}
+}
+$('#reloadNotes').onclick=loadNotes;
+$('#noteSelect').onchange=async e=>{const name=e.target.value;if(!name)return;
+  try{const j=await (await fetch('/api/note?name='+encodeURIComponent(name))).json();$('#noteText').value=j.content||'';}catch(e){}};
+
+/* analyze (auto) */
+async function analyze(){
+  const note=$('#noteText').value.trim();
+  if(!note){toast('회의록을 입력하세요');return;}
+  const model=$('#modelSel').value;
+  setLoading(true);
+  const pre=()=>document.getElementById('streamPre');
+  let acc='';
+  try{
+    const name=document.querySelector('#noteSelect')?.value||'';
+    const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note,model,name})});
+    if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||('러너 오류 '+r.status));}
+    const ct=r.headers.get('Content-Type')||'';
+    if(ct.includes('text/event-stream')&&r.body){
+      const reader=r.body.getReader(),dec=new TextDecoder();let buf='';
+      for(;;){const {value,done}=await reader.read();if(done)break;
+        buf+=dec.decode(value,{stream:true});let i;
+        while((i=buf.indexOf('\n\n'))>=0){
+          let line=buf.slice(0,i);buf=buf.slice(i+2);
+          line=line.startsWith('data:')?line.slice(5).trim():line.trim();
+          if(!line)continue;let ev;try{ev=JSON.parse(line);}catch(e){continue;}
+          if(ev.t!=null){acc+=ev.t;const p=pre();if(p){p.textContent=acc;p.scrollTop=p.scrollHeight;}}
+          else if(ev.error){throw new Error(ev.error);}
+          else if(ev.done){lastMarkdown=ev.markdown||acc;render(ev.json||parseResult(ev.markdown||acc));if(ev.savedTo)toast('결과 저장: '+ev.savedTo);resetBtn();return;}
+        }
+      }
+      lastMarkdown=acc;const d=parseResult(acc);
+      if(d)render(d);else renderError('생성은 끝났지만 JSON을 찾지 못했습니다. 원본 마크다운을 확인하세요.');
+    }else{
+      const j=await r.json();lastMarkdown=j.markdown||'';
+      render(j.json||parseResult(j.raw||j.markdown||''));if(j.savedTo)toast('결과 저장: '+j.savedTo);
+    }
+  }catch(e){renderError(e.message);}
+  resetBtn();
+}
+function resetBtn(){$('#analyzeBtn').disabled=false;$('#analyzeBtn').innerHTML='회의록 분석';}
+function setLoading(on){
+  $('#analyzeBtn').disabled=on;
+  $('#analyzeBtn').innerHTML= on?'<span class="spin"></span> 분석 중…':'회의록 분석';
+  if(on)$('#result').innerHTML='<div class="streaming"><div class="stream-head"><span class="dots"><i></i><i></i><i></i></span>조정치가 회의록을 구조화하는 중… <span class="stream-sub">생성되는 내용이 아래에 실시간으로 표시됩니다</span></div><pre id="streamPre" class="stream-pre"></pre></div>';
+}
+
+/* copy-paste */
+function fullPrompt(note){return SYS+'\n\n================================================================\n# 처리할 회의록 (형식 그대로)\n================================================================\n'+note+'\n\n위 지침에 따라 "A. 실행보드(마크다운)"와 "B. JSON" 두 블록을 순서대로 출력해줘.';}
+$('#copyPromptBtn').onclick=()=>{const n=$('#noteText').value.trim();if(!n){toast('회의록을 입력하세요');return;}copy(fullPrompt(n));};
+$('#renderPasteBtn').onclick=()=>{const t=$('#pasteResult').value.trim();if(!t){toast('결과를 붙여넣으세요');return;}
+  const d=parseResult(t);
+  if(d){lastMarkdown=t.replace(/```json[\s\S]*?```/i,'').trim();render(d);return;}
+  const s=t.indexOf('{'),e=t.lastIndexOf('}');
+  if(s>=0&&e>s){let msg='';try{JSON.parse(t.slice(s,e+1));}catch(x){msg=' ('+x.message+')';}
+    renderError('JSON은 찾았지만 형식이 깨져 있습니다 — 응답이 중간에 잘렸거나 복사가 일부 누락된 것 같습니다.'+msg+' Claude 응답을 처음부터 끝까지 전체 복사해 다시 붙여넣어 주세요. 러너 자동 모드를 쓰면 복사 없이 처리됩니다.');}
+  else renderError('붙여넣은 내용에서 JSON 블록을 찾지 못했습니다. Claude 응답의 "B. JSON" 블록(중괄호 { … })까지 포함해 붙여넣어 주세요.');};
+$('#analyzeBtn').onclick=analyze;
+
+/* parse */
+function parseResult(text){
+  if(!text)return null;
+  let m=text.match(/```json\s*([\s\S]*?)```/i);let c=m?m[1]:null;
+  if(!c){const s=text.indexOf('{'),e=text.lastIndexOf('}');if(s>=0&&e>s)c=text.slice(s,e+1);}
+  if(!c)return null;
+  for(const cand of [c,c.replace(/,\s*([}\]])/g,'$1')]){try{return JSON.parse(cand);}catch(e){}}
+  return null;
+}
+
+/* normalize A/B schemas */
+function normalize(d){
+  if(!d)return d;const mt=d.meeting||{};
+  const deps=(d.by_department||d.departments||[]).map(x=>({
+    dept:x.dept||x.name||'[미상]',
+    action_items:(x.action_items||x.tasks||[]).map(a=>({what:a.what||a.content||'',owner:a.owner||'',due:a.due||a.deadline||'',status:a.status||'',basis:a.basis||''})),
+    documents:(x.documents||[]).map(dd=>typeof dd==='string'?{doc:dd}:({doc:dd.doc||dd.name||dd.title||'',owner:dd.owner||'',due:dd.due||dd.deadline||'',purpose:dd.purpose||'',status:dd.status||''})),
+    decisions_needed:(x.decisions_needed||x.decisions||[]).map(dc=>({topic:dc.topic||dc.item||'',decider:dc.decider||'',due:dc.due||dc.deadline||'',precondition:dc.precondition||'',status:dc.status||''})),
+    _rd:x.dependencies||[]}));
+  let seq=d.sequence||[];
+  if(!seq.length){const acc=[];deps.forEach(dp=>(dp._rd||[]).forEach(r=>acc.push({task:r.after||'',dept:dp.dept,blocked_by:r.before?[r.before]:[],bottleneck:false})));
+    (d.dependencies||[]).forEach(r=>acc.push({task:r.after||'',dept:'',blocked_by:r.before?[r.before]:[],bottleneck:false}));seq=acc;}
+  let sm=d.share_messages;
+  if(!sm||!sm.length){sm=(d.by_department||d.departments||[]).filter(x=>x.share_message).map(x=>({dept:x.dept||x.name||'',chat:x.share_message.chat||'',email_subject:x.share_message.email_subject||'',email_body:x.share_message.email||x.share_message.email_body||''}));}
+  else sm=sm.map(m=>({dept:m.dept||'',chat:m.chat||'',email_subject:m.email_subject||'',email_body:m.email_body||m.email||''}));
+  return {meeting:{title:mt.title||'',datetime:mt.datetime||mt.date||'',attendees:mt.attendees||[]},
+    headline:d.headline||'',top_actions:d.top_actions||[],by_department:deps,sequence:seq,share_messages:sm,
+    assumptions:d.assumptions||[],gaps:d.gaps||[]};
+}
+
+/* render helpers */
+function tag(st){return st?`<span class="tag ${sc(st)}">${esc(st)}</span>`:'';}
+function tblAI(items){if(!items||!items.length)return '';
+  return `<div class="block"><div class="block__l">할 일</div><table class="t"><tr><th>내용</th><th>담당</th><th>기한</th><th>상태</th></tr>`+
+    items.map(a=>`<tr><td>${esc(a.what)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who">${esc(a.owner||'미정')}</td><td class="when">${esc(a.due||'미정')}</td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
+function tblDoc(items){if(!items||!items.length)return '';
+  return `<div class="block"><div class="block__l">작성 문서</div><table class="t"><tr><th>문서</th><th>담당</th><th>기한</th><th>목적</th></tr>`+
+    items.map(d=>`<tr><td>${esc(d.doc)} ${tag(d.status)}</td><td class="who">${esc(d.owner||'미정')}</td><td class="when">${esc(d.due||'미정')}</td><td>${esc(d.purpose||'')}</td></tr>`).join('')+`</table></div>`;}
+function tblDec(items){if(!items||!items.length)return '';
+  return `<div class="block"><div class="block__l">의사결정 필요</div><table class="t"><tr><th>안건</th><th>결정자</th><th>기한</th><th>선행조건</th></tr>`+
+    items.map(d=>`<tr><td>${esc(d.topic)} ${tag(d.status)}</td><td class="who">${esc(d.decider||'미정')}</td><td class="when">${esc(d.due||'미정')}</td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
+function secH(n,t){return `<div class="sec-h"><span class="n mono">${n}</span><h3>${t}</h3><span class="rule"></span></div>`;}
+
+function render(raw){
+  if(!raw){renderError('데이터가 비어 있습니다.');return;}
+  const d=normalize(raw);lastData=raw;const mt=d.meeting||{};
+  let h='';
+  h+=`<div class="summary"><div class="eyebrow">SUMMARY · ${esc(mt.title||'제목 미상')} · ${esc(mt.datetime||'일시 미상')}</div>`;
+  h+=`<h2>${esc(d.headline||'회의 실행보드')}</h2>`;
+  if(d.top_actions&&d.top_actions.length){h+='<div class="top3">'+d.top_actions.slice(0,3).map((t,i)=>
+    `<div class="it"><span class="rk">${i+1}</span><div><div class="wt">${esc(t.what)}</div><div class="mt mono">${esc(t.dept||'')} · ${esc(t.owner||'미정')} · ${esc(t.due||'미정')}</div></div></div>`).join('')+'</div>';}
+  h+='</div>';
+
+  h+=secH('01','부서별 실행 항목');
+  h+='<div class="depts">'+ (d.by_department||[]).map(dep=>
+    `<section class="dept"><div class="dept__h"><span class="dot"></span><span class="nm">${esc(dep.dept)}</span></div><div class="dept__b">`+
+    (tblAI(dep.action_items)+tblDoc(dep.documents)+tblDec(dep.decisions_needed) || '<div class="block"><div class="basis">추출된 항목 없음</div></div>')+
+    `</div></section>`).join('') + '</div>';
+
+  if(d.sequence&&d.sequence.length){
+    h+=secH('02','권장 진행 순서 · 크리티컬 패스');
+    h+='<div class="rail"><ol class="track">'+d.sequence.map(s=>
+      `<li class="node ${s.bottleneck?'bott':''}"><span class="dot"></span><div class="nc"><div class="tk">${esc(s.task)}${s.bottleneck?'<span class="flag">병목</span>':''}</div>`+
+      ((s.dept||(s.blocked_by&&s.blocked_by.length))?`<div class="dep">${s.dept?esc(s.dept):''}${(s.blocked_by&&s.blocked_by.length)?` · 선행: <span class="dchip">${s.blocked_by.map(esc).join(', ')}</span>`:''}</div>`:'')+
+      `</div></li>`).join('')+'</ol></div>';
+  }
+
+  if((d.gaps&&d.gaps.length)||(d.assumptions&&d.assumptions.length)){
+    h+=secH('03','확인 필요 · 가정');
+    h+='<div class="cols2">';
+    h+=`<div class="panelbox"><div class="block__l">❓ 확인 필요 (gaps)</div><div class="chips">${(d.gaps||[]).filter(Boolean).map(g=>`<span class="chip gap">${esc(g)}</span>`).join('')||'<span class="chip">없음</span>'}</div></div>`;
+    h+=`<div class="panelbox"><div class="block__l">🧩 가정 (assumptions)</div><div class="chips">${(d.assumptions||[]).filter(Boolean).map(a=>`<span class="chip asm">${esc(a)}</span>`).join('')||'<span class="chip">없음</span>'}</div></div>`;
+    h+='</div>';
+  }
+
+  if(d.share_messages&&d.share_messages.length){
+    h+=secH('04','부서별 공유 메시지');
+    d.share_messages.forEach((m,i)=>{
+      if(m.chat)h+=`<div class="msg"><div class="mh">💬 ${esc(m.dept)}<span class="kind">메신저</span><button class="btn mini cp" data-c="c${i}">복사</button></div><pre id="c${i}">${esc(m.chat)}</pre></div>`;
+      if(m.email_body)h+=`<div class="msg"><div class="mh">✉️ ${esc(m.dept)}<span class="kind">이메일</span><button class="btn mini cp" data-c="e${i}">복사</button></div><pre id="e${i}">${esc((m.email_subject?('제목: '+m.email_subject+'\n\n'):'')+m.email_body)}</pre></div>`;
+    });
+  }
+
+  h+=`<details class="raw"><summary>원본 마크다운 / JSON</summary><pre>${esc(lastMarkdown||'')}\n\n${esc(JSON.stringify(raw,null,2))}</pre></details>`;
+  $('#result').innerHTML=h;
+  document.querySelectorAll('.msg .cp').forEach(b=>b.onclick=()=>copy($('#'+b.dataset.c).textContent));
+  ['#copyMdBtn','#dlJsonBtn','#printBtn'].forEach(s=>$(s).disabled=false);
+}
+function renderError(msg){$('#result').innerHTML=`<div class="empty"><div><div class="art" style="color:var(--chk)">!</div><h3>처리하지 못했습니다</h3><p>${esc(msg)}</p></div></div>`;}
+
+$('#copyMdBtn').onclick=()=>copy(lastMarkdown||JSON.stringify(lastData,null,2));
+$('#dlJsonBtn').onclick=()=>{const b=new Blob([JSON.stringify(lastData,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='조정치_결과.json';a.click();};
+$('#printBtn').onclick=()=>window.print();
+
+initMode();
+</script>
+</body>
+</html>

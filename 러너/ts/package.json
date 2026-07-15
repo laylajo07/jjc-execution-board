@@ -1,0 +1,16 @@
+{
+  "name": "jojeongchi-runner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "조정치 공용 러너 (TS/pnpm) — 웹앱 서빙 + claude -p 실행 (API 키 불필요)",
+  "scripts": {
+    "start": "tsx server.ts",
+    "start:B": "tsx server.ts ../../B_직접/앱 8787",
+    "start:A": "tsx server.ts ../../A_웹페이지/앱 8788"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "@types/node": "^22.10.0"
+  }
+}
