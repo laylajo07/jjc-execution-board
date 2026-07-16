@@ -60,3 +60,52 @@ test('blocked_by_external은 엣지가 아니라 노드의 externals로 보존�
   assert.deepEqual(node(g, 'T1').externals, ['제품 스펙 확정']);
   assert.equal(g.edges.length, 0);
 });
+
+test('순환 의존을 탐지하고 경고한다 — 조용히 버리지 않는다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: 'a', dept: '', blocked_by: ['T3'] },
+    { id: 'T2', task: 'b', dept: '', blocked_by: ['T1'] },
+    { id: 'T3', task: 'c', dept: '', blocked_by: ['T2'] },
+  ]);
+  const cyc = g.warnings.filter(w => w.type === 'cycle');
+  assert.equal(cyc.length, 1, '순환 경고가 있어야 한다');
+  assert.match(cyc[0].detail, /T1|T2|T3/);
+  // back edge를 뺐으므로 레이아웃은 유한해야 한다
+  assert.ok(g.nodes.every(n => Number.isFinite(n.depth)));
+});
+
+test('자기 자신을 선행으로 적으면 엣지가 되지 않는다', () => {
+  const g = buildGraph([{ id: 'T1', task: 'a', dept: '', blocked_by: ['T1'] }]);
+  assert.equal(g.edges.length, 0);
+  assert.deepEqual(g.nodes[0].externals, ['T1']);
+});
+
+test('없는 id를 선행으로 적으면 external로 강등하고 경고한다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: 'a', dept: '', blocked_by: ['없는거'] },
+  ]);
+  assert.equal(g.edges.length, 0);
+  assert.deepEqual(g.nodes[0].externals, ['없는거']);
+  assert.equal(g.stats.edgeTotal, 1);
+  assert.equal(g.stats.edgeResolved, 0);
+  assert.ok(g.warnings.some(w => w.type === 'unresolved'));
+});
+
+test('빈 입력', () => {
+  const g = buildGraph([]);
+  assert.deepEqual(g.nodes, []);
+  assert.ok(g.warnings.some(w => w.type === 'empty'));
+});
+
+test('노드 1개면 single 경고 — 다이어그램 대신 한 줄로 표시하게 한다', () => {
+  const g = buildGraph([{ id: 'T1', task: 'a', dept: '', blocked_by: [] }]);
+  assert.ok(g.warnings.some(w => w.type === 'single'));
+});
+
+test('id가 없으면 배열 순서로 T1..Tn을 자동 부여한다', () => {
+  const g = buildGraph([
+    { task: 'a', dept: '', blocked_by: [] },
+    { task: 'b', dept: '', blocked_by: [] },
+  ]);
+  assert.deepEqual(g.nodes.map(n => n.id), ['T1', 'T2']);
+});

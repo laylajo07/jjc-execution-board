@@ -38,6 +38,31 @@
     return { edges: edges, total: total, resolved: resolved };
   }
 
+  // DFS로 back edge를 찾아 제거한다. 제거한 것은 반드시 경고로 알린다.
+  function detectCycles(nodes, edges) {
+    var adj = {}, state = {}, backs = [], cycles = [], stack = [];
+    nodes.forEach(function (n) { adj[n.id] = []; state[n.id] = 0; });
+    edges.forEach(function (e) { adj[e.from].push(e); });
+
+    function dfs(id) {
+      state[id] = 1; stack.push(id);
+      adj[id].forEach(function (e) {
+        if (state[e.to] === 1) {
+          backs.push(e);
+          var at = stack.indexOf(e.to);
+          cycles.push(stack.slice(at).concat(e.to).join('→'));
+        } else if (state[e.to] === 0) {
+          dfs(e.to);
+        }
+      });
+      stack.pop(); state[id] = 2;
+    }
+    nodes.forEach(function (n) { if (state[n.id] === 0) dfs(n.id); });
+
+    var kept = edges.filter(function (e) { return backs.indexOf(e) === -1; });
+    return { edges: kept, cycles: cycles };
+  }
+
   function predMap(nodes, edges) {
     var m = {};
     nodes.forEach(function (n) { m[n.id] = []; });
@@ -111,7 +136,24 @@
     nodes.forEach(function (n) { index[n.id] = n; });
 
     var built = buildEdges(seq, nodes, index);
-    var edges = built.edges;
+    var warnings = [];
+
+    var cyc = detectCycles(nodes, built.edges);
+    var edges = cyc.edges;
+    cyc.cycles.forEach(function (c) {
+      warnings.push({ type: 'cycle', detail: c });
+    });
+
+    var unresolved = built.total - built.resolved;
+    if (unresolved > 0) {
+      warnings.push({
+        type: 'unresolved',
+        detail: '선행 ' + built.total + '개 중 ' + unresolved + '개를 작업 목록에서 찾지 못해 별도 표시합니다'
+      });
+    }
+    if (nodes.length === 1) {
+      warnings.push({ type: 'single', detail: '작업이 하나뿐이라 의존 관계가 없습니다' });
+    }
 
     var preds = predMap(nodes, edges);
     var succ = succMap(nodes, edges);
@@ -120,7 +162,7 @@
     markBottleneck(nodes, edges);
 
     return {
-      nodes: nodes, edges: edges, warnings: [],
+      nodes: nodes, edges: edges, warnings: warnings,
       stats: { edgeTotal: built.total, edgeResolved: built.resolved, mode: 'id' }
     };
   }
