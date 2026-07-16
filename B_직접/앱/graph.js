@@ -161,6 +161,39 @@
     edges.forEach(function (e) { e.critical = !!hot[e.from]; });
   }
 
+  // 열 = 깊이. 열 안 순서는 선행들의 슬롯 평균(barycenter)으로 정해 교차를 줄인다.
+  // 동점은 원본 배열 순서로 깨서 항상 같은 결과가 나오게 한다.
+  function layout(nodes, preds) {
+    var byDepth = {};
+    nodes.forEach(function (n) {
+      (byDepth[n.depth] = byDepth[n.depth] || []).push(n);
+    });
+    var slot = {};
+
+    function bary(n) {
+      var ps = preds[n.id].filter(function (p) { return slot[p] != null; });
+      if (!ps.length) return n._i;
+      var s = 0;
+      ps.forEach(function (p) { s += slot[p]; });
+      return s / ps.length;
+    }
+
+    Object.keys(byDepth).map(Number).sort(function (a, b) { return a - b; })
+      .forEach(function (d) {
+        var col = byDepth[d];
+        col.sort(function (a, b) {
+          var ba = bary(a), bb = bary(b);
+          if (ba !== bb) return ba - bb;
+          return a._i - b._i;
+        });
+        col.forEach(function (n, i) {
+          slot[n.id] = i;
+          n.x = d * (NODE_W + GAP_X);
+          n.y = i * (NODE_H + GAP_Y);
+        });
+      });
+  }
+
   function buildGraph(sequence) {
     var seq = Array.isArray(sequence) ? sequence : [];
     if (!seq.length) {
@@ -203,6 +236,7 @@
     computeDepth(nodes, preds);
     computeDownstream(nodes, succ);
     markBottleneck(nodes, edges);
+    layout(nodes, preds);
 
     return {
       nodes: nodes, edges: edges, warnings: warnings,

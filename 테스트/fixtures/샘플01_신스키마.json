@@ -1,0 +1,14 @@
+{
+  "sequence": [
+    { "id": "T1", "task": "대체데이터 개인정보 검토의견 작성", "dept": "법무실", "blocked_by": [], "blocked_by_external": [] },
+    { "id": "T2", "task": "v2 모델 재학습 → AUC 0.85 달성", "dept": "CB본부", "blocked_by": [], "blocked_by_external": [] },
+    { "id": "T3", "task": "가격 단가표 초안 작성", "dept": "경영본부", "blocked_by": [], "blocked_by_external": [] },
+    { "id": "T4", "task": "가격정책 확정", "dept": "경영본부", "blocked_by": ["T3"], "blocked_by_external": [] },
+    { "id": "T5", "task": "API 응답속도 최적화·배포", "dept": "ICT본부", "blocked_by": ["T2"], "blocked_by_external": [] },
+    { "id": "T6", "task": "PoC 데모환경·샘플리포트 준비", "dept": "경영본부/ICT본부", "blocked_by": ["T2", "T5"], "blocked_by_external": [] },
+    { "id": "T7", "task": "이사회 보고자료 초안(7/18)", "dept": "경영본부", "blocked_by": ["T2", "T4"], "blocked_by_external": [] },
+    { "id": "T8", "task": "저축은행 3곳 PoC 시연(8/15)", "dept": "사업솔루션본부", "blocked_by": ["T6"], "blocked_by_external": [] },
+    { "id": "T9", "task": "마케팅 브로셔·랜딩 제작", "dept": "마케팅본부", "blocked_by": [], "blocked_by_external": ["제품 스펙 확정"] },
+    { "id": "T10", "task": "대체데이터 모델 반영 여부 결정", "dept": "CB본부/법무실", "blocked_by": ["T1"], "blocked_by_external": [] }
+  ]
+}

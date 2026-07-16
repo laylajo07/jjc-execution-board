@@ -150,3 +150,48 @@ test('실제 구버전 샘플01 파일이 크래시 없이 처리되고 성능 �
   assert.ok(g.stats.edgeResolved < g.stats.edgeTotal, 'fuzzy는 완전 복구가 아니다');
   assert.ok(g.warnings.some(w => w.type === 'unresolved'), '몇 개가 안 붙었는지 반드시 알려야 한다');
 });
+
+const { NODE_W, GAP_X } = require('../B_직접/앱/graph.js');
+
+test('좌표: x는 깊이에 비례하고, 같은 열은 y가 겹치지 않는다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: 'a', dept: '', blocked_by: [] },
+    { id: 'T2', task: 'b', dept: '', blocked_by: [] },
+    { id: 'T3', task: 'c', dept: '', blocked_by: ['T1'] },
+  ]);
+  assert.equal(node(g, 'T1').x, 0);
+  assert.equal(node(g, 'T3').x, NODE_W + GAP_X);
+  assert.notEqual(node(g, 'T1').y, node(g, 'T2').y, '같은 열의 두 노드는 y가 달라야 한다');
+});
+
+test('좌표는 결정적이다 — 같은 입력이면 같은 출력', () => {
+  const input = [
+    { id: 'T1', task: 'a', dept: '', blocked_by: [] },
+    { id: 'T2', task: 'b', dept: '', blocked_by: ['T1'] },
+    { id: 'T3', task: 'c', dept: '', blocked_by: ['T1'] },
+  ];
+  const a = buildGraph(JSON.parse(JSON.stringify(input)));
+  const b = buildGraph(JSON.parse(JSON.stringify(input)));
+  assert.deepEqual(a.nodes.map(n => [n.id, n.x, n.y]), b.nodes.map(n => [n.id, n.x, n.y]));
+});
+
+// ★ 설계 8절의 인수 기준
+test('[인수] 샘플01 신스키마: 엣지 8/8 · 병목 = v2 재학습 · 후행 4', () => {
+  const d = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', '샘플01_신스키마.json'), 'utf8'));
+  const g = buildGraph(d.sequence);
+
+  assert.equal(g.stats.mode, 'id');
+  assert.equal(g.stats.edgeTotal, 8);
+  assert.equal(g.stats.edgeResolved, 8, '신스키마는 선행이 전부 연결되어야 한다');
+  assert.equal(g.warnings.filter(w => w.type === 'unresolved').length, 0);
+  assert.equal(g.warnings.filter(w => w.type === 'cycle').length, 0);
+
+  const bn = g.nodes.filter(n => n.isBottleneck);
+  assert.equal(bn.length, 1);
+  assert.equal(bn[0].id, 'T2');
+  assert.equal(bn[0].task, 'v2 모델 재학습 → AUC 0.85 달성');
+  assert.equal(bn[0].downstream, 4, 'T5·T6·T7·T8 넷을 막는다');
+
+  // 끊긴 선행은 지어내지 않고 external로 보존
+  assert.deepEqual(node(g, 'T9').externals, ['제품 스펙 확정']);
+});
