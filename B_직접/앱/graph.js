@@ -6,6 +6,45 @@
 
   var NODE_W = 170, NODE_H = 48, GAP_X = 60, GAP_Y = 14;
 
+  var SUFFIX = /(작성|확정|준비|검토|완료|진행)$/;
+
+  function normalize(s) {
+    var n = String(s == null ? '' : s).toLowerCase()
+      .replace(/[\s·→\-—()[\]{}.,/'"`:;!?~]/g, '');
+    return n.replace(SUFFIX, '');
+  }
+
+  function bigrams(s) {
+    var n = normalize(s), set = {}, i;
+    if (n.length < 2) { if (n) set[n] = true; return set; }
+    for (i = 0; i < n.length - 1; i++) set[n.slice(i, i + 2)] = true;
+    return set;
+  }
+
+  // 포함 계수(overlap coefficient). Jaccard가 아닌 이유: 짧은 별칭이 긴 정식명칭을
+  // 가리키는 게 이 데이터의 지배적 패턴이라, 길이 차이에 벌점을 주면 안 된다.
+  function containment(a, b) {
+    var A = bigrams(a), B = bigrams(b);
+    var ka = Object.keys(A), kb = Object.keys(B);
+    if (!ka.length || !kb.length) return 0;
+    var inter = 0;
+    ka.forEach(function (k) { if (B[k]) inter++; });
+    return inter / Math.min(ka.length, kb.length);
+  }
+
+  // 애매하면 연결하지 않는다. 틀린 화살표가 없는 화살표보다 나쁘다.
+  function resolveFuzzy(label, nodes, selfId) {
+    var scored = nodes
+      .filter(function (n) { return n.id !== selfId; })
+      .map(function (n) { return { id: n.id, score: containment(label, n.task) }; })
+      .sort(function (x, y) { return y.score - x.score; });
+    if (!scored.length) return null;
+    var best = scored[0], second = scored[1];
+    if (best.score < 0.5) return null;
+    if (second && (best.score - second.score) < 0.15) return null;
+    return best.id;
+  }
+
   function makeNodes(seq) {
     return seq.map(function (s, i) {
       return {
@@ -20,18 +59,19 @@
   }
 
   // 선행 목록 → 엣지. 해석 실패한 것은 externals로 강등한다.
-  function buildEdges(seq, nodes, index) {
+  function buildEdges(seq, nodes, index, mode) {
     var edges = [], total = 0, resolved = 0;
     seq.forEach(function (s, i) {
       var self = nodes[i];
       ((s && s.blocked_by) || []).forEach(function (b) {
         total++;
-        var from = String(b);
-        if (index[from] && from !== self.id) {
+        var label = String(b);
+        var from = (mode === 'id') ? label : resolveFuzzy(label, nodes, self.id);
+        if (from && index[from] && from !== self.id) {
           edges.push({ from: from, to: self.id, critical: false });
           resolved++;
         } else {
-          self.externals.push(from);   // 없는 id를 가리킴 → 정직하게 external로
+          self.externals.push(label);
         }
       });
     });
@@ -131,11 +171,14 @@
       };
     }
 
+    // id 필드가 하나라도 있으면 신스키마로 간주한다.
+    var mode = seq.some(function (s) { return s && s.id; }) ? 'id' : 'fuzzy';
+
     var nodes = makeNodes(seq);
     var index = {};
     nodes.forEach(function (n) { index[n.id] = n; });
 
-    var built = buildEdges(seq, nodes, index);
+    var built = buildEdges(seq, nodes, index, mode);
     var warnings = [];
 
     var cyc = detectCycles(nodes, built.edges);
@@ -163,7 +206,7 @@
 
     return {
       nodes: nodes, edges: edges, warnings: warnings,
-      stats: { edgeTotal: built.total, edgeResolved: built.resolved, mode: 'id' }
+      stats: { edgeTotal: built.total, edgeResolved: built.resolved, mode: mode }
     };
   }
 

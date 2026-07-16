@@ -109,3 +109,44 @@ test('id가 없으면 배열 순서로 T1..Tn을 자동 부여한다', () => {
   ]);
   assert.deepEqual(g.nodes.map(n => n.id), ['T1', 'T2']);
 });
+
+const fs = require('node:fs');
+const path = require('node:path');
+
+test('구버전(id 없음) 데이터는 fuzzy 모드로 떨어진다', () => {
+  const g = buildGraph([
+    { task: 'v2 모델 재학습 → AUC 0.85 달성', dept: 'CB본부', blocked_by: [] },
+    { task: 'API 응답속도 최적화·배포', dept: 'ICT본부', blocked_by: ['v2 모델 확정'] },
+  ]);
+  assert.equal(g.stats.mode, 'fuzzy');
+  assert.equal(g.stats.edgeResolved, 1, '짧은 별칭이 긴 정식명칭에 붙어야 한다');
+  assert.equal(g.edges[0].from, 'T1');
+  assert.equal(g.edges[0].to, 'T2');
+});
+
+test('접미 차이만 있는 것은 붙는다', () => {
+  const g = buildGraph([
+    { task: '가격 단가표 초안 작성', dept: '', blocked_by: [] },
+    { task: '가격정책 확정', dept: '', blocked_by: ['가격 단가표 초안'] },
+  ]);
+  assert.equal(g.stats.edgeResolved, 1);
+});
+
+test('대응 노드가 없으면 external로 두고 지어내지 않는다', () => {
+  const g = buildGraph([
+    { task: 'v2 모델 재학습 → AUC 0.85 달성', dept: '', blocked_by: [] },
+    { task: '마케팅 브로셔·랜딩 제작', dept: '', blocked_by: ['제품 스펙 확정'] },
+  ]);
+  assert.equal(g.stats.edgeResolved, 0);
+  assert.deepEqual(g.nodes[1].externals, ['제품 스펙 확정']);
+});
+
+test('실제 구버전 샘플01 파일이 크래시 없이 처리되고 성능 저하가 stats에 드러난다', () => {
+  const p = path.join(__dirname, '..', 'B_직접', '앱', '결과', '샘플01_결과.json');
+  const d = JSON.parse(fs.readFileSync(p, 'utf8'));
+  const g = buildGraph(d.sequence);
+  assert.equal(g.stats.mode, 'fuzzy');
+  assert.equal(g.stats.edgeTotal, 8, '구버전 샘플01의 선행은 8개');
+  assert.ok(g.stats.edgeResolved < g.stats.edgeTotal, 'fuzzy는 완전 복구가 아니다');
+  assert.ok(g.warnings.some(w => w.type === 'unresolved'), '몇 개가 안 붙었는지 반드시 알려야 한다');
+});
