@@ -27,6 +27,25 @@ def read(p):
         return f.read()
 
 
+def collect_text(lines):
+    """`claude -p --output-format stream-json` 의 JSON Lines에서 assistant 텍스트만 조립한다."""
+    out = []
+    for ln in lines:
+        ln = (ln or '').strip()
+        if not ln:
+            continue
+        try:
+            ev = json.loads(ln)
+        except Exception:
+            continue  # 깨진 라인은 무시
+        if ev.get('type') != 'assistant':
+            continue
+        for blk in (ev.get('message') or {}).get('content') or []:
+            if blk.get('type') == 'text':
+                out.append(blk.get('text') or '')
+    return ''.join(out)
+
+
 def extract_json(text):
     m = re.search(r'```json\s*(.*?)```', text, re.S)
     cand = m.group(1) if m else None
@@ -45,15 +64,16 @@ def extract_json(text):
 
 
 def run_claude(prompt, model=None):
-    args = ['claude', '-p']
+    args = ['claude', '-p', '--output-format', 'stream-json', '--verbose']
     use = model or MODEL
     if use:
         args += ['--model', use]
     p = subprocess.run(args, input=prompt, capture_output=True, text=True,
                        encoding='utf-8', shell=(os.name == 'nt'), timeout=300)
-    if p.returncode != 0:
+    raw = collect_text(p.stdout.splitlines())
+    if p.returncode != 0 and not raw.strip():
         raise RuntimeError((p.stderr or p.stdout or 'claude 실행 실패').strip())
-    return p.stdout
+    return raw
 
 
 class H(http.server.SimpleHTTPRequestHandler):
@@ -119,7 +139,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             except Exception:
                 pass
 
-        args = ['claude', '-p']
+        args = ['claude', '-p', '--output-format', 'stream-json', '--verbose']
         use = model or MODEL
         if use:
             args += ['--model', use]
@@ -131,16 +151,22 @@ class H(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             return sse({'error': str(e)})
 
-        chunks = []
+        buf, lines = '', []
         while True:
-            b = proc.stdout.read1(4096)          # 가능한 만큼 즉시 읽어 스트리밍
+            b = proc.stdout.read1(4096)
             if not b:
                 break
-            t = b.decode('utf-8', 'replace')
-            chunks.append(t)
-            sse({'t': t})
+            buf += b.decode('utf-8', 'replace')
+            while '\n' in buf:
+                ln, buf = buf.split('\n', 1)
+                lines.append(ln)
+                piece = collect_text([ln])
+                if piece:
+                    sse({'t': piece})       # 생성되는 텍스트를 실시간 전달
+        if buf.strip():
+            lines.append(buf)
         proc.wait()
-        raw = ''.join(chunks)
+        raw = collect_text(lines)
         if proc.returncode != 0 and not raw.strip():
             err = proc.stderr.read().decode('utf-8', 'replace').strip()
             return sse({'error': err or 'claude 실행 실패'})

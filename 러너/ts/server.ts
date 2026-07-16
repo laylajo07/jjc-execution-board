@@ -37,16 +37,31 @@ function extractJson(text: string): unknown {
   return null;
 }
 
+function collectText(line: string): string {
+  try {
+    const ev = JSON.parse(line);
+    if (ev?.type !== 'assistant') return '';
+    return (ev.message?.content ?? [])
+      .filter((b: any) => b?.type === 'text')
+      .map((b: any) => b.text ?? '')
+      .join('');
+  } catch { return ''; }
+}
+
 function runClaude(prompt: string, model?: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const args = ['-p']; const use = model || MODEL; if (use) args.push('--model', use);
+    const args = ['-p', '--output-format', 'stream-json', '--verbose']; const use = model || MODEL; if (use) args.push('--model', use);
     const cp = spawn('claude', args, { shell: process.platform === 'win32' });
     let out = '', err = '';
     const timer = setTimeout(() => { cp.kill(); reject(new Error('시간 초과(300s)')); }, 300_000);
     cp.stdout.on('data', d => (out += d));
     cp.stderr.on('data', d => (err += d));
     cp.on('error', reject);
-    cp.on('close', code => { clearTimeout(timer); code === 0 ? resolve(out) : reject(new Error(err || out || 'claude 실패')); });
+    cp.on('close', code => {
+      clearTimeout(timer);
+      const raw = out.split('\n').map(collectText).join('');
+      code === 0 ? resolve(raw) : reject(new Error(err || raw || 'claude 실패'));
+    });
     cp.stdin.write(prompt); cp.stdin.end();
   });
 }
@@ -91,15 +106,25 @@ const server = http.createServer(async (req, res) => {
       // ── SSE 스트리밍 응답 ──
       res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
       const sse = (obj: unknown) => { try { res.write('data: ' + JSON.stringify(obj) + '\n\n'); } catch { /* client gone */ } };
-      const args = ['-p']; const use = model || MODEL; if (use) args.push('--model', use);
+      const args = ['-p', '--output-format', 'stream-json', '--verbose']; const use = model || MODEL; if (use) args.push('--model', use);
       const cp = spawn('claude', args, { shell: process.platform === 'win32' });
-      let raw = '', err = '';
+      let buf = '', err = ''; const textParts: string[] = [];
       const timer = setTimeout(() => cp.kill(), 300_000);
-      cp.stdout.on('data', d => { const t = d.toString(); raw += t; sse({ t }); });
+      cp.stdout.on('data', d => {
+        buf += d.toString();
+        let idx;
+        while ((idx = buf.indexOf('\n')) >= 0) {
+          const ln = buf.slice(0, idx); buf = buf.slice(idx + 1);
+          const piece = collectText(ln);
+          if (piece) { textParts.push(piece); sse({ t: piece }); }  // 생성되는 텍스트를 실시간 전달
+        }
+      });
       cp.stderr.on('data', d => { err += d.toString(); });
       cp.on('error', e => { clearTimeout(timer); sse({ error: String((e as Error).message ?? e) }); res.end(); });
       cp.on('close', async code => {
         clearTimeout(timer);
+        if (buf.trim()) { const piece = collectText(buf); if (piece) { textParts.push(piece); sse({ t: piece }); } }
+        const raw = textParts.join('');
         if (code !== 0 && !raw.trim()) { sse({ error: err.trim() || 'claude 실패' }); return res.end(); }
         const data = extractJson(raw);
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
