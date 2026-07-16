@@ -12,14 +12,24 @@
 
 import sys, os, json, subprocess, urllib.parse, http.server, socketserver, datetime, re, threading, webbrowser
 
-APP_DIR = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.getcwd()
-PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 8787
-NOTES_DIR = os.path.abspath(os.path.join(APP_DIR, '..', '..', '회의록'))
-RESULT_DIR = os.path.join(APP_DIR, '결과')
-AGENT_MD = os.path.join(APP_DIR, 'AGENT.md')
-APPROACH = os.path.basename(os.path.dirname(APP_DIR))
-MODEL = os.environ.get('CLAUDE_MODEL')
-os.makedirs(RESULT_DIR, exist_ok=True)
+# 아래 값들은 실행 설정(CLI 인자)이라 `_configure()` 안에서만 채운다.
+# 모듈을 그냥 import 할 때(예: 테스트에서 `from server import collect_text`)는
+# sys.argv를 건드리거나 결과 폴더를 만드는 부작용이 없어야 하기 때문이다.
+APP_DIR = PORT = NOTES_DIR = RESULT_DIR = AGENT_MD = APPROACH = MODEL = None
+
+
+def _configure():
+    """CLI 인자로 실행 설정을 채우고 결과 폴더를 만든다. `python server.py ...` 로
+    직접 실행할 때(`__main__`)만 호출한다."""
+    global APP_DIR, PORT, NOTES_DIR, RESULT_DIR, AGENT_MD, APPROACH, MODEL
+    APP_DIR = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.getcwd()
+    PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 8787
+    NOTES_DIR = os.path.abspath(os.path.join(APP_DIR, '..', '..', '회의록'))
+    RESULT_DIR = os.path.join(APP_DIR, '결과')
+    AGENT_MD = os.path.join(APP_DIR, 'AGENT.md')
+    APPROACH = os.path.basename(os.path.dirname(APP_DIR))
+    MODEL = os.environ.get('CLAUDE_MODEL')
+    os.makedirs(RESULT_DIR, exist_ok=True)
 
 
 def read(p):
@@ -46,6 +56,30 @@ def collect_text(lines):
     return ''.join(out)
 
 
+def collect_delta(lines):
+    """`claude -p --include-partial-messages` 가 내는 JSON Lines에서
+    실시간 텍스트 조각(stream_event → content_block_delta → delta.text)만 뽑는다.
+    (thinking_delta 등 text 필드가 없는 델타는 자동으로 걸러진다.)"""
+    out = []
+    for ln in lines:
+        ln = (ln or '').strip()
+        if not ln:
+            continue
+        try:
+            ev = json.loads(ln)
+        except Exception:
+            continue  # 깨진 라인은 무시
+        if ev.get('type') != 'stream_event':
+            continue
+        inner = ev.get('event') or {}
+        if inner.get('type') != 'content_block_delta':
+            continue
+        text = (inner.get('delta') or {}).get('text')
+        if text:
+            out.append(text)
+    return ''.join(out)
+
+
 def extract_json(text):
     m = re.search(r'```json\s*(.*?)```', text, re.S)
     cand = m.group(1) if m else None
@@ -64,7 +98,7 @@ def extract_json(text):
 
 
 def run_claude(prompt, model=None):
-    args = ['claude', '-p', '--output-format', 'stream-json', '--verbose']
+    args = ['claude', '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages']
     use = model or MODEL
     if use:
         args += ['--model', use]
@@ -139,7 +173,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             except Exception:
                 pass
 
-        args = ['claude', '-p', '--output-format', 'stream-json', '--verbose']
+        args = ['claude', '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages']
         use = model or MODEL
         if use:
             args += ['--model', use]
@@ -160,9 +194,11 @@ class H(http.server.SimpleHTTPRequestHandler):
             while '\n' in buf:
                 ln, buf = buf.split('\n', 1)
                 lines.append(ln)
-                piece = collect_text([ln])
+                # SSE에는 델타(조각)만 흘린다 — assistant 텍스트(collect_text)까지 같이
+                # 보내면 미리보기에 같은 내용이 두 번 나온다. 최종 조립은 아래 collect_text(lines)만 담당.
+                piece = collect_delta([ln])
                 if piece:
-                    sse({'t': piece})       # 생성되는 텍스트를 실시간 전달
+                    sse({'t': piece})       # 생성되는 텍스트 조각을 실시간 전달
         if buf.strip():
             lines.append(buf)
         proc.wait()
@@ -190,6 +226,7 @@ class H(http.server.SimpleHTTPRequestHandler):
 
 
 if __name__ == '__main__':
+    _configure()
     print(f"[조정치 러너/py] {APPROACH}  http://localhost:{PORT}")
     print(f"  앱 폴더   : {APP_DIR}")
     print(f"  회의록 폴더: {NOTES_DIR}")

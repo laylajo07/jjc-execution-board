@@ -48,9 +48,22 @@ function collectText(line: string): string {
   } catch { return ''; }
 }
 
+// `claude -p --include-partial-messages` 가 내는 JSON Lines에서 실시간 텍스트 조각
+// (stream_event → content_block_delta → delta.text)만 뽑는다.
+// (thinking_delta 등 text 필드가 없는 델타는 자동으로 걸러진다.)
+function collectDelta(line: string): string {
+  try {
+    const ev = JSON.parse(line);
+    if (ev?.type !== 'stream_event') return '';
+    const inner = ev.event ?? {};
+    if (inner?.type !== 'content_block_delta') return '';
+    return inner.delta?.text ?? '';
+  } catch { return ''; }
+}
+
 function runClaude(prompt: string, model?: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const args = ['-p', '--output-format', 'stream-json', '--verbose']; const use = model || MODEL; if (use) args.push('--model', use);
+    const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages']; const use = model || MODEL; if (use) args.push('--model', use);
     const cp = spawn('claude', args, { shell: process.platform === 'win32' });
     let out = '', err = '';
     const timer = setTimeout(() => { cp.kill(); reject(new Error('시간 초과(300s)')); }, 300_000);
@@ -106,7 +119,7 @@ const server = http.createServer(async (req, res) => {
       // ── SSE 스트리밍 응답 ──
       res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
       const sse = (obj: unknown) => { try { res.write('data: ' + JSON.stringify(obj) + '\n\n'); } catch { /* client gone */ } };
-      const args = ['-p', '--output-format', 'stream-json', '--verbose']; const use = model || MODEL; if (use) args.push('--model', use);
+      const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages']; const use = model || MODEL; if (use) args.push('--model', use);
       const cp = spawn('claude', args, { shell: process.platform === 'win32' });
       let buf = '', err = ''; const textParts: string[] = [];
       const timer = setTimeout(() => cp.kill(), 300_000);
@@ -115,15 +128,15 @@ const server = http.createServer(async (req, res) => {
         let idx;
         while ((idx = buf.indexOf('\n')) >= 0) {
           const ln = buf.slice(0, idx); buf = buf.slice(idx + 1);
-          const piece = collectText(ln);
-          if (piece) { textParts.push(piece); sse({ t: piece }); }  // 생성되는 텍스트를 실시간 전달
+          const text = collectText(ln); if (text) textParts.push(text);  // 최종 조립용(collectText) — SSE로는 보내지 않음
+          const delta = collectDelta(ln); if (delta) sse({ t: delta });  // 생성되는 텍스트 조각만 실시간 전달
         }
       });
       cp.stderr.on('data', d => { err += d.toString(); });
       cp.on('error', e => { clearTimeout(timer); sse({ error: String((e as Error).message ?? e) }); res.end(); });
       cp.on('close', async code => {
         clearTimeout(timer);
-        if (buf.trim()) { const piece = collectText(buf); if (piece) { textParts.push(piece); sse({ t: piece }); } }
+        if (buf.trim()) { const text = collectText(buf); if (text) textParts.push(text); }
         const raw = textParts.join('');
         if (code !== 0 && !raw.trim()) { sse({ error: err.trim() || 'claude 실패' }); return res.end(); }
         const data = extractJson(raw);
