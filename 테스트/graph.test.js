@@ -195,3 +195,9 @@ test('[인수] 샘플01 신스키마: 엣지 8/8 · 병목 = v2 재학습 · 후
   // 끊긴 선행은 지어내지 않고 external로 보존
   assert.deepEqual(node(g, 'T9').externals, ['제품 스펙 확정']);
 });
+
+test('A·B의 graph.js는 바이트 단위로 동일해야 한다 (복사 누락 방지)', () => {
+  const a = fs.readFileSync(path.join(__dirname, '..', 'A_웹페이지', '앱', 'graph.js'), 'utf8');
+  const b = fs.readFileSync(path.join(__dirname, '..', 'B_직접', '앱', 'graph.js'), 'utf8');
+  assert.equal(a, b, 'A와 B의 graph.js가 다릅니다 — 한쪽만 고쳤습니다');
+});
