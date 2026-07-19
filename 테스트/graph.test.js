@@ -201,3 +201,68 @@ test('A·B의 graph.js는 바이트 단위로 동일해야 한다 (복사 누락
   const b = fs.readFileSync(path.join(__dirname, '..', 'B_직접', '앱', 'graph.js'), 'utf8');
   assert.equal(a, b, 'A와 B의 graph.js가 다릅니다 — 한쪽만 고쳤습니다');
 });
+
+const { renderDag, renderDagWarnings } = require('../B_직접/앱/dag-view.js');
+
+test('DAG SVG: 병목 노드에 후행 개수 배지가 붙는다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: '재학습', dept: 'CB본부', blocked_by: [] },
+    { id: 'T2', task: 'API', dept: 'ICT본부', blocked_by: ['T1'] },
+    { id: 'T3', task: 'PoC', dept: '사업솔루션본부', blocked_by: ['T2'] },
+  ]);
+  const svg = renderDag(g);
+  assert.match(svg, /^<svg /);
+  assert.match(svg, /후행 2개가 이걸 기다림/);
+});
+
+test('병목에서 나가는 엣지만 crit 클래스를 갖는다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: 'a', dept: '', blocked_by: [] },
+    { id: 'T2', task: 'b', dept: '', blocked_by: ['T1'] },
+    { id: 'T3', task: 'c', dept: '', blocked_by: ['T2'] },
+  ]);
+  const svg = renderDag(g);
+  assert.equal((svg.match(/class="dag-e crit"/g) || []).length, 1);
+  assert.equal((svg.match(/class="dag-e"/g) || []).length, 1);
+});
+
+test('external 선행은 점선 스텁으로 그려진다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: 'a', dept: '', blocked_by: [], blocked_by_external: ['제품 스펙 확정'] },
+  ]);
+  assert.match(renderDag(g), /dag-x/);
+  assert.match(renderDag(g), /제품 스펙/);
+});
+
+test('XSS: 회의록에서 온 문자열은 이스케이프된다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: '<script>alert(1)</script>', dept: '"><img>', blocked_by: [] },
+  ]);
+  const svg = renderDag(g);
+  assert.ok(!svg.includes('<script>'), '스크립트 태그가 그대로 들어가면 안 된다');
+  assert.match(svg, /&lt;script&gt;/);
+});
+
+test('fuzzy 모드면 몇 개가 연결됐는지 고지한다', () => {
+  const g = buildGraph([
+    { task: 'v2 모델 재학습 → AUC 0.85 달성', dept: '', blocked_by: [] },
+    { task: 'x', dept: '', blocked_by: ['전혀 다른 것'] },
+  ]);
+  const w = renderDagWarnings(g);
+  assert.match(w, /구버전 결과/);
+  assert.match(w, /1개 중 0개만 연결/);
+});
+
+test('순환 경고는 화면에 노출된다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: 'a', dept: '', blocked_by: ['T2'] },
+    { id: 'T2', task: 'b', dept: '', blocked_by: ['T1'] },
+  ]);
+  assert.match(renderDagWarnings(g), /순환 의존/);
+});
+
+test('A·B의 dag-view.js는 바이트 단위로 동일해야 한다', () => {
+  const a = fs.readFileSync(path.join(__dirname, '..', 'A_웹페이지', '앱', 'dag-view.js'), 'utf8');
+  const b = fs.readFileSync(path.join(__dirname, '..', 'B_직접', '앱', 'dag-view.js'), 'utf8');
+  assert.equal(a, b, 'A와 B의 dag-view.js가 다릅니다 — 한쪽만 고쳤습니다');
+});
