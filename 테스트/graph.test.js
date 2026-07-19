@@ -279,7 +279,7 @@ test('graph.js가 normalize·containment를 노출한다 (board-derive 재사용
   );
 });
 
-const { buildDetailMap } = require('../B_직접/앱/board-derive.js');
+const { buildDetailMap, rankItems } = require('../B_직접/앱/board-derive.js');
 
 test('buildDetailMap: 노드 task를 action_item(what)에 조인해 담당/기한/상태를 붙인다', () => {
   const d = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', '샘플01_신스키마.json'), 'utf8'));
@@ -294,6 +294,33 @@ test('buildDetailMap: 노드 task를 action_item(what)에 조인해 담당/기�
   assert.equal(map['T2'].owner, '박리드');
   assert.equal(map['T2'].status, '확인필요');
   assert.equal(map['T9'].matched, false, '대응 action_item이 없는 노드는 matched:false');
+});
+
+test('[인수] rankItems: 병목에 걸린 gap이 1위, 무관한 별건 gap이 꼴찌', () => {
+  const d = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', '샘플01_신스키마.json'), 'utf8'));
+  const g = buildGraph(d.sequence); // 병목 = T2(v2 재학습), downstream 4
+  const gaps = [
+    '데사팀 채용 1명은 별건으로 보류',      // 미매칭 → cpScore 0
+    'v2 모델 재학습 완료 기한 미기재',        // T2 병목 → cpScore 2 (실측 0.46, RANK_THRESH 0.35로 매칭)
+    'API 응답속도 최적화 기한 미기재',        // T5 → cpScore 1
+  ];
+  const ranked = rankItems(g, gaps).map(r => r.text);
+  assert.equal(ranked[0], 'v2 모델 재학습 완료 기한 미기재', '병목 gap이 최상위');
+  assert.equal(ranked[ranked.length - 1], '데사팀 채용 1명은 별건으로 보류', '미매칭 별건이 꼴찌');
+});
+
+test('rankItems: 외부 스텁(제품 스펙 확정)을 가리키는 gap은 cpScore 1', () => {
+  const d = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', '샘플01_신스키마.json'), 'utf8'));
+  const g = buildGraph(d.sequence);
+  const ranked = rankItems(g, ['제품 스펙 확정 시점 미정', '데사팀 별건 보류']);
+  const ext = ranked.find(r => r.text.indexOf('제품 스펙') === 0);
+  assert.equal(ext.cpScore, 1, '외부 선행 매칭 → 준-critical');
+});
+
+test('rankItems: 빈 입력은 빈 배열', () => {
+  const g = buildGraph([{ id: 'T1', task: 'a', dept: '', blocked_by: [] }]);
+  assert.deepEqual(rankItems(g, []), []);
+  assert.deepEqual(rankItems(g, null), []);
 });
 
 test('A·B의 board-derive.js는 바이트 단위로 동일해야 한다 (복사 누락 방지)', () => {
