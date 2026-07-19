@@ -445,7 +445,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 
 <div class="toast" id="toast"></div>
 <div class="np-overlay" id="npOverlay"></div>
-<aside class="node-panel" id="nodePanel" role="dialog" aria-label="작업 상세" aria-modal="true">
+<aside class="node-panel" id="nodePanel" role="dialog" aria-label="작업 상세" aria-modal="true" inert>
   <button class="np-close" id="npClose" aria-label="닫기">✕</button>
   <div id="npBody"></div>
 </aside>
@@ -600,9 +600,11 @@ function tblDec(items){if(!items||!items.length)return '';
 function secH(n,t){return `<div class="sec-h"><span class="n mono">${n}</span><h3>${t}</h3><span class="rule"></span></div>`;}
 
 /* 노드 상세 패널 (#2) */
-function openPanel(html){$('#npBody').innerHTML=html;$('#nodePanel').classList.add('on');$('#npOverlay').classList.add('on');}
-function closePanel(){$('#nodePanel').classList.remove('on');$('#npOverlay').classList.remove('on');
-  document.querySelectorAll('.dag-n.sel').forEach(n=>n.classList.remove('sel'));}
+let _panelReturn=null;
+function openPanel(html,returnTo){$('#npBody').innerHTML=html;const p=$('#nodePanel');p.classList.add('on');p.removeAttribute('inert');$('#npOverlay').classList.add('on');_panelReturn=returnTo||null;$('#npClose').focus();}
+function closePanel(){const p=$('#nodePanel');p.classList.remove('on');p.setAttribute('inert','');$('#npOverlay').classList.remove('on');
+  document.querySelectorAll('.dag-n.sel').forEach(n=>n.classList.remove('sel'));
+  if(_panelReturn){_panelReturn.focus();_panelReturn=null;}}
 $('#npClose').onclick=closePanel;$('#npOverlay').onclick=closePanel;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanel();});
 function acc(title,count,bodyHtml){
@@ -644,7 +646,7 @@ function render(raw){
     `<section class="dept"><div class="dept__h"><span class="dot"></span><span class="nm">${esc(dep.dept)}</span></div><div class="dept__b">`+
     (tblAI(dep.action_items)+tblDoc(dep.documents)+tblDec(dep.decisions_needed) || '<div class="block"><div class="basis">추출된 항목 없음</div></div>')+
     `</div></section>`).join('') + '</div>';
-  h+=acc('부서별 실행 항목', (d.by_department||[]).length, deptsHtml);
+  if((d.by_department||[]).length) h+=acc('부서별 실행 항목', (d.by_department||[]).length, deptsHtml);
 
   if((d.gaps&&d.gaps.length)||(d.assumptions&&d.assumptions.length)){
     const gc=(d.gaps||[]).filter(Boolean).length, asmc=(d.assumptions||[]).filter(Boolean).length;
@@ -672,7 +674,7 @@ function render(raw){
   document.querySelectorAll('#result .dag-n[data-id]').forEach(el=>{
     const open=()=>{const n=g.nodes.find(x=>x.id===el.dataset.id);if(!n)return;
       document.querySelectorAll('.dag-n.sel').forEach(s=>s.classList.remove('sel'));el.classList.add('sel');
-      openPanel(DagView.nodePanelHtml(n,detail[n.id],g));el.focus();};
+      openPanel(DagView.nodePanelHtml(n,detail[n.id],g), el);};
     el.addEventListener('click',open);
     el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
   });

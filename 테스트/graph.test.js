@@ -309,6 +309,14 @@ test('buildDetailMap: 노드 task를 action_item(what)에 조인해 담당/기�
   assert.equal(map['T9'].matched, false, '대응 action_item이 없는 노드는 matched:false');
 });
 
+test('buildDetailMap: 같은 부서명이 없으면 전체 풀에서 조인한다(global fallback)', () => {
+  const g = buildGraph([{ id: 'T1', task: 'v2 모델 재학습', dept: 'CB본부', blocked_by: [] }]);
+  const byDept = [ { dept: '씨비본부', action_items: [ { what: '피처 추가 후 v2 모델 재학습 (AUC 0.85 목표)', owner: '박리드', due: '', status: '확인필요' } ] } ];
+  const map = buildDetailMap(g, byDept);
+  assert.equal(map['T1'].matched, true, '부서명이 안 맞아도 전체 풀에서 매칭되어야 한다');
+  assert.equal(map['T1'].owner, '박리드');
+});
+
 test('[인수] rankItems: 병목에 걸린 gap이 1위, 무관한 별건 gap이 꼴찌', () => {
   const d = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', '샘플01_신스키마.json'), 'utf8'));
   const g = buildGraph(d.sequence); // 병목 = T2(v2 재학습), downstream 4
@@ -354,6 +362,7 @@ test('nodePanelHtml: 매칭 상세는 담당/기한/상태를 담고, 병목은 
   assert.match(html, /박리드/);
   assert.match(html, /7\/15/);
   assert.match(html, /확인필요/);
+  assert.match(html, /<span class="tag chk">확인필요<\/span>/);
   assert.match(html, /후행 1개/);
 });
 
