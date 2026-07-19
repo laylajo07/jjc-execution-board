@@ -86,7 +86,46 @@
     return h + '</div>';
   }
 
-  var api = { renderDag: renderDag, renderDagWarnings: renderDagWarnings, deptColor: deptColor };
+  function statusClass(st) { return { '확정': 'ok', '추정': 'est', '확인필요': 'chk' }[st] || 'chk'; }
+
+  // 노드 상세 패널 본문(순수 문자열). detail은 board-derive.buildDetailMap의 항목.
+  function nodePanelHtml(node, detail, graph) {
+    detail = detail || { matched: false };
+    var byId = {}; (graph.nodes || []).forEach(function (n) { byId[n.id] = n; });
+    var preds = (graph.edges || []).filter(function (e) { return e.to === node.id; })
+      .map(function (e) { return byId[e.from] ? byId[e.from].task : e.from; });
+
+    var h = '<div class="np-head"><span class="np-dept" style="background:' + deptColor(node.dept) + '"></span>'
+          + '<div><div class="np-title">' + esc(node.task) + '</div>'
+          + '<div class="np-sub">' + esc(node.dept || '[미상]') + '</div></div></div>';
+
+    if (node.isBottleneck) {
+      h += '<div class="np-bott">⚠ 병목 · 후행 ' + node.downstream + '개가 이걸 기다림</div>';
+    }
+
+    if (detail.matched) {
+      h += '<dl class="np-facts">'
+        + '<dt>담당</dt><dd>' + esc(detail.owner || '미정') + '</dd>'
+        + '<dt>기한</dt><dd>' + esc(detail.due || '미정') + '</dd>'
+        + '<dt>상태</dt><dd>' + (detail.status ? '<span class="tag ' + statusClass(detail.status) + '">' + esc(detail.status) + '</span>' : '미정') + '</dd>'
+        + '</dl>';
+      if (detail.basis) h += '<div class="np-basis">↳ ' + esc(detail.basis) + '</div>';
+    } else {
+      h += '<div class="np-note">담당·기한·상태는 위 <b>부서별 실행 항목</b> 표에서 확인하세요.</div>';
+    }
+
+    if (preds.length) {
+      h += '<div class="np-block"><div class="np-label">선행</div>'
+        + preds.map(function (t) { return '<div class="np-dep">← ' + esc(t) + '</div>'; }).join('') + '</div>';
+    }
+    if (node.externals && node.externals.length) {
+      h += '<div class="np-block"><div class="np-label">외부 선행 · 회의록에 없음</div>'
+        + node.externals.map(function (x) { return '<div class="np-dep np-ext">? ' + esc(x) + '</div>'; }).join('') + '</div>';
+    }
+    return h;
+  }
+
+  var api = { renderDag: renderDag, renderDagWarnings: renderDagWarnings, deptColor: deptColor, nodePanelHtml: nodePanelHtml };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DagView = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -341,3 +341,34 @@ test('A·B의 board-derive.js는 바이트 단위로 동일해야 한다 (복사
   const b = fs.readFileSync(path.join(__dirname, '..', 'B_직접', '앱', 'board-derive.js'), 'utf8');
   assert.equal(a, b, 'A와 B의 board-derive.js가 다릅니다 — 한쪽만 고쳤습니다');
 });
+
+const { nodePanelHtml } = require('../B_직접/앱/dag-view.js');
+
+test('nodePanelHtml: 매칭 상세는 담당/기한/상태를 담고, 병목은 후행 수를 담는다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: 'v2 재학습', dept: 'CB본부', blocked_by: [] },
+    { id: 'T2', task: 'API', dept: 'ICT본부', blocked_by: ['T1'] },
+  ]);
+  const n = g.nodes.find(x => x.id === 'T1'); // 병목, 후행 1
+  const html = nodePanelHtml(n, { matched: true, owner: '박리드', due: '7/15', status: '확인필요', basis: '' }, g);
+  assert.match(html, /박리드/);
+  assert.match(html, /7\/15/);
+  assert.match(html, /확인필요/);
+  assert.match(html, /후행 1개/);
+});
+
+test('nodePanelHtml: 미매칭이면 부서 표 참조 안내로 축약한다', () => {
+  const g = buildGraph([{ id: 'T1', task: 'a', dept: 'X', blocked_by: [] }]);
+  const html = nodePanelHtml(g.nodes[0], { matched: false }, g);
+  assert.match(html, /부서별 실행 항목/);
+});
+
+test('nodePanelHtml: 외부 선행을 나열하고 회의록 문자열을 이스케이프한다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: '<b>x</b>', dept: '', blocked_by: [], blocked_by_external: ['제품 스펙 확정'] },
+  ]);
+  const html = nodePanelHtml(g.nodes[0], { matched: false }, g);
+  assert.match(html, /제품 스펙 확정/);
+  assert.ok(!html.includes('<b>x</b>'), '작업명이 그대로 들어가면 안 된다');
+  assert.match(html, /&lt;b&gt;/);
+});
