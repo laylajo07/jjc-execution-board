@@ -271,6 +271,7 @@ test('renderDag: 각 노드 <g>에 data-id·role·tabindex가 붙는다 (클릭�
   assert.match(svg, /data-id="T2"/);
   assert.match(svg, /role="button"/);
   assert.match(svg, /tabindex="0"/);
+  assert.match(svg, /aria-label="재학습 · CB본부"/);
 });
 
 test('A·B의 dag-view.js는 바이트 단위로 동일해야 한다', () => {
