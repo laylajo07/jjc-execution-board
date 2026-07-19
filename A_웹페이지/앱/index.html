@@ -233,6 +233,43 @@
   .w-info{background:var(--inset);color:var(--muted)}
   .w-bad{background:var(--chk-bg);color:var(--chk);font-weight:700}
 
+  /* 노드 상세 사이드 패널 (#2) */
+  .dag-n[data-id]{cursor:pointer}
+  .dag-n.sel rect:first-child{stroke:var(--primary);stroke-width:3}
+  .np-overlay{position:fixed;inset:0;background:rgba(4,10,20,.28);opacity:0;pointer-events:none;transition:.2s;z-index:55}
+  .np-overlay.on{opacity:1;pointer-events:auto}
+  .node-panel{position:fixed;top:0;right:0;height:100vh;width:min(360px,88vw);z-index:60;
+    background:var(--surface);border-left:1px solid var(--line);box-shadow:var(--shadow);
+    transform:translateX(100%);transition:transform .22s;overflow:auto;padding:18px 18px 28px}
+  .node-panel.on{transform:translateX(0)}
+  .np-close{float:right;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);
+    background:var(--surface2);color:var(--ink2);cursor:pointer;font-size:14px;line-height:1}
+  .np-close:hover{border-color:var(--primary)}
+  .np-head{display:flex;gap:10px;align-items:flex-start;margin:2px 34px 12px 0}
+  .np-dept{width:8px;height:38px;border-radius:4px;flex:none;margin-top:2px}
+  .np-title{font-size:15px;font-weight:800;line-height:1.3}
+  .np-sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .np-bott{font-size:12px;font-weight:700;color:var(--chk);background:var(--chk-bg);border-radius:8px;padding:7px 10px;margin-bottom:12px}
+  .np-facts{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0 0 10px}
+  .np-facts dt{font-size:11px;color:var(--faint);font-weight:600}
+  .np-facts dd{margin:0;font-size:13px;color:var(--ink);font-family:var(--mono)}
+  .np-basis{font-size:12px;color:var(--muted);margin-bottom:10px}
+  .np-note{font-size:12.5px;color:var(--muted);background:var(--surface2);border:1px dashed var(--line);border-radius:8px;padding:9px 11px;margin-bottom:10px}
+  .np-block{margin-top:10px}
+  .np-label{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .np-dep{font-size:12px;color:var(--ink2);padding:3px 0}
+  .np-dep.np-ext{color:var(--muted);font-family:var(--mono)}
+  @media(max-width:600px){
+    .node-panel{top:auto;bottom:0;right:0;height:auto;max-height:82vh;width:100%;border-left:0;border-top:1px solid var(--line);transform:translateY(100%)}
+    .node-panel.on{transform:translateY(0)}
+  }
+  /* 더보기 토글 (#3) */
+  details.more{margin-top:2px}
+  details.more>summary{cursor:pointer;list-style:none;color:var(--muted);font-family:var(--mono);font-size:11px;padding:5px 0}
+  details.more>summary::-webkit-details-marker{display:none}
+  details.more>summary:hover{color:var(--primary-ink)}
+  details.more[open]>summary{margin-bottom:6px}
+
   /* gaps / assumptions */
   .cols2{display:grid;gap:14px}
   @media(min-width:640px){.cols2{grid-template-columns:1fr 1fr}}
@@ -266,6 +303,7 @@
 </style>
 <script src="graph.js"></script>
 <script src="dag-view.js"></script>
+<script src="board-derive.js"></script>
 </head>
 <body>
 <header class="top">
@@ -345,6 +383,11 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="np-overlay" id="npOverlay"></div>
+<aside class="node-panel" id="nodePanel" role="dialog" aria-label="작업 상세" aria-modal="true">
+  <button class="np-close" id="npClose" aria-label="닫기">✕</button>
+  <div id="npBody"></div>
+</aside>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -495,6 +538,22 @@ function tblDec(items){if(!items||!items.length)return '';
     items.map(d=>`<tr><td>${esc(d.topic)} ${tag(d.status)}</td><td class="who">${esc(d.decider||'미정')}</td><td class="when">${esc(d.due||'미정')}</td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
 function secH(n,t){return `<div class="sec-h"><span class="n mono">${n}</span><h3>${t}</h3><span class="rule"></span></div>`;}
 
+/* 노드 상세 패널 (#2) */
+function openPanel(html){$('#npBody').innerHTML=html;$('#nodePanel').classList.add('on');$('#npOverlay').classList.add('on');}
+function closePanel(){$('#nodePanel').classList.remove('on');$('#npOverlay').classList.remove('on');
+  document.querySelectorAll('.dag-n.sel').forEach(n=>n.classList.remove('sel'));}
+$('#npClose').onclick=closePanel;$('#npOverlay').onclick=closePanel;
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanel();});
+/* 우선순위 칩(#3): 랭킹 → top5 + 더보기 */
+function rankedChips(items,cls,graph){
+  const ranked=BoardDerive.rankItems(graph,items||[]).map(r=>r.text);
+  if(!ranked.length)return '<span class="chip">없음</span>';
+  const chip=t=>`<span class="chip ${cls}">${esc(t)}</span>`;
+  const top=ranked.slice(0,5),rest=ranked.slice(5);
+  let out=top.map(chip).join('');
+  if(rest.length)out+=`<details class="more"><summary>더보기 (+${rest.length})</summary>${rest.map(chip).join('')}</details>`;
+  return out;
+}
 function render(raw){
   if(!raw){renderError('데이터가 비어 있습니다.');return;}
   const d=normalize(raw);lastData=raw;const mt=d.meeting||{};
@@ -539,6 +598,15 @@ function render(raw){
   h+=`<details class="raw"><summary>원본 마크다운 / JSON</summary><pre>${esc(lastMarkdown||'')}\n\n${esc(JSON.stringify(raw,null,2))}</pre></details>`;
   $('#result').innerHTML=h;
   document.querySelectorAll('.msg .cp').forEach(b=>b.onclick=()=>copy($('#'+b.dataset.c).textContent));
+  closePanel();
+  const detail=BoardDerive.buildDetailMap(g,d.by_department);
+  document.querySelectorAll('#result .dag-n[data-id]').forEach(el=>{
+    const open=()=>{const n=g.nodes.find(x=>x.id===el.dataset.id);if(!n)return;
+      document.querySelectorAll('.dag-n.sel').forEach(s=>s.classList.remove('sel'));el.classList.add('sel');
+      openPanel(DagView.nodePanelHtml(n,detail[n.id],g));el.focus();};
+    el.addEventListener('click',open);
+    el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();open();}});
+  });
   ['#copyMdBtn','#dlJsonBtn','#printBtn'].forEach(s=>$(s).disabled=false);
 }
 function renderError(msg){$('#result').innerHTML=`<div class="empty"><div><div class="art" style="color:var(--chk)">!</div><h3>처리하지 못했습니다</h3><p>${esc(msg)}</p></div></div>`;}
