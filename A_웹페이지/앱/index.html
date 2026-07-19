@@ -263,6 +263,15 @@
     .node-panel{top:auto;bottom:0;right:0;height:auto;max-height:82vh;width:100%;border-left:0;border-top:1px solid var(--line);transform:translateY(100%)}
     .node-panel.on{transform:translateY(0)}
   }
+  /* 정보 위계 아코디언 (#5) */
+  details.acc{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);margin:14px 2px 0;overflow:hidden}
+  details.acc>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:14px 16px;font-size:14.5px;font-weight:800;letter-spacing:-.01em}
+  details.acc>summary::-webkit-details-marker{display:none}
+  details.acc>summary::before{content:"▸";color:var(--muted);font-size:11px;transition:transform .15s}
+  details.acc[open]>summary::before{transform:rotate(90deg)}
+  details.acc>summary:hover{color:var(--primary-ink)}
+  details.acc .cnt{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted);background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+  details.acc>.acc-body{padding:0 16px 16px}
   /* 더보기 토글 (#3) */
   details.more{margin-top:2px}
   details.more>summary{cursor:pointer;list-style:none;color:var(--muted);font-family:var(--mono);font-size:11px;padding:5px 0}
@@ -544,6 +553,9 @@ function closePanel(){$('#nodePanel').classList.remove('on');$('#npOverlay').cla
   document.querySelectorAll('.dag-n.sel').forEach(n=>n.classList.remove('sel'));}
 $('#npClose').onclick=closePanel;$('#npOverlay').onclick=closePanel;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanel();});
+function acc(title,count,bodyHtml){
+  return `<details class="acc"><summary><span class="acc-t">${esc(title)}</span><span class="cnt">${count}</span></summary><div class="acc-body">${bodyHtml}</div></details>`;
+}
 /* 우선순위 칩(#3): 랭킹 → top5 + 더보기 */
 function rankedChips(items,cls,graph){
   const ranked=BoardDerive.rankItems(graph,items||[]).map(r=>r.text);
@@ -564,14 +576,10 @@ function render(raw){
     `<div class="it"><span class="rk">${i+1}</span><div><div class="wt">${esc(t.what)}</div><div class="mt mono">${esc(t.dept||'')} · ${esc(t.owner||'미정')} · ${esc(t.due||'미정')}</div></div></div>`).join('')+'</div>';}
   h+='</div>';
 
-  h+=secH('01','부서별 실행 항목');
-  h+='<div class="depts">'+ (d.by_department||[]).map(dep=>
-    `<section class="dept"><div class="dept__h"><span class="dot"></span><span class="nm">${esc(dep.dept)}</span></div><div class="dept__b">`+
-    (tblAI(dep.action_items)+tblDoc(dep.documents)+tblDec(dep.decisions_needed) || '<div class="block"><div class="basis">추출된 항목 없음</div></div>')+
-    `</div></section>`).join('') + '</div>';
-
   const g = Graph.buildGraph(d.sequence||[]);
-  h+=secH('02','권장 진행 순서 · 크리티컬 패스');
+
+  // ── 히어로: 크리티컬 패스 DAG (최상단 강조) ──
+  h+=secH('01','권장 진행 순서 · 크리티컬 패스');
   h+=DagView.renderDagWarnings(g);
   if(g.nodes.length===1){
     h+=`<div class="dag-single">${esc(g.nodes[0].task)} · ${esc(g.nodes[0].dept)}</div>`;
@@ -579,20 +587,29 @@ function render(raw){
     h+=`<div class="dag-wrap">${DagView.renderDag(g)}</div>`;
   }
 
+  // ── 아코디언 3그룹 (기본 접힘) ──
+  const deptsHtml='<div class="depts">'+ (d.by_department||[]).map(dep=>
+    `<section class="dept"><div class="dept__h"><span class="dot"></span><span class="nm">${esc(dep.dept)}</span></div><div class="dept__b">`+
+    (tblAI(dep.action_items)+tblDoc(dep.documents)+tblDec(dep.decisions_needed) || '<div class="block"><div class="basis">추출된 항목 없음</div></div>')+
+    `</div></section>`).join('') + '</div>';
+  h+=acc('부서별 실행 항목', (d.by_department||[]).length, deptsHtml);
+
   if((d.gaps&&d.gaps.length)||(d.assumptions&&d.assumptions.length)){
-    h+=secH('03','확인 필요 · 가정');
-    h+='<div class="cols2">';
-    h+=`<div class="panelbox"><div class="block__l">❓ 확인 필요 (gaps)</div><div class="chips">${rankedChips(d.gaps,'gap',g)}</div></div>`;
-    h+=`<div class="panelbox"><div class="block__l">🧩 가정 (assumptions)</div><div class="chips">${rankedChips(d.assumptions,'asm',g)}</div></div>`;
-    h+='</div>';
+    const gc=(d.gaps||[]).filter(Boolean).length, asmc=(d.assumptions||[]).filter(Boolean).length;
+    const body='<div class="cols2">'
+      +`<div class="panelbox"><div class="block__l">❓ 확인 필요 (gaps)</div><div class="chips">${rankedChips(d.gaps,'gap',g)}</div></div>`
+      +`<div class="panelbox"><div class="block__l">🧩 가정 (assumptions)</div><div class="chips">${rankedChips(d.assumptions,'asm',g)}</div></div>`
+      +'</div>';
+    h+=acc('확인 필요 · 가정', gc+asmc, body);
   }
 
   if(d.share_messages&&d.share_messages.length){
-    h+=secH('04','부서별 공유 메시지');
+    let body='';
     d.share_messages.forEach((m,i)=>{
-      if(m.chat)h+=`<div class="msg"><div class="mh">💬 ${esc(m.dept)}<span class="kind">메신저</span><button class="btn mini cp" data-c="c${i}">복사</button></div><pre id="c${i}">${esc(m.chat)}</pre></div>`;
-      if(m.email_body)h+=`<div class="msg"><div class="mh">✉️ ${esc(m.dept)}<span class="kind">이메일</span><button class="btn mini cp" data-c="e${i}">복사</button></div><pre id="e${i}">${esc((m.email_subject?('제목: '+m.email_subject+'\n\n'):'')+m.email_body)}</pre></div>`;
+      if(m.chat)body+=`<div class="msg"><div class="mh">💬 ${esc(m.dept)}<span class="kind">메신저</span><button class="btn mini cp" data-c="c${i}">복사</button></div><pre id="c${i}">${esc(m.chat)}</pre></div>`;
+      if(m.email_body)body+=`<div class="msg"><div class="mh">✉️ ${esc(m.dept)}<span class="kind">이메일</span><button class="btn mini cp" data-c="e${i}">복사</button></div><pre id="e${i}">${esc((m.email_subject?('제목: '+m.email_subject+'\n\n'):'')+m.email_body)}</pre></div>`;
     });
+    h+=acc('부서별 공유 메시지', d.share_messages.length, body);
   }
 
   h+=`<details class="raw"><summary>원본 마크다운 / JSON</summary><pre>${esc(lastMarkdown||'')}\n\n${esc(JSON.stringify(raw,null,2))}</pre></details>`;
