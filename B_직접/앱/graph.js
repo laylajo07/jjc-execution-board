@@ -246,6 +246,7 @@
 
   var api = {
     buildGraph: buildGraph,
+    normalize: normalize, containment: containment,
     NODE_W: NODE_W, NODE_H: NODE_H, GAP_X: GAP_X, GAP_Y: GAP_Y
   };
 

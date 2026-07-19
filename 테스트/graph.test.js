@@ -266,3 +266,15 @@ test('A·B의 dag-view.js는 바이트 단위로 동일해야 한다', () => {
   const b = fs.readFileSync(path.join(__dirname, '..', 'B_직접', '앱', 'dag-view.js'), 'utf8');
   assert.equal(a, b, 'A와 B의 dag-view.js가 다릅니다 — 한쪽만 고쳤습니다');
 });
+
+const { normalize, containment } = require('../B_직접/앱/graph.js');
+
+test('graph.js가 normalize·containment를 노출한다 (board-derive 재사용용)', () => {
+  assert.equal(typeof normalize, 'function');
+  assert.equal(typeof containment, 'function');
+  // 괄호·특수문자 제거 후 짧은 정식명칭이 긴 노드명에 포함 → 높은 포함계수
+  assert.ok(
+    containment('피처 추가 후 v2 모델 재학습 (AUC 0.85 목표)', 'v2 모델 재학습 → AUC 0.85 달성') >= 0.5,
+    '실측 0.85 근처여야 한다'
+  );
+});
