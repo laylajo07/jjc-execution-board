@@ -634,8 +634,8 @@ function render(raw){
   if((d.gaps&&d.gaps.length)||(d.assumptions&&d.assumptions.length)){
     h+=secH('03','확인 필요 · 가정');
     h+='<div class="cols2">';
-    h+=`<div class="panelbox"><div class="block__l">❓ 확인 필요 (gaps)</div><div class="chips">${(d.gaps||[]).filter(Boolean).map(g=>`<span class="chip gap">${esc(g)}</span>`).join('')||'<span class="chip">없음</span>'}</div></div>`;
-    h+=`<div class="panelbox"><div class="block__l">🧩 가정 (assumptions)</div><div class="chips">${(d.assumptions||[]).filter(Boolean).map(a=>`<span class="chip asm">${esc(a)}</span>`).join('')||'<span class="chip">없음</span>'}</div></div>`;
+    h+=`<div class="panelbox"><div class="block__l">❓ 확인 필요 (gaps)</div><div class="chips">${rankedChips(d.gaps,'gap',g)}</div></div>`;
+    h+=`<div class="panelbox"><div class="block__l">🧩 가정 (assumptions)</div><div class="chips">${rankedChips(d.assumptions,'asm',g)}</div></div>`;
     h+='</div>';
   }
 
