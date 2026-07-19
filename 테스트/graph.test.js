@@ -278,3 +278,26 @@ test('graph.js가 normalize·containment를 노출한다 (board-derive 재사용
     '실측 0.85 근처여야 한다'
   );
 });
+
+const { buildDetailMap } = require('../B_직접/앱/board-derive.js');
+
+test('buildDetailMap: 노드 task를 action_item(what)에 조인해 담당/기한/상태를 붙인다', () => {
+  const d = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', '샘플01_신스키마.json'), 'utf8'));
+  const g = buildGraph(d.sequence);
+  const byDept = [
+    { dept: 'CB본부', action_items: [
+      { what: '피처 추가 후 v2 모델 재학습 (AUC 0.85 목표, 현재 0.82)', owner: '박리드', due: '확인 필요', status: '확인필요', basis: '' },
+    ] },
+  ];
+  const map = buildDetailMap(g, byDept);
+  assert.equal(map['T2'].matched, true, 'v2 재학습 노드가 조인되어야 한다');
+  assert.equal(map['T2'].owner, '박리드');
+  assert.equal(map['T2'].status, '확인필요');
+  assert.equal(map['T9'].matched, false, '대응 action_item이 없는 노드는 matched:false');
+});
+
+test('A·B의 board-derive.js는 바이트 단위로 동일해야 한다 (복사 누락 방지)', () => {
+  const a = fs.readFileSync(path.join(__dirname, '..', 'A_웹페이지', '앱', 'board-derive.js'), 'utf8');
+  const b = fs.readFileSync(path.join(__dirname, '..', 'B_직접', '앱', 'board-derive.js'), 'utf8');
+  assert.equal(a, b, 'A와 B의 board-derive.js가 다릅니다 — 한쪽만 고쳤습니다');
+});
