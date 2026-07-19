@@ -53,7 +53,7 @@
   // 노드
   g.nodes.forEach(function(n){
     var x = 20+n.x, y = TOP+n.y;
-    out += '<g class="dag-n'+(n.isBottleneck?' bott':'')+'">'
+    out += '<g class="dag-n'+(n.isBottleneck?' bott':'')+'" data-id="'+esc(n.id)+'" role="button" tabindex="0" aria-label="'+esc(n.task+' · '+n.dept)+'">'
         +  '<rect x="'+x+'" y="'+y+'" width="'+W+'" height="'+H+'" rx="8"/>'
         +  '<rect x="'+x+'" y="'+y+'" width="4" height="'+H+'" rx="2" fill="'+deptColor(n.dept)+'"/>'
         +  '<text x="'+(x+14)+'" y="'+(y+18)+'" class="dag-t">'+esc(clip(n.task,22))+'</text>'

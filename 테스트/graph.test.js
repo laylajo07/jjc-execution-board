@@ -261,6 +261,18 @@ test('순환 경고는 화면에 노출된다', () => {
   assert.match(renderDagWarnings(g), /순환 의존/);
 });
 
+test('renderDag: 각 노드 <g>에 data-id·role·tabindex가 붙는다 (클릭·키보드 타깃)', () => {
+  const g = buildGraph([
+    { id: 'T1', task: '재학습', dept: 'CB본부', blocked_by: [] },
+    { id: 'T2', task: 'API', dept: 'ICT본부', blocked_by: ['T1'] },
+  ]);
+  const svg = renderDag(g);
+  assert.match(svg, /data-id="T1"/);
+  assert.match(svg, /data-id="T2"/);
+  assert.match(svg, /role="button"/);
+  assert.match(svg, /tabindex="0"/);
+});
+
 test('A·B의 dag-view.js는 바이트 단위로 동일해야 한다', () => {
   const a = fs.readFileSync(path.join(__dirname, '..', 'A_웹페이지', '앱', 'dag-view.js'), 'utf8');
   const b = fs.readFileSync(path.join(__dirname, '..', 'B_직접', '앱', 'dag-view.js'), 'utf8');
