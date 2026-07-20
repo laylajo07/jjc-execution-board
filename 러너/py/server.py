@@ -32,7 +32,7 @@ _DEPT_CONTROL_CHARS_RE = re.compile(r'[\x00-\x1F\x7F-\x9F]')
 # 유니코드 모드 \s는 그렇지 않다 — board-custom.js와 같은 결과를 내려면 명시적으로 넣어야 한다.
 # (전수 스캔 결과 이 외의 \s 불일치(U+001C-001F, U+0085)는 위 제어문자 정규식이 먼저
 # 공백으로 치환해 버리므로 여기 도달하기 전에 이미 동일해져 무해하다.)
-_DEPT_WHITESPACE_RE = re.compile(r'[\s﻿]+')
+_DEPT_WHITESPACE_RE = re.compile(r'[\s\uFEFF]+')
 
 
 def sanitize_dept_name(s):
