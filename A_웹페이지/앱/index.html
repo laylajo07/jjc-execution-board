@@ -427,7 +427,7 @@ const $ = s => document.querySelector(s);
 const SYS = $('#sys-prompt').textContent.trim();
 const META = JSON.parse($('#app-meta').textContent);
 $('#approachTag').textContent = META.approach;
-let lastData=null, lastMarkdown='', AUTO=false;
+let lastData=null, lastBoard=null, lastMarkdown='', AUTO=false;
 
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1700);}
 function esc(s){return (s??'').toString().replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
@@ -594,7 +594,12 @@ function rankedChips(items,cls,graph){
 }
 function render(raw){
   if(!raw){renderError('데이터가 비어 있습니다.');return;}
-  const d=normalize(raw);lastData=raw;const mt=d.meeting||{};
+  renderBoard(normalize(raw), raw);
+}
+function renderBoard(d, raw){
+  lastBoard=d;
+  if(raw!=null) lastData=raw;
+  const mt=d.meeting||{};
   let h='';
   h+=`<div class="summary"><div class="eyebrow">SUMMARY · ${esc(mt.title||'제목 미상')} · ${esc(mt.datetime||'일시 미상')}</div>`;
   h+=`<h2>${esc(d.headline||'회의 실행보드')}</h2>`;
@@ -638,7 +643,7 @@ function render(raw){
     h+=acc('부서별 공유 메시지', d.share_messages.length, body);
   }
 
-  h+=`<details class="raw"><summary>원본 마크다운 / JSON</summary><pre>${esc(lastMarkdown||'')}\n\n${esc(JSON.stringify(raw,null,2))}</pre></details>`;
+  h+=`<details class="raw"><summary>원본 마크다운 / JSON</summary><pre>${esc(lastMarkdown||'')}\n\n${esc(JSON.stringify(lastData,null,2))}</pre></details>`;
   $('#result').innerHTML=h;
   document.querySelectorAll('.msg .cp').forEach(b=>b.onclick=()=>copy($('#'+b.dataset.c).textContent));
   closePanel();
