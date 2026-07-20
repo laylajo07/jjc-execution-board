@@ -42,6 +42,13 @@
       .filter(function (s) { return s; });
   }
 
+  // 부서 이름을 비교/조회 키로 쓸 때는 항상 trim한다.
+  // splitDept가 세그먼트를 trim해서 만들기 때문에, 부서 자신의 dept를 raw로 키에 쓰면
+  // (예: 'CB본부 '처럼 끝공백이 섞인 원본 데이터) sequence 세그먼트와 어긋나 매칭에 실패한다.
+  function deptKey(dept) {
+    return String(dept == null ? '' : dept).trim();
+  }
+
   // 세그먼트 배열 → dept 문자열. 구분자는 '/'(공백 없음), 순서를 지키며 중복 제거.
   function joinDept(segments) {
     var seen = Object.create(null), out = [], i, s;
@@ -115,16 +122,16 @@
     var depts = board.by_department;
     if (!isValidIdx(idx, depts.length)) return board;
     var trimmed = typeof name === 'string' ? name.trim() : '';
-    if (!trimmed) return board;
+    if (!trimmed || trimmed.indexOf('/') !== -1) return board; // '/'는 세그먼트 구분자라 이름에 못 쓴다
 
     var old = depts[idx].dept;
     if (trimmed === old) return board;
-    var dup = depts.some(function (d, i) { return i !== idx && d && d.dept === trimmed; });
+    var dup = depts.some(function (d, i) { return i !== idx && d && deptKey(d.dept) === trimmed; });
     if (dup) return board;
 
     var newDepts = depts.slice();
     newDepts[idx] = assign({}, depts[idx], { dept: trimmed });
-    var newSeq = renameSegmentsInSequence(seqOf(board), old, trimmed);
+    var newSeq = renameSegmentsInSequence(seqOf(board), deptKey(old), trimmed);
     return cloneBoard(board, newDepts, newSeq);
   }
 
@@ -140,7 +147,7 @@
     var tmp = newDepts[idx];
     newDepts[idx] = newDepts[otherIdx];
     newDepts[otherIdx] = tmp;
-    return cloneBoard(board, newDepts, board.sequence); // sequence는 표시 순서일 뿐 — 안 건드린다
+    return cloneBoard(board, newDepts, seqOf(board)); // sequence는 표시 순서일 뿐 — 안 건드린다
   }
 
   function setHideDept(board, idx, hidden) {
@@ -150,7 +157,7 @@
 
     var newDepts = depts.slice();
     newDepts[idx] = assign({}, depts[idx], { _hidden: !!hidden });
-    return cloneBoard(board, newDepts, board.sequence); // 숨김은 표시 상태 — sequence는 안 건드린다
+    return cloneBoard(board, newDepts, seqOf(board)); // 숨김은 표시 상태 — sequence는 안 건드린다
   }
 
   function deleteDept(board, idx) {
@@ -158,7 +165,7 @@
     var depts = board.by_department;
     if (!isValidIdx(idx, depts.length)) return board;
 
-    var name = depts[idx].dept;
+    var name = deptKey(depts[idx].dept);
     var newDepts = depts.slice(0, idx).concat(depts.slice(idx + 1));
     var newSeq = removeDeptsFromSequence(seqOf(board), [name]);
     return cloneBoard(board, newDepts, newSeq);
@@ -181,23 +188,23 @@
       .map(function (d, i) { return i === toIdx ? mergedTo : d; })
       .filter(function (d, i) { return i !== fromIdx; });
 
-    var newSeq = renameSegmentsInSequence(seqOf(board), from.dept, to.dept);
+    var newSeq = renameSegmentsInSequence(seqOf(board), deptKey(from.dept), deptKey(to.dept));
     return cloneBoard(board, newDepts, newSeq); // 엔트리는 지우지 않는다 — 작업은 살아있고 담당만 바뀐다
   }
 
   function addDept(board, name) {
     if (!isBoard(board)) return board;
     var trimmed = typeof name === 'string' ? name.trim() : '';
-    if (!trimmed) return board;
+    if (!trimmed || trimmed.indexOf('/') !== -1) return board; // '/'는 세그먼트 구분자라 이름에 못 쓴다
 
     var depts = board.by_department;
-    var dup = depts.some(function (d) { return d && d.dept === trimmed; });
+    var dup = depts.some(function (d) { return d && deptKey(d.dept) === trimmed; });
     if (dup) return board;
 
     var newDepts = depts.concat([{
       dept: trimmed, action_items: [], documents: [], decisions_needed: [], _rd: []
     }]);
-    return cloneBoard(board, newDepts, board.sequence); // sequence는 안 건드린다
+    return cloneBoard(board, newDepts, seqOf(board)); // sequence는 안 건드린다
   }
 
   // 헬퍼(설계 2-1엔 없는 7번째 함수): 숨긴 부서를 실제로 제외한 board를 만든다.
@@ -207,7 +214,7 @@
     if (!isBoard(board)) return board;
     var depts = board.by_department;
     var hiddenNames = depts.filter(function (d) { return d && d._hidden; })
-      .map(function (d) { return d.dept; });
+      .map(function (d) { return deptKey(d.dept); });
     var newDepts = depts.filter(function (d) { return !(d && d._hidden); });
     var seq = seqOf(board);
     var newSeq = hiddenNames.length ? removeDeptsFromSequence(seq, hiddenNames) : seq;

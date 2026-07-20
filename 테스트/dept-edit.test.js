@@ -64,13 +64,26 @@ test('deleteDept: 단일부서 엔트리를 참조하는 부서를 지우면 by_
   assert.ok(!out.by_department.some(d => d.dept === '경영본부'));
 });
 
-test('mergeDepts: to에 from의 action_items/documents/decisions_needed가 순서대로 이어붙는다', () => {
+test('mergeDepts: to에 action_items/documents/decisions_needed가 순서대로 이어붙고, to._rd·to._hidden은 보존된다', () => {
   const board = makeBoard();
+  // to(CB본부)·from(ICT본부) 둘 다 세 배열 전부에 값을 채워야 "이어붙임"이 실제로 검증된다
+  // (원래 fixture는 documents/decisions_needed 쪽이 비어 있어 뮤턴트가 안 잡혔다).
+  board.by_department[1].decisions_needed = [{ topic: '단가승인', decider: 'CB1', due: '', precondition: '', status: '' }];
+  board.by_department[1]._hidden = true;
+  board.by_department[1]._rd = ['to-rd'];
+  board.by_department[3].documents = [{ doc: 'API 명세', owner: 'ICT1', due: '', purpose: '', status: '' }];
+  board.by_department[3].decisions_needed = [{ topic: '배포일정', decider: 'ICT1', due: '', precondition: '', status: '' }];
+  board.by_department[3]._hidden = false;
+  board.by_department[3]._rd = ['from-rd'];
+
   const out = mergeDepts(board, 3, 1); // ICT본부 → CB본부
   const to = out.by_department.find(d => d.dept === 'CB본부');
-  assert.equal(to.action_items.length, 2);
-  assert.equal(to.action_items[0].what, '모델 재학습');
-  assert.equal(to.action_items[1].what, 'API 최적화');
+
+  assert.deepEqual(to.action_items.map(a => a.what), ['모델 재학습', 'API 최적화']);
+  assert.deepEqual(to.documents.map(d => d.doc), ['단가표', 'API 명세']);
+  assert.deepEqual(to.decisions_needed.map(d => d.topic), ['단가승인', '배포일정']);
+  assert.equal(to._hidden, true, 'to._hidden은 from에 덮이지 않고 보존되어야 한다');
+  assert.deepEqual(to._rd, ['to-rd'], 'to._rd는 from._rd로 덮이면 안 된다');
   assert.equal(out.by_department.length, 3);
 });
 
@@ -167,6 +180,23 @@ test('세그먼트: 병합이 A/B → A 로 접히고 A/A 가 안 생긴다', ()
   assert.ok(!t6.dept.includes('/'), 'A/A 형태가 남으면 안 된다');
 });
 
+test('세그먼트: 구분자 앞뒤 공백이 있는 복합 dept도 세그먼트 단위로 trim되어 매칭된다', () => {
+  const board = makeBoard();
+  board.sequence.push({ id: 'T11', task: '공백 포함 복합부서 작업', dept: 'CB본부 / 법무실', blocked_by: [], blocked_by_external: [] });
+  const out = renameDept(board, 1, '리스크본부'); // CB본부 → 리스크본부
+  const t11 = out.sequence.find(s => s.id === 'T11');
+  assert.equal(t11.dept, '리스크본부/법무실', '세그먼트가 trim된 뒤 일치해야 치환되고, 재결합은 공백 없는 / 여야 한다');
+});
+
+test('세그먼트: 연속된 //로 생긴 빈 세그먼트는 버려진다', () => {
+  const board = makeBoard();
+  board.sequence.push({ id: 'T12', task: '이중 슬래시 표기', dept: 'CB본부//법무실', blocked_by: [], blocked_by_external: [] });
+  const out = deleteDept(board, 1); // CB본부 삭제
+  const t12 = out.sequence.find(s => s.id === 'T12');
+  assert.ok(t12, 'T12은 법무실 세그먼트로 살아남아야 한다');
+  assert.equal(t12.dept, '법무실', '빈 세그먼트 없이 법무실만 남아야 한다');
+});
+
 // ---------------------------------------------------------------------------
 // 4. 끊어진 참조 정리 — Graph.buildGraph로 검증(제일 중요한 단언)
 // ---------------------------------------------------------------------------
@@ -204,6 +234,23 @@ test('끊어진 참조 정리: visibleBoard도 숨긴 부서로 사라진 엔트
   assert.equal(g.stats.edgeTotal, g.stats.edgeResolved);
 });
 
+test('끊어진 참조 정리: fuzzy 모드(blocked_by가 id가 아니라 task 문자열)에서도 정리된다', () => {
+  const board = {
+    by_department: [
+      { dept: '법무실', action_items: [], documents: [], decisions_needed: [], _rd: [] },
+      { dept: 'CB본부', action_items: [], documents: [], decisions_needed: [], _rd: [] }
+    ],
+    sequence: [
+      { id: null, task: '가격 단가표 초안 작성', dept: 'CB본부', blocked_by: [], blocked_by_external: [] },
+      { id: null, task: 'PoC 데모환경 준비', dept: '법무실', blocked_by: ['가격 단가표 초안 작성'], blocked_by_external: [] }
+    ]
+  };
+  const out = deleteDept(board, 1); // CB본부 삭제 → task 문자열 기반 엔트리가 사라짐
+  const remaining = out.sequence.find(s => s.task === 'PoC 데모환경 준비');
+  assert.ok(remaining, '법무실 엔트리는 남아야 한다');
+  assert.ok(!remaining.blocked_by.includes('가격 단가표 초안 작성'), 'fuzzy 모드 task 문자열 참조도 정리되어야 한다');
+});
+
 // ---------------------------------------------------------------------------
 // 5. 불변식 — 동일 이름 부서 중복 방지
 // ---------------------------------------------------------------------------
@@ -225,6 +272,58 @@ test('불변식: renameDept가 다른 인덱스의 기존 부서명과 같으면
   const board = makeBoard();
   const out = renameDept(board, 0, 'CB본부'); // 법무실 → CB본부(이미 idx1에 존재)
   assert.equal(out, board);
+});
+
+test('불변식: addDept는 이름에 /가 있으면 거부하고 원본을 그대로 반환한다', () => {
+  const board = makeBoard();
+  const out = addDept(board, 'A/B');
+  assert.equal(out, board);
+  assert.equal(out.by_department.length, 4);
+});
+
+test('불변식: renameDept는 이름에 /가 있으면 거부하고 원본을 그대로 반환한다', () => {
+  const board = makeBoard();
+  const out = renameDept(board, 0, 'A/B');
+  assert.equal(out, board);
+});
+
+// ---------------------------------------------------------------------------
+// 5b. trim — 부서 자신의 dept가 끝공백을 포함해도 매칭 키가 어긋나지 않는다
+// ---------------------------------------------------------------------------
+
+function makeTrimBoard() {
+  return {
+    by_department: [
+      { dept: 'CB본부 ', action_items: [], documents: [], decisions_needed: [], _rd: [] }, // 끝공백
+      { dept: '법무실', action_items: [], documents: [], decisions_needed: [], _rd: [] }
+    ],
+    sequence: [
+      { id: 'T1', task: '대체데이터 모델 반영 여부 결정', dept: 'CB본부/법무실', blocked_by: [], blocked_by_external: [] }
+    ]
+  };
+}
+
+test('trim: 부서명 끝공백이 있어도 delete가 sequence 세그먼트를 제대로 찾아 지운다', () => {
+  const board = makeTrimBoard();
+  const out = deleteDept(board, 0); // 'CB본부 ' 삭제 (끝공백)
+  const t1 = out.sequence.find(s => s.id === 'T1');
+  assert.ok(t1, 'T1은 법무실 세그먼트로 살아남아야 한다');
+  assert.equal(t1.dept, '법무실', 'CB본부 세그먼트가 trim 비교로 제거되어야 한다(고아 참조 금지)');
+});
+
+test('trim: 부서명 끝공백이 있어도 setHideDept+visibleBoard가 DAG에서 제외한다', () => {
+  const board = makeTrimBoard();
+  const hidden = setHideDept(board, 0, true); // 'CB본부 ' 숨김
+  const out = visibleBoard(hidden);
+  const t1 = out.sequence.find(s => s.id === 'T1');
+  assert.ok(t1, 'T1은 법무실 세그먼트로 살아남아야 한다');
+  assert.equal(t1.dept, '법무실', '숨긴 CB본부(끝공백)가 trim 비교로 제외되어야 한다');
+});
+
+test('trim: 끝공백만 다른 이름은 addDept 중복 판정에 걸린다', () => {
+  const board = makeTrimBoard(); // by_department[0].dept === 'CB본부 '
+  const out = addDept(board, 'CB본부'); // 공백 없는 같은 이름
+  assert.equal(out, board, '트리밍하면 같은 이름이므로 추가되면 안 된다');
 });
 
 // ---------------------------------------------------------------------------
@@ -303,6 +402,22 @@ test('moveDept·addDept도 sequence 참조를 그대로 유지한다', () => {
   const board = makeBoard();
   assert.equal(moveDept(board, 0, 1).sequence, board.sequence);
   assert.equal(addDept(board, '신설본부').sequence, board.sequence);
+});
+
+test('sequence: board에 sequence 키가 없으면 7종 함수 모두 배열을 반환한다(undefined 금지)', () => {
+  const noSeqBoard = () => ({
+    by_department: [
+      { dept: '법무실', action_items: [], documents: [], decisions_needed: [], _rd: [] },
+      { dept: 'CB본부', action_items: [], documents: [], decisions_needed: [], _rd: [] }
+    ]
+  });
+  assert.ok(Array.isArray(renameDept(noSeqBoard(), 0, '새이름').sequence));
+  assert.ok(Array.isArray(moveDept(noSeqBoard(), 0, 1).sequence));
+  assert.ok(Array.isArray(setHideDept(noSeqBoard(), 0, true).sequence));
+  assert.ok(Array.isArray(deleteDept(noSeqBoard(), 0).sequence));
+  assert.ok(Array.isArray(mergeDepts(noSeqBoard(), 0, 1).sequence));
+  assert.ok(Array.isArray(addDept(noSeqBoard(), '신설').sequence));
+  assert.ok(Array.isArray(visibleBoard(noSeqBoard()).sequence));
 });
 
 // ---------------------------------------------------------------------------
