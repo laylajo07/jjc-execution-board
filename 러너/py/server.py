@@ -17,6 +17,99 @@ import sys, os, json, subprocess, urllib.parse, http.server, socketserver, datet
 # sys.argv를 건드리거나 결과 폴더를 만드는 부작용이 없어야 하기 때문이다.
 APP_DIR = PORT = NOTES_DIR = RESULT_DIR = AGENT_MD = APPROACH = MODEL = None
 
+# ── 부서 커스터마이징 정규화 (B_직접/앱/board-custom.js 의 sanitize 규칙과 동일 — 3개 언어 중 하나) ──
+# 문자열당 최대 길이(부서명·매핑 raw·dept 공통)
+DEPT_MAX_NAME_LEN = 40
+# customDepts 최대 개수
+DEPT_MAX_CUSTOM_DEPTS = 30
+# customMappings 최대 개수
+DEPT_MAX_CUSTOM_MAPPINGS = 60
+# 표준 6본부 — 추가만 가능, 삭제 불가. 커스텀 부서 중 이름이 겹치면 버린다.
+DEPT_STD_DEPTS = ('CB본부', 'ICT본부', '경영본부', '법무실', '고객솔루션본부', '사업성장본부')
+
+_DEPT_CONTROL_CHARS_RE = re.compile(r'[\x00-\x1F\x7F-\x9F]')
+_DEPT_WHITESPACE_RE = re.compile(r'\s+')
+
+
+def sanitize_dept_name(s):
+    """제어문자·개행을 공백으로 → 연속 공백 접기 → trim → 길이 컷. 문자열이 아니면 빈 문자열."""
+    if not isinstance(s, str):
+        return ''
+    cleaned = _DEPT_WHITESPACE_RE.sub(' ', _DEPT_CONTROL_CHARS_RE.sub(' ', s)).strip()
+    if len(cleaned) > DEPT_MAX_NAME_LEN:
+        cleaned = cleaned[:DEPT_MAX_NAME_LEN].strip()
+    return cleaned
+
+
+def sanitize_depts(arr):
+    if not isinstance(arr, list):
+        return []
+    std_set = set(DEPT_STD_DEPTS)
+    seen = set()
+    out = []
+    for item in arr:
+        if len(out) >= DEPT_MAX_CUSTOM_DEPTS:
+            break
+        name = sanitize_dept_name(item)
+        if not name or name in std_set or name in seen:
+            continue
+        seen.add(name)
+        out.append(name)
+    return out
+
+
+def sanitize_mappings(arr):
+    if not isinstance(arr, list):
+        return []
+    seen_raw = set()
+    out = []
+    for m in arr:
+        if len(out) >= DEPT_MAX_CUSTOM_MAPPINGS:
+            break
+        if not isinstance(m, dict):
+            continue
+        raw = sanitize_dept_name(m.get('raw'))
+        dept = sanitize_dept_name(m.get('dept'))
+        if not raw or not dept or raw in seen_raw:
+            continue
+        seen_raw.add(raw)
+        out.append({'raw': raw, 'dept': dept})
+    return out
+
+
+def sanitize_dept_config(config):
+    """방어적 정규화(순수). 항상 {'customDepts': [], 'customMappings': []} 모양을 반환한다."""
+    src = config if isinstance(config, dict) else {}
+    return {
+        'customDepts': sanitize_depts(src.get('customDepts')),
+        'customMappings': sanitize_mappings(src.get('customMappings')),
+    }
+
+
+def dept_config_to_prompt(config):
+    """설정 → 프롬프트 블록(board-custom.js deptConfigToPrompt 과 문구·형식 동일). 비어 있으면 ''."""
+    c = sanitize_dept_config(config)
+    if not c['customDepts'] and not c['customMappings']:
+        return ''
+    lines = ['[사용자 추가 부서 — 표준 본부와 동일하게 취급]']
+    if c['customDepts']:
+        lines.append('- 추가 부서: ' + ', '.join(c['customDepts']))
+    if c['customMappings']:
+        lines.append('- 매핑(우선 적용): ' + ', '.join(
+            '"' + m['raw'] + '"→' + m['dept'] for m in c['customMappings']))
+    lines.append('표준 6본부 + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다.')
+    return '\n'.join(lines)
+
+
+def dept_prompt_block(dept_config):
+    """AGENT.md 뒤에 이어붙일 블록. 앞에 '\\n\\n'을 포함(비면 ''). deptConfig 가 없거나 이상해도
+    예외를 절대 밖으로 내지 않는다 — 러너가 이 때문에 500을 내면 안 된다(설계 5절)."""
+    try:
+        text = dept_config_to_prompt(dept_config)
+    except Exception:
+        return ''
+    return ('\n\n' + text) if text else ''
+
 
 def _configure():
     """CLI 인자로 실행 설정을 채우고 결과 폴더를 만든다. `python server.py ...` 로
@@ -154,7 +247,8 @@ class H(http.server.SimpleHTTPRequestHandler):
             model = None
         if not note:
             return self._send(400, {'error': 'empty note'})
-        prompt = (read(AGENT_MD) +
+        dept_block = dept_prompt_block(body.get('deptConfig'))
+        prompt = (read(AGENT_MD) + dept_block +
                   "\n\n================================================================\n"
                   "# 처리할 회의록 (형식 그대로)\n"
                   "================================================================\n" + note +

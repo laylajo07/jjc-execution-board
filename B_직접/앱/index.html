@@ -648,7 +648,7 @@ async function analyze(){
   let acc='';
   try{
     const name=document.querySelector('#noteSelect')?.value||'';
-    const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note,model,name})});
+    const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note,model,name,deptConfig:BoardCustom.load()})});
     if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e.error||('러너 오류 '+r.status));}
     const ct=r.headers.get('Content-Type')||'';
     if(ct.includes('text/event-stream')&&r.body){

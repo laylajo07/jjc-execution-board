@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-import sys, os, unittest
+import sys, os, json, unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '러너', 'py'))
-from server import collect_text, collect_delta
+from server import collect_text, collect_delta, dept_config_to_prompt
 
 class TestCollectText(unittest.TestCase):
     def test_assistant_텍스트만_이어붙인다(self):
@@ -63,6 +63,25 @@ class TestCollectDelta(unittest.TestCase):
 
     def test_빈입력은_빈문자열(self):
         self.assertEqual(collect_delta([]), '')
+
+
+class TestDeptConfigToPrompt(unittest.TestCase):
+    """Task 5: 러너(py)가 JS(board-custom.js `deptConfigToPrompt`)와 같은 규칙으로
+    deptConfig → 프롬프트 블록을 만드는지, 공유 fixture로 고정한다.
+    fixture(`테스트/fixtures/dept-config-prompt-cases.json`)의 `expected` 는
+    JS 구현을 실제로 실행해 뽑은 값이다(py가 손으로 지어낸 게 아니라 JS를 기준으로 맞춘 것)."""
+
+    @classmethod
+    def setUpClass(cls):
+        fixture_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'dept-config-prompt-cases.json')
+        with open(fixture_path, encoding='utf-8') as f:
+            cls.cases = json.load(f)
+
+    def test_fixture_전체_일치(self):
+        self.assertTrue(self.cases, 'fixture가 비어있으면 안 된다')
+        for case in self.cases:
+            with self.subTest(name=case['name']):
+                self.assertEqual(dept_config_to_prompt(case['config']), case['expected'])
 
 
 if __name__ == '__main__':

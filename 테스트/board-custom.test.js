@@ -172,3 +172,17 @@ test('A·B의 board-custom.js는 바이트 단위로 동일해야 한다 (복사
   const b = fs.readFileSync(path.join(__dirname, '..', 'B_직접', '앱', 'board-custom.js'), 'utf8');
   assert.equal(a, b, 'A와 B의 board-custom.js가 다릅니다 — 한쪽만 고쳤습니다');
 });
+
+// Task 5: 러너(py/ts)가 이 JS 구현과 같은 규칙으로 deptConfig → 프롬프트 블록을 만드는지,
+// 공유 fixture(`테스트/fixtures/dept-config-prompt-cases.json`)를 기준으로 고정한다.
+// fixture의 `expected` 는 이 JS 구현을 실제로 실행해 뽑은 값(손으로 지어내지 않음) — 이 파일이 기준 구현.
+const deptFixtureCases = JSON.parse(
+  fs.readFileSync(path.join(__dirname, 'fixtures', 'dept-config-prompt-cases.json'), 'utf8')
+);
+
+test('fixture: deptConfigToPrompt(config) === expected (JS 기준 구현 자체 회귀)', () => {
+  assert.ok(deptFixtureCases.length > 0, 'fixture가 비어있으면 안 된다');
+  for (const { name, config, expected } of deptFixtureCases) {
+    assert.equal(deptConfigToPrompt(config), expected, `케이스 "${name}" 불일치`);
+  }
+});
