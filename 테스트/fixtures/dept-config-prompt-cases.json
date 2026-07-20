@@ -100,5 +100,25 @@
       "customMappings": []
     },
     "expected": "[사용자 추가 부서 — 표준 본부와 동일하게 취급]\n- 추가 부서: 신설본부\n표준 6본부 + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다."
+  },
+  {
+    "name": "길이 컷 — 서러게이트 쌍 경계(39 ASCII + 별자리문자 1개)",
+    "config": {
+      "customDepts": [
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA😀"
+      ],
+      "customMappings": []
+    },
+    "expected": "[사용자 추가 부서 — 표준 본부와 동일하게 취급]\n- 추가 부서: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA😀\n표준 6본부 + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다."
+  },
+  {
+    "name": "U+FEFF(BOM)는 공백으로 취급되어 제거된다",
+    "config": {
+      "customDepts": [
+        "﻿부서"
+      ],
+      "customMappings": []
+    },
+    "expected": "[사용자 추가 부서 — 표준 본부와 동일하게 취급]\n- 추가 부서: 부서\n표준 6본부 + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다."
   }
 ]

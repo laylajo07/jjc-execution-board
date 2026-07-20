@@ -16,7 +16,10 @@
   function sanitizeName(s) {
     if (typeof s !== 'string') return '';
     var cleaned = s.replace(/[\x00-\x1F\x7F-\x9F]/g, ' ').replace(/\s+/g, ' ').trim();
-    if (cleaned.length > MAX_NAME_LEN) cleaned = cleaned.slice(0, MAX_NAME_LEN).trim();
+    // 코드 포인트 단위로 자른다(.slice(0,N)은 UTF-16 코드 유닛 단위라 서러게이트 쌍을
+    // 반으로 잘라 홀로 남은 하이 서러게이트 같은 깨진 유니코드를 만들 수 있다).
+    var codePoints = Array.from(cleaned);
+    if (codePoints.length > MAX_NAME_LEN) cleaned = codePoints.slice(0, MAX_NAME_LEN).join('').trim();
     return cleaned;
   }
 
