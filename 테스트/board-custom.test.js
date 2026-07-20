@@ -143,6 +143,30 @@ test('save()는 Node(localStorage 없음)에서 예외 없이 false를 반환한
   assert.equal(save({ customDepts: ['x'] }), false);
 });
 
+test('Object.prototype 상속 멤버와 같은 이름도 중복으로 오판되지 않고 살아남는다', () => {
+  const result = sanitize({
+    customDepts: ['constructor', 'toString', '정상부서'],
+    customMappings: [{ raw: 'hasOwnProperty', dept: 'CB본부' }, { raw: '정상원문', dept: 'ICT본부' }]
+  });
+  assert.deepEqual(result.customDepts, ['constructor', 'toString', '정상부서'],
+    '해시셋으로 {}를 쓰면 상속된 Object.prototype 멤버가 선점된 것처럼 보여 첫 등장이 버려진다');
+  assert.deepEqual(result.customMappings, [
+    { raw: 'hasOwnProperty', dept: 'CB본부' },
+    { raw: '정상원문', dept: 'ICT본부' }
+  ]);
+
+  const block = deptConfigToPrompt({ customDepts: ['constructor'], customMappings: [] });
+  assert.ok(block.includes('- 추가 부서: constructor'), 'constructor가 프롬프트 블록까지 도달해야 한다');
+});
+
+test('U+2028/U+2029(줄·문단 구분자)은 \\s+ 공백 접기 규칙에 의해 부수적으로 공백 하나로 눌린다', () => {
+  // 이 보호는 전용 제어문자 정규식(/[\x00-\x1F\x7F-\x9F]/g)이 아니라 그 뒤의 /\s+/g 공백 접기에서
+  // 나온다 — JS의 \s 클래스가 U+2028/U+2029를 포함하기 때문(부수적 보호). 이 정규식이 나중에
+  // [ \t]+ 처럼 좁혀지면 이 구멍이 소리 없이 다시 열리므로, 이 동작을 못박아 둔다.
+  const result = sanitize({ customDepts: ['a\u2028b\u2029c'] });
+  assert.deepEqual(result.customDepts, ['a b c']);
+});
+
 test('A·B의 board-custom.js는 바이트 단위로 동일해야 한다 (복사 누락 방지)', () => {
   const a = fs.readFileSync(path.join(__dirname, '..', 'A_웹페이지', '앱', 'board-custom.js'), 'utf8');
   const b = fs.readFileSync(path.join(__dirname, '..', 'B_직접', '앱', 'board-custom.js'), 'utf8');

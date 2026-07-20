@@ -22,9 +22,9 @@
 
   function sanitizeDepts(arr) {
     if (!Array.isArray(arr)) return [];
-    var stdSet = {};
+    var stdSet = Object.create(null);
     STD_DEPTS.forEach(function (d) { stdSet[d] = true; });
-    var seen = {}, out = [], i, name;
+    var seen = Object.create(null), out = [], i, name;
     for (i = 0; i < arr.length && out.length < MAX_CUSTOM_DEPTS; i++) {
       name = sanitizeName(arr[i]);
       if (!name || stdSet[name] || seen[name]) continue;
@@ -36,7 +36,7 @@
 
   function sanitizeMappings(arr) {
     if (!Array.isArray(arr)) return [];
-    var seenRaw = {}, out = [], i, m, raw, dept;
+    var seenRaw = Object.create(null), out = [], i, m, raw, dept;
     for (i = 0; i < arr.length && out.length < MAX_CUSTOM_MAPPINGS; i++) {
       m = arr[i];
       if (!m || typeof m !== 'object' || Array.isArray(m)) continue;
