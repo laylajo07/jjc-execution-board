@@ -21,6 +21,23 @@
 
   var TOP = 28;
 
+  // 폴리라인 P를 스무스 곡선(Catmull-Rom→cubic bezier)으로. 2점이면 수평 접선 곡선.
+  function smoothPath(P) {
+    function r(v) { return Math.round(v * 10) / 10; }
+    if (P.length === 2) {
+      var a = P[0], b = P[1], mx = (a.x + b.x) / 2;
+      return 'M' + r(a.x) + ',' + r(a.y) + ' C' + r(mx) + ',' + r(a.y) + ' ' + r(mx) + ',' + r(b.y) + ' ' + r(b.x) + ',' + r(b.y);
+    }
+    var d = 'M' + r(P[0].x) + ',' + r(P[0].y);
+    for (var i = 0; i < P.length - 1; i++) {
+      var p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || P[i + 1];
+      var c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6;
+      var c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6;
+      d += ' C' + r(c1x) + ',' + r(c1y) + ' ' + r(c2x) + ',' + r(c2y) + ' ' + r(p2.x) + ',' + r(p2.y);
+    }
+    return d;
+  }
+
   function renderDag(g) {
   if (!g.nodes.length) return '';
   var W = G.NODE_W, H = G.NODE_H, GX = G.GAP_X, GY = G.GAP_Y;
@@ -41,12 +58,12 @@
     out += '<text x="'+lx+'" y="16" class="dag-col">'+(d===0?'1단계 · 지금 시작 가능':(d+1)+'단계')+'</text>';
   }
 
-  // 엣지를 노드보다 먼저 그려 뒤에 깔리게 한다
+  // 엣지를 노드보다 먼저 그려 뒤에 깔리게 한다. graph.js가 준 route(포트·박스회피 웨이포인트)를 스플라인으로.
   g.edges.forEach(function(e){
-    var a = byId[e.from], b = byId[e.to];
-    var x1 = 20+a.x+W, y1 = TOP+a.y+H/2, x2 = 20+b.x, y2 = TOP+b.y+H/2;
-    var mid = (x1+x2)/2;
-    out += '<path d="M'+x1+','+y1+' C'+mid+','+y1+' '+mid+','+y2+' '+x2+','+y2+'"'
+    var route = e.route;
+    if (!route || route.length < 2) return;
+    var P = route.map(function(p){ return { x: 20 + p.x, y: TOP + p.y }; });
+    out += '<path d="'+ smoothPath(P) +'"'
         +  ' class="'+(e.critical?'dag-e crit':'dag-e')+'" marker-end="url(#'+(e.critical?'ahc':'ah')+')"/>';
   });
 

@@ -381,3 +381,51 @@ test('nodePanelHtml: 외부 선행을 나열하고 회의록 문자열을 이스
   assert.ok(!html.includes('<b>x</b>'), '작업명이 그대로 들어가면 안 된다');
   assert.match(html, /&lt;b&gt;/);
 });
+
+const { NODE_H } = require('../B_직접/앱/graph.js');
+
+test('레이아웃: 엣지마다 route(소스 우변 포트 → 타깃 좌변 포트)가 붙는다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: 'a', dept: '', blocked_by: [] },
+    { id: 'T2', task: 'b', dept: '', blocked_by: ['T1'] },
+  ]);
+  const e = g.edges[0], a = node(g, 'T1'), b = node(g, 'T2');
+  assert.ok(Array.isArray(e.route) && e.route.length >= 2);
+  assert.equal(e.route[0].x, a.x + NODE_W, '시작은 소스 노드 우변');
+  assert.equal(e.route[e.route.length - 1].x, b.x, '끝은 타깃 노드 좌변');
+  assert.ok(e.route[0].y > a.y && e.route[0].y < a.y + NODE_H, '포트는 노드 세로 범위 안');
+});
+
+test('레이아웃: 포트 분산 — 한 노드의 여러 나가는 엣지는 시작 y가 서로 다르다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: 'a', dept: '', blocked_by: [] },
+    { id: 'T2', task: 'b', dept: '', blocked_by: ['T1'] },
+    { id: 'T3', task: 'c', dept: '', blocked_by: ['T1'] },
+  ]);
+  const e2 = g.edges.find(e => e.to === 'T2'), e3 = g.edges.find(e => e.to === 'T3');
+  assert.notEqual(e2.route[0].y, e3.route[0].y, 'T1의 두 나가는 엣지 포트가 분산돼야 한다');
+});
+
+test('레이아웃: 다열을 건너뛰는 엣지는 중간 열 통과 웨이포인트가 생긴다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: 'a', dept: '', blocked_by: [] },
+    { id: 'T2', task: 'b', dept: '', blocked_by: ['T1'] },
+    { id: 'T3', task: 'c', dept: '', blocked_by: ['T1', 'T2'] }, // T1→T3: depth 0→2 (한 열 건너뜀)
+  ]);
+  const long = g.edges.find(e => e.from === 'T1' && e.to === 'T3');
+  assert.ok(long.route.length >= 3, '중간 웨이포인트가 있어야 한다');
+});
+
+test('[박스회피] 샘플01: 어떤 엣지 route 점도 노드 박스 내부를 지나지 않는다', () => {
+  const d = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', '샘플01_신스키마.json'), 'utf8'));
+  const g = buildGraph(d.sequence);
+  g.edges.forEach(e => {
+    e.route.forEach(p => {
+      g.nodes.forEach(n => {
+        const insideX = p.x > n.x && p.x < n.x + NODE_W;
+        const insideY = p.y > n.y && p.y < n.y + NODE_H;
+        assert.ok(!(insideX && insideY), e.from + '→' + e.to + ' route가 ' + n.id + ' 박스 내부 통과 (' + p.x + ',' + p.y + ')');
+      });
+    });
+  });
+});

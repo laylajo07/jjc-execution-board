@@ -4,7 +4,7 @@
 (function (root) {
   'use strict';
 
-  var NODE_W = 170, NODE_H = 48, GAP_X = 60, GAP_Y = 14;
+  var NODE_W = 170, NODE_H = 48, GAP_X = 100, GAP_Y = 32;
 
   var SUFFIX = /(작성|확정|준비|검토|완료|진행)$/;
 
@@ -161,37 +161,92 @@
     edges.forEach(function (e) { e.critical = !!hot[e.from]; });
   }
 
-  // 열 = 깊이. 열 안 순서는 선행들의 슬롯 평균(barycenter)으로 정해 교차를 줄인다.
-  // 동점은 원본 배열 순서로 깨서 항상 같은 결과가 나오게 한다.
-  function layout(nodes, preds) {
+  // 열 = 깊이. 열 내부 순서는 반복 barycenter(선행/후행 교대)로 교차를 줄인다.
+  // 결정적: 동점은 원본 배열 index(_i)로 깬다.
+  function orderRanks(nodes, preds, succ) {
     var byDepth = {};
-    nodes.forEach(function (n) {
-      (byDepth[n.depth] = byDepth[n.depth] || []).push(n);
-    });
-    var slot = {};
+    nodes.forEach(function (n) { (byDepth[n.depth] = byDepth[n.depth] || []).push(n); });
+    var depths = Object.keys(byDepth).map(Number).sort(function (a, b) { return a - b; });
+    depths.forEach(function (d) { byDepth[d].sort(function (a, b) { return a._i - b._i; }); });
+    var pos = {};
+    function reindex() { depths.forEach(function (d) { byDepth[d].forEach(function (n, i) { pos[n.id] = i; }); }); }
+    reindex();
+    function bary(n, adj) {
+      var ns = adj[n.id].filter(function (m) { return pos[m] != null; });
+      if (!ns.length) return pos[n.id];
+      var s = 0; ns.forEach(function (m) { s += pos[m]; }); return s / ns.length;
+    }
+    for (var it = 0; it < 4; it++) {
+      var down = (it % 2 === 0);
+      (down ? depths : depths.slice().reverse()).forEach(function (d) {
+        var adj = down ? preds : succ;
+        byDepth[d] = byDepth[d]
+          .map(function (n) { return { n: n, b: bary(n, adj) }; })
+          .sort(function (a, b) { return (a.b - b.b) || (a.n._i - b.n._i); })
+          .map(function (o) { return o.n; });
+        reindex();
+      });
+    }
+    return byDepth;
+  }
 
-    function bary(n) {
-      var ps = preds[n.id].filter(function (p) { return slot[p] != null; });
-      if (!ps.length) return n._i;
-      var s = 0;
-      ps.forEach(function (p) { s += slot[p]; });
-      return s / ps.length;
+  function layout(nodes, preds, succ) {
+    var byDepth = orderRanks(nodes, preds, succ);
+    Object.keys(byDepth).map(Number).forEach(function (d) {
+      byDepth[d].forEach(function (n, i) {
+        n.x = d * (NODE_W + GAP_X);
+        n.y = i * (NODE_H + GAP_Y);
+      });
+    });
+    return byDepth;
+  }
+
+  // 열 colNodes의 박스(세로 밴드)를 피해 targetY에 가장 가까운 y를 고른다.
+  function clearY(colNodes, targetY) {
+    if (!colNodes.length) return targetY;
+    var pad = 10;
+    var bands = colNodes.map(function (n) { return [n.y - pad, n.y + NODE_H + pad]; })
+      .sort(function (a, b) { return a[0] - b[0]; });
+    for (var i = 0; i < bands.length; i++) {
+      if (targetY >= bands[i][0] && targetY <= bands[i][1]) {
+        return (targetY - bands[i][0] <= bands[i][1] - targetY) ? bands[i][0] : bands[i][1];
+      }
+    }
+    return targetY;
+  }
+
+  // 각 엣지에 route(절대좌표 폴리라인)를 붙인다:
+  //   소스 우변 포트 → (긴 엣지면 중간 열을 안전한 y로 수평 통과) → 타깃 좌변 포트.
+  // 포트는 노드 좌우변에서 세로로 분산해 겹침을 줄인다.
+  function computeRoutes(nodes, edges, byDepth) {
+    var byId = {}; nodes.forEach(function (n) { byId[n.id] = n; });
+    var out = {}, inc = {};
+    nodes.forEach(function (n) { out[n.id] = []; inc[n.id] = []; });
+    edges.forEach(function (e) { out[e.from].push(e); inc[e.to].push(e); });
+
+    function port(node, list, e, otherKey) {
+      var sorted = list.slice().sort(function (a, b) {
+        var oa = byId[a[otherKey]], ob = byId[b[otherKey]];
+        return ((oa ? oa.y : 0) - (ob ? ob.y : 0)) || (a.from + '>' + a.to).localeCompare(b.from + '>' + b.to);
+      });
+      return node.y + Math.round(NODE_H * (sorted.indexOf(e) + 1) / (sorted.length + 1));
     }
 
-    Object.keys(byDepth).map(Number).sort(function (a, b) { return a - b; })
-      .forEach(function (d) {
-        var col = byDepth[d];
-        col.sort(function (a, b) {
-          var ba = bary(a), bb = bary(b);
-          if (ba !== bb) return ba - bb;
-          return a._i - b._i;
-        });
-        col.forEach(function (n, i) {
-          slot[n.id] = i;
-          n.x = d * (NODE_W + GAP_X);
-          n.y = i * (NODE_H + GAP_Y);
-        });
-      });
+    edges.forEach(function (e) {
+      var a = byId[e.from], b = byId[e.to];
+      var sx = a.x + NODE_W, sy = port(a, out[a.id], e, 'to');
+      var tx = b.x, ty = port(b, inc[b.id], e, 'from');
+      var pts = [{ x: sx, y: sy }];
+      for (var d = a.depth + 1; d < b.depth; d++) {
+        var colX = d * (NODE_W + GAP_X);
+        var lineY = sy + (ty - sy) * ((colX - sx) / (tx - sx || 1));
+        var safe = clearY(byDepth[d] || [], lineY);
+        pts.push({ x: colX, y: safe });
+        pts.push({ x: colX + NODE_W, y: safe });
+      }
+      pts.push({ x: tx, y: ty });
+      e.route = pts;
+    });
   }
 
   function buildGraph(sequence) {
@@ -236,7 +291,8 @@
     computeDepth(nodes, preds);
     computeDownstream(nodes, succ);
     markBottleneck(nodes, edges);
-    layout(nodes, preds);
+    var byDepth = layout(nodes, preds, succ);
+    computeRoutes(nodes, edges, byDepth);
 
     return {
       nodes: nodes, edges: edges, warnings: warnings,
