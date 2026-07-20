@@ -357,6 +357,29 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   details.more>summary:hover{color:var(--primary-ink)}
   details.more[open]>summary{margin-bottom:6px}
 
+  /* 부서 편집 모드 (설계 2-3) */
+  .acc-edit{font-family:var(--sans);font-size:11px;font-weight:700;border-radius:999px;padding:4px 10px;
+    border:1px solid var(--line);background:var(--surface2);color:var(--muted);cursor:pointer}
+  .acc-edit:hover{border-color:var(--primary);color:var(--primary-ink)}
+  .acc-edit.on{background:var(--primary-soft);color:var(--primary-ink);border-color:transparent}
+  .dept.is-hidden{opacity:.5}
+  .dept__h .exc{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--est);background:var(--est-bg);
+    border-radius:5px;padding:2px 6px;white-space:nowrap;flex:none}
+  .de-name{flex:1;min-width:90px;font-family:var(--sans);font-size:13.5px;font-weight:800;color:var(--ink);
+    background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+  .de-tools{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:8px 15px;
+    border-bottom:1px solid var(--line2);background:var(--surface2)}
+  .de-btn{width:28px;height:28px;flex:none;border-radius:8px;border:1px solid var(--line);background:var(--surface);
+    color:var(--ink2);cursor:pointer;font-size:12px;line-height:1;display:grid;place-items:center}
+  .de-btn:hover{border-color:var(--primary)}
+  .de-btn.on{background:var(--est-bg);color:var(--est);border-color:transparent}
+  .de-btn.danger:hover{border-color:var(--chk);color:var(--chk)}
+  select.de-merge{appearance:none;font-family:var(--sans);font-size:11.5px;font-weight:700;color:var(--ink2);
+    background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 8px;cursor:pointer;max-width:150px}
+  select.de-merge:hover{border-color:var(--primary)}
+  .de-add{display:flex;gap:8px;align-items:center;margin-top:12px}
+  .de-add .dept-input{flex:1}
+
   /* gaps / assumptions */
   .cols2{display:grid;gap:14px}
   @media(min-width:640px){.cols2{grid-template-columns:1fr 1fr}}
@@ -392,6 +415,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 <script src="dag-view.js"></script>
 <script src="board-derive.js"></script>
 <script src="board-custom.js"></script>
+<script src="dept-edit.js"></script>
 </head>
 <body>
 <header class="top">
@@ -523,6 +547,8 @@ const SYS = $('#sys-prompt').textContent.trim();
 const META = JSON.parse($('#app-meta').textContent);
 $('#approachTag').textContent = META.approach;
 let lastData=null, lastBoard=null, lastMarkdown='', AUTO=false;
+// 부서 편집 상태. boardEdited는 "실제로 board가 바뀌었는가" — 이 플래그가 산출물 재구성 여부를 가른다.
+let editMode=false, boardEdited=false;
 
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1700);}
 function esc(s){return (s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -744,8 +770,10 @@ function closePanel(){const p=$('#nodePanel');p.classList.remove('on');p.setAttr
   if(_panelReturn){_panelReturn.focus();_panelReturn=null;}}
 $('#npClose').onclick=closePanel;$('#npOverlay').onclick=closePanel;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanel();});
-function acc(title,count,bodyHtml){
-  return `<details class="acc"><summary><span class="acc-t">${esc(title)}</span><span class="cnt">${count}</span></summary><div class="acc-body">${bodyHtml}</div></details>`;
+// extraHtml: 제목 오른쪽 컨트롤 슬롯(부서 편집 토글). 안 넘기면 기존과 같은 마크업.
+// data-acc: 재렌더 후 열림 상태를 되살리는 키. 제목은 코드 상수라 사용자 입력이 아니다.
+function acc(title,count,bodyHtml,extraHtml){
+  return `<details class="acc" data-acc="${esc(title)}"><summary><span class="acc-t">${esc(title)}</span>${extraHtml||''}<span class="cnt">${count}</span></summary><div class="acc-body">${bodyHtml}</div></details>`;
 }
 /* 우선순위 칩(#3): 랭킹 → top5 + 더보기 */
 function rankedChips(items,cls,graph){
@@ -757,13 +785,161 @@ function rankedChips(items,cls,graph){
   if(rest.length)out+=`<details class="more"><summary>더보기 (+${rest.length})</summary>${rest.map(chip).join('')}</details>`;
   return out;
 }
+/* ── 부서 편집 (설계 2-3) ─────────────────────────────────────────────────
+   dept-edit.js 의 7종은 무효한 요청이면 입력 board를 "참조 그대로" 돌려준다.
+   applyEdit은 그 규약을 UI 피드백으로 바꾼다 — 거부된 편집(빈 이름·'/' 포함·중복·범위 밖
+   이동·자기 자신과 병합)이 조용히 사라지지 않고 토스트로 보인다.
+   boardEdited는 실제로 바뀐 경우에만 켜져 무편집 산출물이 원본 그대로 나가게 한다. */
+function applyEdit(next){
+  if(next===lastBoard){ toast('적용할 수 없는 변경입니다'); return false; }
+  lastBoard=next; boardEdited=true; renderBoard(lastBoard); return true;
+}
+const DEPT_ACC='부서별 실행 항목';
+
+// renderBoard가 #result를 통째로 다시 그리므로 열려 있던 아코디언이 매 편집마다 접힌다.
+// 재렌더 직전에 기록해 두고 직후에 되살린다.
+function accOpenState(){
+  const st={}; document.querySelectorAll('#result details.acc[data-acc]').forEach(el=>{st[el.dataset.acc]=el.open;}); return st;
+}
+function restoreAccOpen(st){
+  document.querySelectorAll('#result details.acc[data-acc]').forEach(el=>{ if(st[el.dataset.acc]) el.open=true; });
+}
+
+function deptToolsHtml(dep,i,all){
+  const opts=all.map((o,j)=> j===i?'':`<option value="${j}">→ ${esc(o.dept)}</option>`).join('');
+  return `<div class="de-tools">`+
+    `<button type="button" class="de-btn" data-de="up" data-i="${i}" title="위로" aria-label="위로">↑</button>`+
+    `<button type="button" class="de-btn" data-de="down" data-i="${i}" title="아래로" aria-label="아래로">↓</button>`+
+    `<button type="button" class="de-btn${dep._hidden?' on':''}" data-de="hide" data-i="${i}" aria-pressed="${!!dep._hidden}" title="${dep._hidden?'다시 포함':'산출물에서 제외(숨김)'}" aria-label="숨김 토글">👁</button>`+
+    `<button type="button" class="de-btn danger" data-de="del" data-i="${i}" title="삭제" aria-label="삭제">✕</button>`+
+    `<select class="de-merge" data-de="merge" data-i="${i}" aria-label="다른 부서로 병합"><option value="">병합 ▾</option>${opts}</select>`+
+    `</div>`;
+}
+
+// data-i는 항상 lastBoard.by_department의 인덱스다(편집 모드에선 숨긴 부서도 그리므로 어긋나지 않는다).
+function bindDeptEdit(all){
+  const eb=$('#deptEditBtn');
+  // summary 안의 버튼이라 기본 동작(아코디언 접기)을 막아야 한다.
+  if(eb) eb.onclick=e=>{ e.preventDefault(); e.stopPropagation(); editMode=!editMode; renderBoard(lastBoard); };
+  if(!editMode) return;
+  document.querySelectorAll('#result [data-de]').forEach(el=>{
+    const i=+el.dataset.i, act=el.dataset.de, cur=all[i];
+    if(act==='rename'){
+      const orig=cur?String(cur.dept):'';
+      // 매 키 입력마다 재렌더하면 못 쓴다 — change/Enter에서만 확정한다.
+      const go=()=>{ if(el.value.trim()===orig.trim()) return;  // 변경 없음 = 무시(토스트도 없음)
+        if(!applyEdit(DeptEdit.renameDept(lastBoard,i,el.value))) el.value=orig; };
+      el.addEventListener('change',go);
+      el.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); go(); } });
+    }else if(act==='merge'){
+      el.addEventListener('change',()=>{ if(el.value==='') return;
+        if(!applyEdit(DeptEdit.mergeDepts(lastBoard,i,+el.value))) el.value=''; });
+    }else if(act==='del'){
+      el.onclick=()=>{ // 삭제는 되돌릴 수 없다(숨김과 달리). 반드시 한 번 확인.
+        if(!confirm('"'+(cur?cur.dept:'')+'" 부서를 삭제할까요? 되돌릴 수 없습니다.\n(다른 부서와 공동으로 맡은 작업은 그 부서에 남습니다.)')) return;
+        applyEdit(DeptEdit.deleteDept(lastBoard,i)); };
+    }else{
+      el.onclick=()=>{
+        if(act==='up') applyEdit(DeptEdit.moveDept(lastBoard,i,-1));
+        else if(act==='down') applyEdit(DeptEdit.moveDept(lastBoard,i,1));
+        else if(act==='hide') applyEdit(DeptEdit.setHideDept(lastBoard,i,!(cur&&cur._hidden)));
+      };
+    }
+  });
+  const ab=$('#deAddBtn'), ai=$('#deAddInput');
+  if(ab&&ai){
+    const go=()=>{ if(!applyEdit(DeptEdit.addDept(lastBoard,ai.value))) ai.focus(); };
+    ab.onclick=go;
+    ai.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); go(); } });
+  }
+}
+
+/* ── 산출물 재구성 ────────────────────────────────────────────────────────
+   lastMarkdown은 모델이 쓴 원본이라 근거·주석 같은 서술형 본문이 잔뜩 들어 있고
+   boardToMarkdown은 그걸 재현할 수 없다. 그래서 편집을 안 했으면 원본을 그대로 주고
+   편집한 경우에만 재조립본을 준다(맨 위 고지 포함). */
+function mdCell(s){ return (s==null?'':String(s)).replace(/\|/g,'\\|').replace(/\r?\n/g,'<br>').trim()||'—'; }
+function mdTable(head,rows){
+  return '| '+head.join(' | ')+' |\n|'+head.map(()=>'---').join('|')+'|\n'
+    +rows.map(r=>'| '+r.map(mdCell).join(' | ')+' |').join('\n')+'\n\n';
+}
+function mdList(title,items){
+  const xs=(items||[]).filter(Boolean);
+  return xs.length ? '## '+title+'\n\n'+xs.map((t,i)=>(i+1)+'. '+String(t)).join('\n')+'\n\n' : '';
+}
+function boardToMarkdown(b){
+  b=b||{}; const mt=b.meeting||{};
+  let o='> ※ 부서 편집이 반영된 재구성본입니다. 원본 응답의 서술(근거·주석)은 포함되지 않습니다.\n\n';
+  o+='# 실행보드 — '+(mt.title||'[미상]')+' 회의\n\n';
+  if(mt.datetime) o+='**일시** '+mt.datetime+'\n\n';
+  o+='**📌 한 줄 요약**\n'+(b.headline||'')+'\n\n';
+  const ta=(b.top_actions||[]).slice(0,3);
+  if(ta.length) o+='**▶ 지금 당장 할 일 Top 3**\n\n'
+    +mdTable(['#','할 일','담당','기한'], ta.map((t,i)=>[String(i+1),t.what,t.owner||'미정',t.due||'미정']));
+  (b.by_department||[]).forEach(dp=>{
+    o+='---\n\n## '+(dp.dept||'')+'\n\n';
+    let any=false;
+    if((dp.action_items||[]).length){ any=true;
+      o+='**할 일**\n\n'+mdTable(['내용','담당','기한','상태'],
+        dp.action_items.map(a=>[(a.what||'')+(a.basis?(' ↳ '+a.basis):''),a.owner||'미정',a.due||'미정',a.status||''])); }
+    if((dp.documents||[]).length){ any=true;
+      o+='**작성 문서**\n\n'+mdTable(['문서','담당','기한','목적'],
+        dp.documents.map(x=>[(x.doc||'')+(x.status?(' ('+x.status+')'):''),x.owner||'미정',x.due||'미정',x.purpose||''])); }
+    if((dp.decisions_needed||[]).length){ any=true;
+      o+='**의사결정 필요**\n\n'+mdTable(['안건','결정자','기한','선행조건'],
+        dp.decisions_needed.map(x=>[(x.topic||'')+(x.status?(' ('+x.status+')'):''),x.decider||'미정',x.due||'미정',x.precondition||''])); }
+    if(!any) o+='_추출된 항목 없음_\n\n';
+  });
+  const seq=b.sequence||[];
+  if(seq.length){
+    o+='---\n\n## 🔁 진행 순서(의존관계)\n\n'+seq.map((s,i)=>{
+      const bb=(s.blocked_by||[]).filter(Boolean), ex=(s.blocked_by_external||[]).filter(Boolean);
+      return (i+1)+'. '+(s.task||'')+(s.dept?(' ('+s.dept+')'):'')
+        +(bb.length?(' — 선행: '+bb.join(', ')):'')
+        +(ex.length?(' — 외부 선행: '+ex.join(', ')):'')
+        +(s.bottleneck?' ⚠️ 병목':'');
+    }).join('\n')+'\n\n';
+  }
+  o+=mdList('❓ 확인 필요(gaps)', b.gaps);
+  o+=mdList('🧩 가정(assumptions)', b.assumptions);
+  const sm=(b.share_messages||[]).filter(m=>m&&(m.chat||m.email_body));
+  if(sm.length){
+    o+='---\n\n## 부서별 공유 메시지\n\n';
+    sm.forEach(m=>{
+      o+='### '+(m.dept||'')+'\n\n';
+      if(m.chat) o+='[메신저]\n\n```\n'+m.chat+'\n```\n\n';
+      if(m.email_body){ o+='[이메일]\n\n';
+        if(m.email_subject) o+='제목: '+m.email_subject+'\n\n';
+        o+='```\n'+m.email_body+'\n```\n\n'; }
+    });
+  }
+  return o.trimEnd()+'\n';
+}
+
+/* 편집 안 했으면 lastData 그대로. 편집했으면 raw 사본에 정규화 스키마를 스플라이스한다.
+   구스키마 키(departments·dependencies)는 지운다 — 정규화된 부서 배열을 구키에 남기면
+   스키마가 섞인 잡종 JSON이 나온다. _hidden·_rd는 내부 필드라 절대 새면 안 된다. */
+function exportJson(){
+  if(!boardEdited) return lastData;
+  const vb=DeptEdit.visibleBoard(lastBoard);
+  const out=JSON.parse(JSON.stringify(lastData||{}));
+  out.by_department=(vb.by_department||[]).map(dp=>{
+    const c={}; for(const k in dp) if(Object.prototype.hasOwnProperty.call(dp,k)&&k!=='_hidden'&&k!=='_rd') c[k]=dp[k];
+    return c;});
+  out.sequence=vb.sequence||[];
+  delete out.departments; delete out.dependencies;
+  return out;
+}
+
 function render(raw){
   if(!raw){renderError('데이터가 비어 있습니다.');return;}
+  editMode=false; boardEdited=false;   // 새 분석 결과 = 편집 이력 초기화
   renderBoard(normalize(raw), raw);
 }
 function renderBoard(d, raw){
   lastBoard=d;
   if(raw!=null) lastData=raw;
+  const accOpen=accOpenState();   // #result를 갈아끼우기 전에 열린 아코디언을 기록
   const mt=d.meeting||{};
   let h='';
   h+=`<div class="summary"><div class="eyebrow">SUMMARY · ${esc(mt.title||'제목 미상')} · ${esc(mt.datetime||'일시 미상')}</div>`;
@@ -772,7 +948,9 @@ function renderBoard(d, raw){
     `<div class="it"><span class="rk">${i+1}</span><div><div class="wt">${esc(t.what)}</div><div class="mt mono">${esc(t.dept||'')} · ${esc(t.owner||'미정')} · ${esc(t.due||'미정')}</div></div></div>`).join('')+'</div>';}
   h+='</div>';
 
-  const g = Graph.buildGraph(d.sequence||[]);
+  // 숨긴 부서는 DAG 노드로 남으면 안 된다(사용자 결정) — 그래프·상세는 visibleBoard 기준.
+  const vb = DeptEdit.visibleBoard(d);
+  const g = Graph.buildGraph(vb.sequence||[]);
 
   // ── 히어로: 크리티컬 패스 DAG (최상단 강조) ──
   h+=secH('01','권장 진행 순서 · 크리티컬 패스');
@@ -784,11 +962,22 @@ function renderBoard(d, raw){
   }
 
   // ── 아코디언 3그룹 (기본 접힘) ──
-  const deptsHtml='<div class="depts">'+ (d.by_department||[]).map(dep=>
-    `<section class="dept"><div class="dept__h"><span class="dot"></span><span class="nm">${esc(dep.dept)}</span></div><div class="dept__b">`+
+  // 숨긴 부서: 편집 모드에선 흐리게라도 보여야 되돌릴 수 있고, 보기 모드에선 아예 안 보인다.
+  const allDepts=d.by_department||[];
+  const shown=allDepts.map((dep,i)=>({dep:dep,i:i})).filter(x=>editMode||!x.dep._hidden);
+  const deptsHtml='<div class="depts">'+ shown.map(x=>{const dep=x.dep;
+    return `<section class="dept${dep._hidden?' is-hidden':''}"><div class="dept__h"><span class="dot"></span>`+
+    (editMode
+      ? `<input class="de-name" type="text" maxlength="40" data-de="rename" data-i="${x.i}" value="${esc(dep.dept)}" aria-label="부서명">`
+      : `<span class="nm">${esc(dep.dept)}</span>`)+
+    (dep._hidden?'<span class="exc">제외됨</span>':'')+
+    `</div>`+(editMode?deptToolsHtml(dep,x.i,allDepts):'')+`<div class="dept__b">`+
     (tblAI(dep.action_items)+tblDoc(dep.documents)+tblDec(dep.decisions_needed) || '<div class="block"><div class="basis">추출된 항목 없음</div></div>')+
-    `</div></section>`).join('') + '</div>';
-  if((d.by_department||[]).length) h+=acc('부서별 실행 항목', (d.by_department||[]).length, deptsHtml);
+    `</div></section>`;}).join('') + '</div>'
+    +(editMode?`<div class="de-add"><input class="dept-input" type="text" id="deAddInput" maxlength="40" placeholder="추가할 부서명" aria-label="추가할 부서명"><button type="button" class="btn" id="deAddBtn">+ 부서 추가</button></div>`:'');
+  // 편집 모드에선 부서를 다 지워도 아코디언(과 [+ 부서 추가])이 남아야 복구할 수 있다.
+  if(allDepts.length||editMode) h+=acc(DEPT_ACC, shown.length, deptsHtml,
+    `<button type="button" class="acc-edit${editMode?' on':''}" id="deptEditBtn" aria-pressed="${editMode}">✎ 부서 편집</button>`);
 
   if((d.gaps&&d.gaps.length)||(d.assumptions&&d.assumptions.length)){
     const gc=(d.gaps||[]).filter(Boolean).length, asmc=(d.assumptions||[]).filter(Boolean).length;
@@ -810,9 +999,11 @@ function renderBoard(d, raw){
 
   h+=`<details class="raw"><summary>원본 마크다운 / JSON</summary><pre>${esc(lastMarkdown||'')}\n\n${esc(JSON.stringify(lastData,null,2))}</pre></details>`;
   $('#result').innerHTML=h;
+  restoreAccOpen(accOpen);   // 편집할 때마다 부서 목록이 접히면 못 쓴다
+  bindDeptEdit(allDepts);
   document.querySelectorAll('.msg .cp').forEach(b=>b.onclick=()=>copy($('#'+b.dataset.c).textContent));
   closePanel();
-  const detail=BoardDerive.buildDetailMap(g,d.by_department);
+  const detail=BoardDerive.buildDetailMap(g,vb.by_department);
   document.querySelectorAll('#result .dag-n[data-id]').forEach(el=>{
     const open=()=>{const n=g.nodes.find(x=>x.id===el.dataset.id);if(!n)return;
       document.querySelectorAll('.dag-n.sel').forEach(s=>s.classList.remove('sel'));el.classList.add('sel');
@@ -824,8 +1015,11 @@ function renderBoard(d, raw){
 }
 function renderError(msg){$('#result').innerHTML=`<div class="empty"><div><div class="art" style="color:var(--chk)">!</div><h3>처리하지 못했습니다</h3><p>${esc(msg)}</p></div></div>`;}
 
-$('#copyMdBtn').onclick=()=>copy(lastMarkdown||JSON.stringify(lastData,null,2));
-$('#dlJsonBtn').onclick=()=>{const b=new Blob([JSON.stringify(lastData,null,2)],{type:'application/json'});
+$('#copyMdBtn').onclick=()=>{
+  if(!boardEdited) return copy(lastMarkdown||JSON.stringify(lastData,null,2));   // 편집 전엔 모델 원본 그대로
+  copy(boardToMarkdown(DeptEdit.visibleBoard(lastBoard)));
+};
+$('#dlJsonBtn').onclick=()=>{const b=new Blob([JSON.stringify(exportJson(),null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='조정치_결과.json';a.click();};
 $('#printBtn').onclick=()=>window.print();
 
