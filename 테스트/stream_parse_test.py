@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import sys, os, json, unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '러너', 'py'))
-from server import collect_text, collect_delta, dept_config_to_prompt
+from server import collect_text, collect_delta, dept_config_to_prompt, sanitize_dept_config
 
 class TestCollectText(unittest.TestCase):
     def test_assistant_텍스트만_이어붙인다(self):
@@ -82,6 +82,14 @@ class TestDeptConfigToPrompt(unittest.TestCase):
         for case in self.cases:
             with self.subTest(name=case['name']):
                 self.assertEqual(dept_config_to_prompt(case['config']), case['expected'])
+
+    def test_U2028_U2029_줄문단_구분자는_공백_접기_규칙에_의해_부수적으로_공백_하나로_눌린다(self):
+        # board-custom.test.js의 동명 테스트와 같은 회귀를 py 쪽에도 고정한다 — 전용 제어문자
+        # 정규식(_DEPT_CONTROL_CHARS_RE)이 아니라 그 뒤의 \s+ 공백 접기(_DEPT_WHITESPACE_RE)에서
+        # 나오는 부수적 보호다(Python도 유니코드 모드 \s가 U+2028/U+2029를 포함). 이 정규식이
+        # 나중에 [ \t]+ 처럼 좁혀지면 이 구멍이 소리 없이 다시 열리므로 못박아 둔다.
+        result = sanitize_dept_config({'customDepts': ['a b c']})
+        self.assertEqual(result['customDepts'], ['a b c'])
 
 
 if __name__ == '__main__':
