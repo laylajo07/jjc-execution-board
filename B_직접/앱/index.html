@@ -525,7 +525,7 @@ $('#approachTag').textContent = META.approach;
 let lastData=null, lastBoard=null, lastMarkdown='', AUTO=false;
 
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1700);}
-function esc(s){return (s??'').toString().replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function esc(s){return (s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 async function copy(text){try{await navigator.clipboard.writeText(text);toast('복사됐습니다');}catch(e){
   const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('복사됐습니다');}}
 const sc = st => ({'확정':'ok','추정':'est','확인필요':'chk'}[st]||'chk');
