@@ -141,6 +141,9 @@
     var depts = board.by_department;
     if (!isValidIdx(idx, depts.length)) return board;
     var otherIdx = idx + dir;
+    // 부서가 1개뿐이면 항상 여기서 걸려 board를 그대로 반환한다(구조적으로 이동 불가) —
+    // 다른 함수들의 idx 범위 밖 처리와 동일한 "그대로 반환"이며, seqOf에 의한
+    // sequence 배열화는 아래 성공 경로(cloneBoard 호출)에서만 보장된다.
     if (!isValidIdx(otherIdx, depts.length)) return board;
 
     var newDepts = depts.slice();
@@ -175,6 +178,8 @@
     if (!isBoard(board)) return board;
     var depts = board.by_department;
     if (!isValidIdx(fromIdx, depts.length) || !isValidIdx(toIdx, depts.length)) return board;
+    // 부서가 1개뿐이면 fromIdx===toIdx가 강제되어 항상 여기서 board를 그대로 반환한다
+    // (moveDept의 1부서 케이스와 같은 구조적 한계 — 버그 아님).
     if (fromIdx === toIdx) return board;
 
     var from = depts[fromIdx], to = depts[toIdx];
