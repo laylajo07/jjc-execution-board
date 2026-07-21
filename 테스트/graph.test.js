@@ -410,6 +410,109 @@ test('A·B의 board-derive.js는 바이트 단위로 동일해야 한다 (복사
   assert.equal(a, b, 'A와 B의 board-derive.js가 다릅니다 — 한쪽만 고쳤습니다');
 });
 
+// ── qualityScore (지시사항 14: 회의록 품질 점수) ──
+const { qualityScore } = require('../B_직접/앱/board-derive.js');
+
+test('qualityScore: 담당·기한·의사결정이 전부 채워진 보드는 100점, missing 0', () => {
+  const board = { by_department: [
+    { dept: 'CB본부',
+      action_items: [{ what: 'a', owner: '철수', due: '7/10', status: '확정' }],
+      documents: [{ doc: 'd', owner: '영희', due: '7/11', status: '확정' }],
+      decisions_needed: [{ topic: 't', decider: '민수', due: '7/12', status: '확정' }],
+    },
+  ] };
+  const qs = qualityScore(board);
+  assert.equal(qs.score, 100);
+  assert.equal(qs.ownerMissing, 0);
+  assert.equal(qs.dueMissing, 0);
+  assert.equal(qs.decisionOpen, 0);
+  assert.equal(qs.itemCount, 2, 'action_item 1 + document 1');
+  assert.equal(qs.decisionCount, 1);
+  assert.equal(qs.total, 7, 'ownerSlots3+dueSlots3+decisionSlots1');
+});
+
+test('qualityScore: 절반이 미정이면 대략 그 비율의 점수가 나온다', () => {
+  const board = { by_department: [
+    { dept: 'X',
+      action_items: [
+        { what: 'a', owner: '미정', due: '7/10' },   // owner 미정
+        { what: 'b', owner: '미정', due: '7/11' },   // owner 미정
+        { what: 'c', owner: '철수', due: '미정' },   // due 미정
+        { what: 'd', owner: '영희', due: '미정' },   // due 미정
+      ],
+      documents: [], decisions_needed: [],
+    },
+  ] };
+  const qs = qualityScore(board);
+  // items=4 → ownerSlots4+dueSlots4+decisionSlots0=total8, missing=2+2=4 → 50점
+  assert.equal(qs.total, 8);
+  assert.equal(qs.ownerMissing, 2);
+  assert.equal(qs.dueMissing, 2);
+  assert.equal(qs.score, 50);
+});
+
+test('qualityScore: decisions_needed 상태 확정 vs 확인필요가 decisionOpen에 반영된다', () => {
+  const board = { by_department: [
+    { dept: 'X', action_items: [], documents: [],
+      decisions_needed: [
+        { topic: 't1', decider: '민수', due: '7/1', status: '확정' },
+        { topic: 't2', decider: '지수', due: '7/2', status: '확인필요' },
+      ],
+    },
+  ] };
+  const qs = qualityScore(board);
+  assert.equal(qs.decisionCount, 2);
+  assert.equal(qs.decisionOpen, 1, '확정이 아닌 것만 미완');
+  // total = ownerSlots2+dueSlots2+decisionSlots2 = 6, missing = decisionOpen 1 → round((1-1/6)*100)=83
+  assert.equal(qs.total, 6);
+  assert.equal(qs.score, 83);
+});
+
+test('qualityScore: "미정" 판정은 빈값·미정·미상·[미상]·- 를 trim 후 모두 잡는다', () => {
+  const board = { by_department: [
+    { dept: 'X',
+      action_items: [
+        { what: 'a', owner: '', due: '7/1' },
+        { what: 'b', owner: '미정', due: '7/1' },
+        { what: 'c', owner: '미상', due: '7/1' },
+        { what: 'd', owner: '[미상]', due: '7/1' },
+        { what: 'e', owner: '-', due: '7/1' },
+        { what: 'f', owner: '  미정  ', due: '7/1' },
+        { what: 'g', owner: '철수', due: '7/1' },   // 이건 채워짐 — 미정 아님
+      ],
+      documents: [], decisions_needed: [],
+    },
+  ] };
+  const qs = qualityScore(board);
+  assert.equal(qs.ownerMissing, 6, '앞의 6개만 미정으로 잡히고 마지막(철수)은 아니어야 한다');
+  assert.equal(qs.dueMissing, 0);
+});
+
+test('qualityScore: 빈 보드/null은 예외 없이 score 100, 모든 카운트 0', () => {
+  assert.deepEqual(qualityScore(null), { score: 100, ownerMissing: 0, dueMissing: 0, decisionOpen: 0, itemCount: 0, decisionCount: 0, total: 0 });
+  assert.deepEqual(qualityScore(undefined), { score: 100, ownerMissing: 0, dueMissing: 0, decisionOpen: 0, itemCount: 0, decisionCount: 0, total: 0 });
+  assert.deepEqual(qualityScore({}), { score: 100, ownerMissing: 0, dueMissing: 0, decisionOpen: 0, itemCount: 0, decisionCount: 0, total: 0 });
+  assert.deepEqual(qualityScore({ by_department: [] }), { score: 100, ownerMissing: 0, dueMissing: 0, decisionOpen: 0, itemCount: 0, decisionCount: 0, total: 0 });
+});
+
+test('qualityScore: 이상한/기형 board가 와도 절대 예외를 던지지 않는다', () => {
+  assert.doesNotThrow(() => qualityScore('문자열'));
+  assert.doesNotThrow(() => qualityScore(42));
+  assert.doesNotThrow(() => qualityScore({ by_department: '배열아님' }));
+  assert.doesNotThrow(() => qualityScore({ by_department: [{ action_items: null, documents: undefined, decisions_needed: 5 }] }));
+  const qs = qualityScore({ by_department: [{ action_items: null, documents: undefined, decisions_needed: 5 }] });
+  assert.equal(qs.total, 0, '슬롯을 못 세는 기형 필드는 무시하고 0으로 떨어져야 한다');
+});
+
+test('qualityScore: 불변 — 입력 board를 변형하지 않는다', () => {
+  const board = { by_department: [
+    { dept: 'X', action_items: [{ what: 'a', owner: '', due: '' }], documents: [], decisions_needed: [] },
+  ] };
+  const snapshot = JSON.parse(JSON.stringify(board));
+  qualityScore(board);
+  assert.deepEqual(board, snapshot);
+});
+
 const { nodePanelHtml } = require('../B_직접/앱/dag-view.js');
 
 test('nodePanelHtml: 매칭 상세는 담당/기한/상태를 담고, 병목은 후행 수를 담는다', () => {

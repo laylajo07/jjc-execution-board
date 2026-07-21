@@ -82,7 +82,48 @@
     return scored;
   }
 
-  var api = { buildDetailMap: buildDetailMap, rankItems: rankItems };
+  // ── 지시사항 14: 회의록 품질 점수 ──
+  // "미정" 판정: 비었거나 미정·미상·[미상]·- (trim 후 비교).
+  function isBlank(v) {
+    v = (v == null ? '' : String(v)).trim();
+    return !v || v === '미정' || v === '미상' || v === '[미상]' || v === '-';
+  }
+
+  // 순수·결정적·DOM 미접근. board가 null/이상해도 예외를 던지지 않고 0점 상태를 돌려준다.
+  function qualityScore(board) {
+    var zero = { score: 100, ownerMissing: 0, dueMissing: 0, decisionOpen: 0, itemCount: 0, decisionCount: 0, total: 0 };
+    try {
+      var depts = (board && Array.isArray(board.by_department)) ? board.by_department : [];
+      var items = [], decisions = [];
+      depts.forEach(function (d) {
+        if (!d) return;
+        (Array.isArray(d.action_items) ? d.action_items : []).forEach(function (a) { if (a) items.push(a); });
+        (Array.isArray(d.documents) ? d.documents : []).forEach(function (doc) { if (doc) items.push(doc); });
+        (Array.isArray(d.decisions_needed) ? d.decisions_needed : []).forEach(function (dc) { if (dc) decisions.push(dc); });
+      });
+      var ownerMissing = 0, dueMissing = 0, decisionOpen = 0;
+      items.forEach(function (it) {
+        if (isBlank(it.owner)) ownerMissing++;
+        if (isBlank(it.due)) dueMissing++;
+      });
+      decisions.forEach(function (dc) {
+        if (isBlank(dc.decider)) ownerMissing++;
+        if (isBlank(dc.due)) dueMissing++;
+        if (String(dc.status == null ? '' : dc.status).trim() !== '확정') decisionOpen++;
+      });
+      var ownerSlots = items.length + decisions.length;
+      var dueSlots = items.length + decisions.length;
+      var decisionSlots = decisions.length;
+      var total = ownerSlots + dueSlots + decisionSlots;
+      var missing = ownerMissing + dueMissing + decisionOpen;
+      var score = total > 0 ? Math.round((1 - missing / total) * 100) : 100;
+      return { score: score, ownerMissing: ownerMissing, dueMissing: dueMissing, decisionOpen: decisionOpen, itemCount: items.length, decisionCount: decisions.length, total: total };
+    } catch (e) {
+      return zero;
+    }
+  }
+
+  var api = { buildDetailMap: buildDetailMap, rankItems: rankItems, qualityScore: qualityScore };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.BoardDerive = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

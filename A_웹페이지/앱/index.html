@@ -198,6 +198,15 @@
     display:grid;place-items:center;font-size:11px;flex:none;margin-top:1px}
   .top3 .wt{font-size:12.5px;font-weight:600;line-height:1.35}
   .top3 .mt{font-size:11px;color:var(--muted);margin-top:4px}
+  .qscore{display:flex;align-items:baseline;flex-wrap:wrap;column-gap:10px;row-gap:2px;
+    margin:10px 0 2px;padding:8px 12px;border-radius:var(--radius-sm);border:1px solid var(--line);border-left:3px solid var(--line)}
+  .qscore .qs-num{font-family:var(--mono);font-size:22px;font-weight:800;line-height:1}
+  .qscore .qs-unit{font-size:12px;font-weight:600;color:var(--muted)}
+  .qscore .qs-label{font-size:11px;font-weight:700;color:var(--muted)}
+  .qscore .qs-break{flex-basis:100%;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .qscore.q-good{background:var(--ok-bg);border-left-color:var(--ok)} .qscore.q-good .qs-num{color:var(--ok)}
+  .qscore.q-mid{background:var(--est-bg);border-left-color:var(--est)} .qscore.q-mid .qs-num{color:var(--est)}
+  .qscore.q-low{background:var(--chk-bg);border-left-color:var(--chk)} .qscore.q-low .qs-num{color:var(--chk)}
 
   /* section heading */
   .sec-h{display:flex;align-items:center;gap:10px;margin:22px 2px 12px}
@@ -985,6 +994,11 @@ function renderBoard(d, raw){
   let h='';
   h+=`<div class="summary"><div class="eyebrow">SUMMARY · ${esc(mt.title||'제목 미상')} · ${esc(mt.datetime||'일시 미상')}</div>`;
   if(lastUpdatedIso){ const u=BoardCustom.fmtUpdatedAt(new Date(lastUpdatedIso)); if(u) h+=`<div class="updated mono">업데이트 ${esc(u)}</div>`; }
+  const qs=BoardDerive.qualityScore(d);
+  if(qs.total>0){
+    const qBand=qs.score>=80?'good':(qs.score>=50?'mid':'low');
+    h+=`<div class="qscore q-${qBand}"><span class="qs-num">${qs.score}</span><span class="qs-unit">점</span><span class="qs-label">회의록 품질</span><span class="qs-break">담당자 미정 ${qs.ownerMissing} · 기한 미정 ${qs.dueMissing} · 의사결정 미완 ${qs.decisionOpen}</span></div>`;
+  }
   h+=`<h2>${esc(d.headline||'회의 실행보드')}</h2>`;
   if(d.top_actions&&d.top_actions.length){h+='<div class="top3">'+d.top_actions.slice(0,3).map((t,i)=>
     `<div class="it"><span class="rk">${i+1}</span><div><div class="wt">${esc(t.what)}</div><div class="mt mono">${esc(t.dept||'')} · ${esc(t.owner||'미정')} · ${esc(t.due||'미정')}</div></div></div>`).join('')+'</div>';}
