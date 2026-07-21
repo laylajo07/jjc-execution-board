@@ -132,6 +132,29 @@ test('접미 차이만 있는 것은 붙는다', () => {
   assert.equal(g.stats.edgeResolved, 1);
 });
 
+test('step 스키마: blocked_by가 단계 번호면 step으로 정확 매칭돼 깊은 체인이 살아난다', () => {
+  // 모델이 blocked_by를 작업명이 아니라 단계 번호([1],[2]…)로 참조하는 경우 — 4단계 체인.
+  const g = buildGraph([
+    { step: 1, task: '결합 서비스 적법성 법률 검토', dept: '법무실', blocked_by: [] },
+    { step: 2, task: '등급 암시 금지 가이드라인 수립', dept: '법무실', blocked_by: [1] },
+    { step: 3, task: '알림 문구 초안 작성', dept: '마케팅', blocked_by: [2] },
+    { step: 4, task: '발송 로직 개발', dept: 'ICT본부', blocked_by: ['3'] },  // 문자열 숫자도 허용
+  ]);
+  assert.equal(g.stats.mode, 'fuzzy');
+  assert.equal(g.stats.edgeTotal, 3);
+  assert.equal(g.stats.edgeResolved, 3, '숫자 blocked_by가 step으로 전부 해결돼야 한다');
+  assert.equal(node(g, 'T4').depth, 3, '4단계 체인이면 최대 깊이 3');
+});
+
+test('숫자 blocked_by라도 그 step이 없으면 지어내지 않고 external로 둔다', () => {
+  const g = buildGraph([
+    { step: 1, task: 'A 작업', dept: '', blocked_by: [] },
+    { step: 2, task: 'B 작업', dept: '', blocked_by: [9] },  // step 9는 없음
+  ]);
+  assert.equal(g.stats.edgeResolved, 0);
+  assert.deepEqual(g.nodes[1].externals, ['9']);
+});
+
 test('대응 노드가 없으면 external로 두고 지어내지 않는다', () => {
   const g = buildGraph([
     { task: 'v2 모델 재학습 → AUC 0.85 달성', dept: '', blocked_by: [] },

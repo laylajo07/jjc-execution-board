@@ -59,14 +59,23 @@
   }
 
   // 선행 목록 → 엣지. 해석 실패한 것은 externals로 강등한다.
+  // blocked_by가 단계 번호(숫자)면 step으로 정확 매칭(모델이 "[1],[2]"처럼 번호로 참조하는 경우),
+  // 그 외에는 작업명 fuzzy 매칭. id 모드는 label을 그대로 id로 쓴다.
   function buildEdges(seq, nodes, index, mode) {
     var edges = [], total = 0, resolved = 0;
+    var stepMap = {};
+    seq.forEach(function (s, i) {
+      if (s && s.step != null && String(s.step).trim() !== '') stepMap[String(s.step).trim()] = nodes[i].id;
+    });
     seq.forEach(function (s, i) {
       var self = nodes[i];
       ((s && s.blocked_by) || []).forEach(function (b) {
         total++;
-        var label = String(b);
-        var from = (mode === 'id') ? label : resolveFuzzy(label, nodes, self.id);
+        var label = String(b).trim();
+        var from;
+        if (mode === 'id') from = label;
+        else if (/^\d+$/.test(label) && stepMap[label]) from = stepMap[label];
+        else from = resolveFuzzy(label, nodes, self.id);
         if (from && index[from] && from !== self.id) {
           edges.push({ from: from, to: self.id, critical: false });
           resolved++;
