@@ -12,8 +12,8 @@ function board(depts) {
   return { meeting: { title: '테스트', date: '2026-07-21' }, by_department: depts, sequence: [], gaps: [] };
 }
 
-function dept(name, actionItems, decisions) {
-  return { dept: name, action_items: actionItems || [], documents: [], decisions_needed: decisions || [], _rd: [] };
+function dept(name, actionItems, decisions, documents) {
+  return { dept: name, action_items: actionItems || [], documents: documents || [], decisions_needed: decisions || [], _rd: [] };
 }
 
 function action(what, owner, due, status) {
@@ -22,6 +22,10 @@ function action(what, owner, due, status) {
 
 function decision(topic, decider, due, status) {
   return { topic: topic, decider: decider || '', due: due || '', status: status || '', precondition: '' };
+}
+
+function document(doc, owner, due, status) {
+  return { doc: doc, owner: owner || '', due: due || '', purpose: '', status: status || '' };
 }
 
 function snapshot(b) { return JSON.stringify(b); }
@@ -203,7 +207,67 @@ test('기형 board(문자열/숫자/빈 객체/깨진 by_department)도 예외 �
 });
 
 // ---------------------------------------------------------------------------
-// 10. A·B 바이트 동일
+// 10. documents(문서)도 매칭 대상 — 설계 §2: action_items+documents+decisions
+// ---------------------------------------------------------------------------
+
+test('문서: prev에 없는 cur 문서는 new 태그(kind=doc)', () => {
+  const prev = board([dept('CB본부', [], [], [])]);
+  const cur = board([dept('CB본부', [], [], [document('이사회 보고자료', '라일라', '07-18', '확정')])]);
+  const out = diffBoards(prev, cur);
+  assert.equal(out.tags[key('CB본부', 'doc', 0)], 'new');
+});
+
+test('문서: owner/due가 달라지면 changed', () => {
+  const prev = board([dept('CB본부', [], [], [document('이사회 보고자료', '라일라', '07-18', '추정')])]);
+  const cur = board([dept('CB본부', [], [], [document('이사회 보고자료', '김대리', '07-20', '추정')])]);
+  const out = diffBoards(prev, cur);
+  assert.equal(out.tags[key('CB본부', 'doc', 0)], 'changed');
+});
+
+test('문서: status가 확정으로 바뀌면 done + done[]에 confirmed로 기록(kind=doc)', () => {
+  const prev = board([dept('CB본부', [], [], [document('이사회 보고자료', '라일라', '07-18', '추정')])]);
+  const cur = board([dept('CB본부', [], [], [document('이사회 보고자료', '라일라', '07-18', '확정')])]);
+  const out = diffBoards(prev, cur);
+  assert.equal(out.tags[key('CB본부', 'doc', 0)], 'done');
+  assert.equal(out.done.length, 1);
+  assert.equal(out.done[0].reason, 'confirmed');
+  assert.equal(out.done[0].kind, 'doc');
+});
+
+// ---------------------------------------------------------------------------
+// 11. 빈 값 ↔ '미정' 동치 — owner/due(및 decider) 비교는 board-derive.js isBlank와 동일 판정을 쓴다
+// ---------------------------------------------------------------------------
+
+test("동치: owner가 ''→'미정'으로 바뀐 것뿐이면(나머지 동일) changed가 아니라 same", () => {
+  const prev = board([dept('CB본부', [action('모델 재학습', '', '07-30', '진행중')])]);
+  const cur = board([dept('CB본부', [action('모델 재학습', '미정', '07-30', '진행중')])]);
+  const out = diffBoards(prev, cur);
+  assert.equal(out.tags[key('CB본부', 'action', 0)], 'same');
+});
+
+// ---------------------------------------------------------------------------
+// 12. 특성화(characterization) — greedy 매칭은 안정적 이분매칭이 아니다(문서화된 현재 동작 고정)
+//     의도된 동작이며 바꾸지 않는다. 이 테스트는 리팩터가 이 동작을 바꿀 때 반드시 인지하게 만든다.
+// ---------------------------------------------------------------------------
+
+test('[특성화] prev 항목 2개가 모두 cur 항목 1개와 매칭 가능해도 그리디 매칭이라 양쪽 다 dropped 처리되지 않는다', () => {
+  const prev = board([dept('CB본부', [
+    action('모델 재학습', 'CB1', '07-30', '진행중'),
+    action('모델 재학습', 'CB2', '08-01', '진행중')
+  ])]);
+  const cur = board([dept('CB본부', [
+    action('모델 재학습', 'CB1', '07-30', '진행중')
+  ])]);
+  const out = diffBoards(prev, cur);
+  // 현재 실제 동작 고정: cur의 유일한 항목은 prev의 첫 항목(CB1)과 매칭돼 same.
+  assert.deepEqual(out.tags, { [key('CB본부', 'action', 0)]: 'same' });
+  // 두 prev 항목 모두 독립적으로(비배타적으로) cur의 그 하나와 매칭에 성공하므로
+  // 이분매칭이었다면 dropped로 잡혔을 두 번째 prev 항목(CB2)도 dropped로 잡히지 않는다.
+  assert.deepEqual(out.done, []);
+});
+
+// ---------------------------------------------------------------------------
+// 13. A·B 바이트 동일
 // ---------------------------------------------------------------------------
 
 test('A·B의 board-diff.js는 바이트 단위로 동일해야 한다 (복사 누락 방지)', () => {

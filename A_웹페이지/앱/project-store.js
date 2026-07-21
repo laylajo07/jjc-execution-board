@@ -23,6 +23,14 @@
   function sanitizeProjectName(s) { return cleanText(s, MAX_PROJECT_NAME_LEN); }
   function sanitizeRoundTitle(s) { return cleanText(s, MAX_ROUND_TITLE_LEN); }
 
+  // raw를 깊은 복제로 떼어낸다 — 호출자가 준(또는 기존 저장된) raw 객체를 참조로 그대로 들고 있으면
+  // 저장 후 호출자 쪽 변형이 상태에 새거나, 두 state가 같은 raw를 공유(alias)하게 된다. 순환 참조 등
+  // JSON으로 못 도는 값이면 예외 대신 null로 대체한다(설계: 순수·무예외).
+  function cloneRaw(raw) {
+    if (raw === null || raw === undefined) return null;
+    try { return JSON.parse(JSON.stringify(raw)); } catch (e) { return null; }
+  }
+
   // 기존 id들 중 prefix로 시작하는 것의 최대 숫자 접미사 + 1. Date.now()/Math.random() 없이
   // state에 이미 있는 id만으로 다음 id를 결정적으로 뽑는다(테스트 재현성).
   function nextSeqId(ids, prefix) {
@@ -52,7 +60,7 @@
       id: id,
       ts: typeof r.ts === 'string' ? r.ts : '',
       title: sanitizeRoundTitle(r.title),
-      raw: (r.raw === undefined) ? null : r.raw
+      raw: cloneRaw(r.raw)
     };
   }
 
@@ -143,11 +151,12 @@
   }
 
   // 해당 프로젝트의 rounds 뒤에 회차를 추가한다. id·ts는 이 함수가 채운다(호출자는 title·raw만 준다).
+  // raw는 깊은 복제로 떼어 저장한다(cloneRaw) — 호출자가 이후 자기 raw를 변형해도 저장된 회차는 영향받지 않는다.
   // 20개 초과 시 오래된 것부터 제거. projectId가 없으면 아무 것도 바꾸지 않는다(no-op).
   function addRound(state, projectId, round) {
     var s = sanitize(state);
     var r = (round && typeof round === 'object' && !Array.isArray(round)) ? round : {};
-    var raw = (r.raw === undefined) ? null : r.raw;
+    var raw = cloneRaw(r.raw);
     var found = false;
     var projects = s.projects.map(function (p) {
       if (p.id !== projectId) return p;

@@ -10,7 +10,7 @@
        그 부서·종류 배열 안에서의 0-based 순번(idx)으로 만든다(렌더러가 by_department를
        그대로 순회하며 조회할 수 있게 하기 위함 — by_department 배열 순서가 바뀌어도
        dept명이 안 바뀌면 key는 안정적이다).
-       kind: 'action'(action_items) | 'decision'(decisions_needed)
+       kind: 'action'(action_items) | 'doc'(documents) | 'decision'(decisions_needed)
    - done: [{ dept, kind, idx, text, owner, due, status, reason }]
        '완료'로 판정된 항목 목록. reason:
          'dropped'   — prev에는 있었는데 cur에 매칭되는 항목이 없음(idx는 prevBoard 쪽 배열 인덱스)
@@ -25,7 +25,7 @@
      4) 그 외(매칭되고 전부 동일)                    → 'same'
    prevBoard가 없으면(첫 회차, null/undefined) 비교 대상이 없으므로 cur 전부 'same'(스펙 §2 — 'new' 아님).
 
-   매칭 규칙: 항목 텍스트(action_items의 what / decisions_needed의 topic)를 graph.js의
+   매칭 규칙: 항목 텍스트(action_items의 what / documents의 doc / decisions_needed의 topic)를 graph.js의
    containment(bigram 포함계수)로 비교한다. 같은 kind(action↔action, decision↔decision)끼리만
    비교하고, 우선 같은 dept 안에서 최댓값을 찾은 뒤 임계 0.6 미만이면 dept 무관 전체 풀로 폴백한다
    (부서 개명·이동 대응 — board-derive.js의 buildDetailMap과 같은 관용구). 매칭은 방향성 있는
@@ -43,6 +43,20 @@
 
   function str(v) { return v == null ? '' : String(v); }
 
+  // board-derive.js isBlank와 동일 판정(로컬 복제 — 모듈 독립성 유지, house style).
+  // "미정" 취급: 비었거나 미정·미상·[미상]·- (trim 후 비교). owner/due/decider 비교에 쓴다.
+  function isBlank(v) {
+    v = (v == null ? '' : String(v)).trim();
+    return !v || v === '미정' || v === '미상' || v === '[미상]' || v === '-';
+  }
+
+  // owner/due(및 decider) 비교용 동치 판정 — 둘 다 "미정" 취급(빈 값·미정·미상·[미상]·-)이면
+  // 문자열이 달라도 같은 값으로 본다. status는 이 함수를 쓰지 않고 리터럴 비교한다.
+  function sameFieldValue(a, b) {
+    if (isBlank(a) && isBlank(b)) return true;
+    return a === b;
+  }
+
   // by_department → 평탄화된 항목 목록 [{dept, kind, idx, text, owner, due, status}]
   function flatten(board) {
     var depts = (board && Array.isArray(board.by_department)) ? board.by_department : [];
@@ -53,6 +67,10 @@
       (Array.isArray(d.action_items) ? d.action_items : []).forEach(function (a, i) {
         if (!a) return;
         out.push({ dept: dept, kind: 'action', idx: i, text: str(a.what), owner: str(a.owner), due: str(a.due), status: str(a.status) });
+      });
+      (Array.isArray(d.documents) ? d.documents : []).forEach(function (doc, i) {
+        if (!doc) return;
+        out.push({ dept: dept, kind: 'doc', idx: i, text: str(doc.doc), owner: str(doc.owner), due: str(doc.due), status: str(doc.status) });
       });
       (Array.isArray(d.decisions_needed) ? d.decisions_needed : []).forEach(function (dc, i) {
         if (!dc) return;
@@ -103,7 +121,7 @@
           done.push({ dept: c.dept, kind: c.kind, idx: c.idx, text: c.text, owner: c.owner, due: c.due, status: c.status, reason: 'confirmed' });
           return;
         }
-        var changed = (c.owner !== m.owner) || (c.due !== m.due) || (c.status !== m.status);
+        var changed = !sameFieldValue(c.owner, m.owner) || !sameFieldValue(c.due, m.due) || (c.status !== m.status);
         tags[key(c)] = changed ? 'changed' : 'same';
       });
 

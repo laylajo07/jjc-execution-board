@@ -143,6 +143,26 @@ test('[불변] renameProject/deleteProject/setCurrent 모두 입력 state를 변
   assert.deepEqual(s1, snapshot);
 });
 
+// ── raw 딥클론(저장 시 참조 분리) ─────────────────────────────────────────
+test('[불변] addRound 이후 호출자가 넘긴 raw 객체를 변형해도 저장된 회차의 raw는 영향받지 않는다', () => {
+  const { state: s1, id: pid } = createProject(emptyState, 'X');
+  const raw = { updated_at: 't1', nested: { count: 1 } };
+  const s2 = addRound(s1, pid, { title: '1차', raw: raw });
+  raw.nested.count = 999;
+  raw.updated_at = 'mutated';
+  const stored = getProject(s2, pid).rounds[0].raw;
+  assert.deepEqual(stored, { updated_at: 't1', nested: { count: 1 } }, '호출자 쪽 mutate가 저장된 raw로 새면 안 된다');
+});
+
+test('[불변] 같은 이전 state에서 파생된 두 state는 공통 조상 회차의 raw를 공유(alias)하지 않는다', () => {
+  const { state: s1, id: pid } = createProject(emptyState, 'X');
+  const sBase = addRound(s1, pid, { title: '1차', raw: { updated_at: 't1', val: 1 } });
+  const sA = addRound(sBase, pid, { title: '2차A', raw: { updated_at: 't2a', val: 2 } });
+  const sB = addRound(sBase, pid, { title: '2차B', raw: { updated_at: 't2b', val: 3 } });
+  sA.projects[0].rounds[0].raw.val = 12345;
+  assert.equal(sB.projects[0].rounds[0].raw.val, 1, 'sA의 공통 조상 회차 raw를 직접 바꿔도 sB 쪽은 영향받지 않아야 한다(별개 객체)');
+});
+
 // ── renameProject / deleteProject / setCurrent / getProject ──────────────
 test('renameProject: 이름을 바꾸고, 정리(trim·40자캡)를 거친다', () => {
   const { state: s1, id: pid } = createProject(emptyState, 'X');
