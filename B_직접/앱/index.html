@@ -759,8 +759,16 @@ function normalize(d){
     decisions_needed:(x.decisions_needed||x.decisions||[]).map(dc=>({topic:dc.topic||dc.item||'',decider:dc.decider||'',due:dc.due||dc.deadline||'',precondition:dc.precondition||'',status:dc.status||''})),
     _rd:x.dependencies||[]}));
   let seq=d.sequence||[];
-  if(!seq.length){const acc=[];deps.forEach(dp=>(dp._rd||[]).forEach(r=>acc.push({task:r.after||'',dept:dp.dept,blocked_by:r.before?[r.before]:[],bottleneck:false})));
-    (d.dependencies||[]).forEach(r=>acc.push({task:r.after||'',dept:'',blocked_by:r.before?[r.before]:[],bottleneck:false}));seq=acc;}
+  if(!seq.length){
+    // A 스키마(부서별 dependencies:{before,after}) 폴백. before도 노드로 만든다 —
+    // after에만 노드를 두면 선행 작업이 DAG에서 사라져 체인이 끊긴다.
+    const pairs=[];
+    deps.forEach(dp=>(dp._rd||[]).forEach(r=>{if(r&&r.after)pairs.push({before:r.before||'',after:r.after,dept:dp.dept});}));
+    (d.dependencies||[]).forEach(r=>{if(r&&r.after)pairs.push({before:r.before||'',after:r.after,dept:''});});
+    const nm={}, ensure=(t,dept)=>{if(!t)return;if(!nm[t])nm[t]={task:t,dept:dept||'',blocked_by:[],bottleneck:false};else if(dept&&!nm[t].dept)nm[t].dept=dept;};
+    pairs.forEach(p=>{ensure(p.after,p.dept);if(p.before){ensure(p.before,'');nm[p.after].blocked_by.push(p.before);}});
+    seq=Object.keys(nm).map(function(k){return nm[k];});
+  }
   let sm=d.share_messages;
   if(!sm||!sm.length){sm=(d.by_department||d.departments||[]).filter(x=>x.share_message).map(x=>({dept:x.dept||x.name||'',chat:x.share_message.chat||'',email_subject:x.share_message.email_subject||'',email_body:x.share_message.email||x.share_message.email_body||''}));}
   else sm=sm.map(m=>({dept:m.dept||'',chat:m.chat||'',email_subject:m.email_subject||'',email_body:m.email_body||m.email||''}));
