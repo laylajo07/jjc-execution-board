@@ -189,6 +189,7 @@
       linear-gradient(135deg,color-mix(in srgb,var(--primary) 12%,transparent),transparent 62%),var(--surface);
     border:1px solid var(--line);border-left:3px solid var(--primary);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow-sm)}
   .summary .eyebrow{color:var(--primary-ink)}
+  .summary .updated{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
   .summary h2{margin:8px 0 14px;font-size:18px;line-height:1.4;letter-spacing:-.01em}
   .top3{display:grid;gap:9px}
   @media(min-width:620px){.top3{grid-template-columns:1fr 1fr 1fr}}
@@ -496,13 +497,19 @@ const $ = s => document.querySelector(s);
 const SYS = $('#sys-prompt').textContent.trim();
 const META = JSON.parse($('#app-meta').textContent);
 $('#approachTag').textContent = META.approach;
-let lastData=null, lastBoard=null, lastMarkdown='', AUTO=false;
+let lastData=null, lastBoard=null, lastUpdatedIso=null, lastMarkdown='', AUTO=false;
 // 부서 편집 상태. "편집됐는가"는 더 이상 래치 플래그가 아니라 boardSnapshot과의 스냅샷 비교(isEdited)로
 // 매번 판정한다 — 그래야 숨김→해제처럼 원본으로 되돌아간 진짜 왕복 편집이 "편집 없음"으로 정확히 잡힌다.
 let editMode=false, boardSnapshot=null;
 
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1700);}
 function esc(s){return (s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+// 표시용 로컬 tz ISO 8601 타임스탬프 생성(순수 아님 — 테스트 대상 아님). 포맷은 BoardCustom.fmtUpdatedAt이 담당.
+function nowIso(){
+  const d=new Date(), z=-d.getTimezoneOffset(), s=z<0?'-':'+', p=n=>String(Math.abs(Math.trunc(n))).padStart(2,'0');
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds())
+    +s+p(z/60)+':'+p(z%60);
+}
 async function copy(text){try{await navigator.clipboard.writeText(text);toast('복사됐습니다');}catch(e){
   const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('복사됐습니다');}}
 const sc = st => ({'확정':'ok','추정':'est','확인필요':'chk'}[st]||'chk');
@@ -749,7 +756,7 @@ function isEdited(){ return canonBoard(lastBoard)!==boardSnapshot; }
    "편집됐는가"는 isEdited()가 boardSnapshot과 비교해 매번 판정하므로 여기서 플래그를 켤 필요는 없다. */
 function applyEdit(next){
   if(next===lastBoard){ toast('적용할 수 없는 변경입니다'); return false; }
-  lastBoard=next; renderBoard(lastBoard); return true;
+  lastBoard=next; lastUpdatedIso=nowIso(); renderBoard(lastBoard); return true;
 }
 const DEPT_ACC='부서별 실행 항목';
 
@@ -921,7 +928,8 @@ function boardToMarkdown(b){
   return o.trimEnd()+'\n';
 }
 
-/* 편집 안 했으면 lastData 그대로. 편집했으면 raw 사본에 정규화 스키마를 스플라이스한다.
+/* 편집 안 했으면 lastData 그대로(타임스탬프 외 동일 — lastUpdatedIso 있으면 사본에 updated_at 필드만 추가,
+   lastData 자체는 mutate하지 않는다). 편집했으면 raw 사본에 정규화 스키마를 스플라이스한다.
    구스키마 키(departments·dependencies)는 지운다 — 정규화된 부서 배열을 구키에 남기면
    스키마가 섞인 잡종 JSON이 나온다. _hidden·_rd는 내부 필드라 절대 새면 안 된다.
    top_actions·share_messages는 lastData(원본 raw)가 아니라 vb(=visibleBoard(lastBoard))에서 가져온다 —
@@ -931,7 +939,7 @@ function boardToMarkdown(b){
    JSON 산출물에서 다시 빠진다(finding 1 재발) — vb 쪽을 써야 relabel이 실제로 반영된다.
    숨김·삭제 부서는 여기서도 top_actions·share_messages에서 제외한다(visNames — boardToMarkdown과 동일 기준). */
 function exportJson(){
-  if(!isEdited()) return lastData;
+  if(!isEdited()) return lastUpdatedIso ? Object.assign({}, lastData, {updated_at:lastUpdatedIso}) : lastData;
   const vb=DeptEdit.visibleBoard(lastBoard);
   const visNames=visibleDeptNames(vb.by_department);
   const out=JSON.parse(JSON.stringify(lastData||{}));
@@ -944,6 +952,7 @@ function exportJson(){
   if(Array.isArray(vb.share_messages)) out.share_messages=JSON.parse(JSON.stringify(vb.share_messages.filter(m=>m&&visNames.has(String(m.dept||'').trim()))));
   if(Array.isArray(vb.top_actions)) out.top_actions=JSON.parse(JSON.stringify(vb.top_actions.filter(t=>!t||!t.dept||visNames.has(String(t.dept).trim()))));
   delete out.departments; delete out.dependencies;
+  if(lastUpdatedIso) out.updated_at=lastUpdatedIso;
   return out;
 }
 
@@ -956,11 +965,12 @@ function renderBoard(d, raw){
   lastBoard=d;
   // raw가 있을 때만 "새로 처음 그려지는 원본"이다 — 편집 재렌더(applyEdit·편집토글)는 raw 없이
   // renderBoard(lastBoard)로 불려서 여기 안 들어오므로, 편집 중 스냅샷이 계속 갱신되는 일은 없다.
-  if(raw!=null){ lastData=raw; boardSnapshot=canonBoard(d); }
+  if(raw!=null){ lastData=raw; boardSnapshot=canonBoard(d); lastUpdatedIso = (raw && raw.updated_at) || nowIso(); }
   const accOpen=accOpenState();   // #result를 갈아끼우기 전에 열린 아코디언을 기록
   const mt=d.meeting||{};
   let h='';
   h+=`<div class="summary"><div class="eyebrow">SUMMARY · ${esc(mt.title||'제목 미상')} · ${esc(mt.datetime||'일시 미상')}</div>`;
+  if(lastUpdatedIso){ const u=BoardCustom.fmtUpdatedAt(new Date(lastUpdatedIso)); if(u) h+=`<div class="updated mono">업데이트 ${esc(u)}</div>`; }
   h+=`<h2>${esc(d.headline||'회의 실행보드')}</h2>`;
   if(d.top_actions&&d.top_actions.length){h+='<div class="top3">'+d.top_actions.slice(0,3).map((t,i)=>
     `<div class="it"><span class="rk">${i+1}</span><div><div class="wt">${esc(t.what)}</div><div class="mt mono">${esc(t.dept||'')} · ${esc(t.owner||'미정')} · ${esc(t.due||'미정')}</div></div></div>`).join('')+'</div>';}
@@ -1042,8 +1052,9 @@ function renderBoard(d, raw){
 function renderError(msg){$('#result').innerHTML=`<div class="empty"><div><div class="art" style="color:var(--chk)">!</div><h3>처리하지 못했습니다</h3><p>${esc(msg)}</p></div></div>`;}
 
 $('#copyMdBtn').onclick=()=>{
-  if(!isEdited()) return copy(lastMarkdown||JSON.stringify(lastData,null,2));   // 편집 전엔(왕복 편집 포함) 모델 원본 그대로
-  copy(boardToMarkdown(DeptEdit.visibleBoard(lastBoard)));
+  const stamp = lastUpdatedIso ? ('> 업데이트 일시: '+BoardCustom.fmtUpdatedAt(new Date(lastUpdatedIso))+'\n\n') : '';
+  if(!isEdited()) return copy(stamp + (lastMarkdown||JSON.stringify(lastData,null,2)));   // 편집 전엔(왕복 편집 포함) 모델 원본 그대로(+타임스탬프 한 줄만 앞에 붙임)
+  copy(stamp + boardToMarkdown(DeptEdit.visibleBoard(lastBoard)));
 };
 $('#dlJsonBtn').onclick=()=>{const b=new Blob([JSON.stringify(exportJson(),null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='조정치_결과.json';a.click();};
