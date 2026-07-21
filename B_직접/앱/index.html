@@ -296,7 +296,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 
   /* 크리티컬 패스 · 계층형 DAG */
   .dag-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px 14px}
-  .dag{min-width:100%;height:auto;display:block}
+  .dag{max-width:100%;height:auto;display:block}   /* 고유 크기로 렌더, 넓을 때만 축소 — 항목 적을 때 확대 방지 */
   .dag-col{font-size:10px;fill:var(--muted);letter-spacing:1px}
   .dag-e{stroke:var(--line2);stroke-width:1.6;fill:none}
   .dag-e.crit{stroke:var(--chk);stroke-width:2.6}

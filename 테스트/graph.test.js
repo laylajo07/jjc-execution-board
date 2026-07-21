@@ -243,14 +243,40 @@ test('XSS: 회의록에서 온 문자열은 이스케이프된다', () => {
   assert.match(svg, /&lt;script&gt;/);
 });
 
-test('fuzzy 모드면 몇 개가 연결됐는지 고지한다', () => {
+test('fuzzy 모드에서 선행 일부가 매칭 안 되면 몇 개 연결됐는지 고지한다 (구버전·재분석 문구 없이)', () => {
   const g = buildGraph([
     { task: 'v2 모델 재학습 → AUC 0.85 달성', dept: '', blocked_by: [] },
     { task: 'x', dept: '', blocked_by: ['전혀 다른 것'] },
   ]);
   const w = renderDagWarnings(g);
-  assert.match(w, /구버전 결과/);
-  assert.match(w, /1개 중 0개만 연결/);
+  assert.match(w, /일부만 자동 연결/);
+  assert.match(w, /1개 중 0개/);
+  assert.doesNotMatch(w, /구버전/, '현재 스키마 결과를 "구버전"으로 오인시키면 안 된다');
+  assert.doesNotMatch(w, /다시 분석/, '재분석하라는 오해 소지 문구를 넣으면 안 된다');
+});
+
+test('fuzzy 모드라도 선행관계가 전부 연결되면(0개 중 0개 포함) 경고를 띄우지 않는다', () => {
+  // 회의에 선후행이 전혀 없는 흔한 경우(step 스키마) — 예전엔 "0개 중 0개만 연결됨"이 항상 떴다.
+  const g = buildGraph([
+    { step: 1, task: 'KPI 취합', dept: '경영본부', blocked_by: [] },
+    { step: 2, task: '오류시트 수정', dept: 'ICT본부', blocked_by: [] },
+  ]);
+  assert.equal(g.stats.mode, 'fuzzy');
+  assert.equal(g.stats.edgeTotal, 0);
+  assert.equal(g.stats.edgeResolved, 0);
+  assert.equal(renderDagWarnings(g), '', '의존관계 0/0이면 경고 박스를 만들지 않는다');
+});
+
+test('renderDag: SVG에 viewBox와 일치하는 명시적 width·height가 붙는다 (컨테이너에서 확대 방지)', () => {
+  const g = buildGraph([
+    { id: 'T1', task: 'a', dept: '', blocked_by: [] },
+    { id: 'T2', task: 'b', dept: '', blocked_by: [] },
+  ]);
+  const svg = renderDag(g);
+  const vb = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
+  assert.ok(vb, 'viewBox가 있어야 한다');
+  assert.match(svg, new RegExp('\\swidth="' + vb[1] + '"'), 'width 속성이 viewBox 너비와 일치해야 한다');
+  assert.match(svg, new RegExp('\\sheight="' + vb[2] + '"'), 'height 속성이 viewBox 높이와 일치해야 한다');
 });
 
 test('순환 경고는 화면에 노출된다', () => {

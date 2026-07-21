@@ -46,7 +46,9 @@
   var w = (maxD+1)*(W+GX)+40, h = maxY+H+56;
   var byId = {}; g.nodes.forEach(function(n){ byId[n.id]=n; });
 
-  var out = '<svg viewBox="0 0 '+w+' '+h+'" class="dag" role="img" aria-label="크리티컬 패스 의존 그래프">';
+  // width·height를 명시해 SVG를 고유 크기(=viewBox)로 렌더한다. CSS(.dag max-width:100%)가
+  // 컨테이너보다 넓을 때만 줄이고, 좁을 땐 확대하지 않는다 — 항목이 적을 때 박스가 커지던 문제 방지.
+  var out = '<svg viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" class="dag" role="img" aria-label="크리티컬 패스 의존 그래프">';
   out += '<defs>'
       +  '<marker id="ah" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="var(--line2)"/></marker>'
       +  '<marker id="ahc" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="var(--chk)"/></marker>'
@@ -88,11 +90,14 @@
   }
 
   function renderDagWarnings(g) {
-    if (!g.warnings.length && g.stats.mode === 'id') return '';
+    // fuzzy는 현재 스키마(step+작업명 blocked_by)의 정상 경로다. 선행 표기를 자동 매칭하다
+    // 일부를 못 찾았을 때(edgeTotal>edgeResolved)만 알린다. 전부 연결·의존 없음(0/0)이면 조용히.
+    var partial = g.stats.mode === 'fuzzy' && g.stats.edgeTotal > g.stats.edgeResolved;
+    if (!g.warnings.length && !partial) return '';
     var h = '<div class="dag-warn">';
-    if (g.stats.mode === 'fuzzy') {
-      h += '<div class="w-row w-info">구버전 결과 · 의존관계 ' + g.stats.edgeTotal + '개 중 '
-        + g.stats.edgeResolved + '개만 연결됨. 정확한 그래프를 보려면 다시 분석하세요.</div>';
+    if (partial) {
+      h += '<div class="w-row w-info">선행관계 일부만 자동 연결(' + g.stats.edgeTotal + '개 중 '
+        + g.stats.edgeResolved + '개) — 나머지는 표기가 달라 매칭하지 못했습니다.</div>';
     }
     g.warnings.forEach(function (w) {
       if (w.type === 'cycle')       h += '<div class="w-row w-bad">순환 의존: ' + esc(w.detail) + '</div>';
