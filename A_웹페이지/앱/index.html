@@ -764,6 +764,17 @@ function diffBadge(diffTags,dept,kind,idx){
   if(t==='done')return ' <span class="tag" style="color:var(--muted)">완료</span>';
   return '';
 }
+// Task 4: 직전 회차엔 있었지만 이번 회차엔 없는 항목("빠짐"). diffBadge는 이번 회차 행에 배지를 붙이는
+// 방식이라, 애초에 이번 회차에 행이 없는 빠진 항목은 배지로 표현이 안 된다 — 별도로 옅게 나열한다.
+// diff가 null(무프로젝트·첫 회차·직전 없음)이거나 dropped가 0개면 빈 문자열 → 기존 렌더와 바이트 동일.
+function droppedItemsHtml(diff){
+  if(!diff)return '';
+  const dropped=(diff.done||[]).filter(x=>x.reason==='dropped');
+  if(!dropped.length)return '';
+  return '<div class="block dropped-items"><div class="block__l">이번 회차에서 빠진 항목</div>'+
+    dropped.map(x=>`<div class="basis"><span style="text-decoration:line-through">${esc(x.text)}</span> · ${esc(x.dept)}</div>`).join('')+
+    '</div>';
+}
 function tblAI(items,dept,diffTags){if(!items||!items.length)return '';
   return `<div class="block"><div class="block__l">할 일</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-tag"></colgroup><tr><th>내용</th><th>담당</th><th>기한</th><th>상태</th></tr>`+
     items.map((a,i)=>`<tr><td>${esc(a.what)}${diffBadge(diffTags,dept,'action',i)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who" title="${esc(a.owner||'미정')}"><span class="clip2">${esc(a.owner||'미정')}</span></td><td class="when" title="${esc(a.due||'미정')}"><span class="clip2">${esc(a.due||'미정')}</span></td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
@@ -1093,6 +1104,7 @@ function renderBoard(d, raw){
   // 편집 토글이라는 "할 수 있는 일"이 있으니 빈 아코디언을 무조건 숨기는 것과는 다르다.
   h+=acc(DEPT_ACC, shown.length, deptsHtml,
     `<button type="button" class="acc-edit${editMode?' on':''}" id="deptEditBtn" aria-pressed="${editMode}">✎ 부서 편집</button>`);
+  h+=droppedItemsHtml(diff);   // Task 4 — 직전 회차 대비 이번 회차에서 빠진 항목(diff null/미해당이면 빈 문자열)
 
   if((d.gaps&&d.gaps.length)||(d.assumptions&&d.assumptions.length)){
     const gc=(d.gaps||[]).filter(Boolean).length, asmc=(d.assumptions||[]).filter(Boolean).length;
@@ -1177,10 +1189,13 @@ function renderProjHistory(){
       const round=p&&p.rounds.find(x=>x.id===btn.dataset.rid);
       if(!round)return;
       suppressSave=true;
-      currentRoundId=round.id;
-      editMode=false;
-      renderBoard(normalize(round.raw), round.raw);   // raw 넘기되 저장은 suppressSave가 억제
-      suppressSave=false;
+      try{
+        currentRoundId=round.id;
+        editMode=false;
+        renderBoard(normalize(round.raw), round.raw);   // raw 넘기되 저장은 suppressSave가 억제
+      }finally{
+        suppressSave=false;   // renderBoard가 도중에 throw해도 반드시 해제 — 안 그러면 이후 세션 내내 자동저장이 조용히 멈춘다
+      }
     };
   });
 }
