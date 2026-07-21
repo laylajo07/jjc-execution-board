@@ -224,6 +224,8 @@
   table.t tr:last-child td{border-bottom:0}
   table.t col.c-who{width:5.6em} table.t col.c-when{width:5em} table.t col.c-tag{width:4.6em}   /* 담당/기한/상태 최소 너비 고정 */
   td.who,td.when{font-family:var(--mono);font-size:11.5px;color:var(--ink2)}
+  /* 담당/기한의 긴 주석("미정 (원문 …)")은 2줄로 자르고 전체 값은 title 툴팁·원본 마크다운에서. 산출물은 원본 값 그대로. */
+  .clip2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
   .basis{color:var(--muted);font-size:11px;margin-top:2px}
   [hidden]{display:none!important}   /* 클래스의 display가 hidden 속성을 덮지 않도록 (재구성본 배지) */
   .tag{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;border-radius:5px;padding:2px 6px;white-space:nowrap}
@@ -715,13 +717,13 @@ function normalize(d){
 function tag(st){return st?`<span class="tag ${sc(st)}">${esc(st)}</span>`:'';}
 function tblAI(items){if(!items||!items.length)return '';
   return `<div class="block"><div class="block__l">할 일</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-tag"></colgroup><tr><th>내용</th><th>담당</th><th>기한</th><th>상태</th></tr>`+
-    items.map(a=>`<tr><td>${esc(a.what)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who">${esc(a.owner||'미정')}</td><td class="when">${esc(a.due||'미정')}</td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
+    items.map(a=>`<tr><td>${esc(a.what)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who" title="${esc(a.owner||'미정')}"><span class="clip2">${esc(a.owner||'미정')}</span></td><td class="when" title="${esc(a.due||'미정')}"><span class="clip2">${esc(a.due||'미정')}</span></td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
 function tblDoc(items){if(!items||!items.length)return '';
   return `<div class="block"><div class="block__l">작성 문서</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col></colgroup><tr><th>문서</th><th>담당</th><th>기한</th><th>목적</th></tr>`+
-    items.map(d=>`<tr><td>${esc(d.doc)} ${tag(d.status)}</td><td class="who">${esc(d.owner||'미정')}</td><td class="when">${esc(d.due||'미정')}</td><td>${esc(d.purpose||'')}</td></tr>`).join('')+`</table></div>`;}
+    items.map(d=>`<tr><td>${esc(d.doc)} ${tag(d.status)}</td><td class="who" title="${esc(d.owner||'미정')}"><span class="clip2">${esc(d.owner||'미정')}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.purpose||'')}</td></tr>`).join('')+`</table></div>`;}
 function tblDec(items){if(!items||!items.length)return '';
   return `<div class="block"><div class="block__l">의사결정 필요</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col></colgroup><tr><th>안건</th><th>결정자</th><th>기한</th><th>선행조건</th></tr>`+
-    items.map(d=>`<tr><td>${esc(d.topic)} ${tag(d.status)}</td><td class="who">${esc(d.decider||'미정')}</td><td class="when">${esc(d.due||'미정')}</td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
+    items.map(d=>`<tr><td>${esc(d.topic)} ${tag(d.status)}</td><td class="who" title="${esc(d.decider||'미정')}"><span class="clip2">${esc(d.decider||'미정')}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
 function secH(n,t){return `<div class="sec-h"><span class="n mono">${n}</span><h3>${t}</h3><span class="rule"></span></div>`;}
 
 /* 노드 상세 패널 (#2) */
