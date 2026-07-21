@@ -267,11 +267,15 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .dept__b{padding:6px 15px 15px}
   .block{margin-top:12px}
   .block__l{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:5px}
-  table.t{width:100%;border-collapse:collapse;font-size:12.5px}
+  /* table-layout:fixed — 컬럼이 내용 길이로 늘어나지 않게 고정. 담당/기한 같은 좁은 컬럼이
+     긴 값("미정 (원문 …)")으로 폭을 먹어 내용 컬럼이 0에 수렴→글자당 줄바꿈(세로 늘어짐)하던 문제 방지. */
+  table.t{width:100%;max-width:100%;table-layout:fixed;border-collapse:collapse;font-size:12.5px}
   table.t th{text-align:left;font-size:10.5px;font-weight:600;color:var(--faint);padding:4px 8px 4px 0;border-bottom:1px solid var(--line2)}
   table.t td{padding:7px 8px 7px 0;border-bottom:1px solid var(--line2);vertical-align:top}
+  table.t th,table.t td{overflow-wrap:anywhere}   /* 셀 너비에 맞춰 자동 줄바꿈, 긴 토큰도 넘치지 않음 */
   table.t tr:last-child td{border-bottom:0}
-  td.who,td.when{white-space:nowrap;font-family:var(--mono);font-size:11.5px;color:var(--ink2)}
+  table.t col.c-who{width:5.6em} table.t col.c-when{width:5em} table.t col.c-tag{width:4.6em}   /* 담당/기한/상태 최소 너비 고정 */
+  td.who,td.when{font-family:var(--mono);font-size:11.5px;color:var(--ink2)}
   .basis{color:var(--muted);font-size:11px;margin-top:2px}
   [hidden]{display:none!important}   /* 클래스의 display가 hidden 속성을 덮지 않도록 (재구성본 배지) */
   .tag{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;border-radius:5px;padding:2px 6px;white-space:nowrap}
@@ -762,13 +766,13 @@ function normalize(d){
 /* render helpers */
 function tag(st){return st?`<span class="tag ${sc(st)}">${esc(st)}</span>`:'';}
 function tblAI(items){if(!items||!items.length)return '';
-  return `<div class="block"><div class="block__l">할 일</div><table class="t"><tr><th>내용</th><th>담당</th><th>기한</th><th>상태</th></tr>`+
+  return `<div class="block"><div class="block__l">할 일</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-tag"></colgroup><tr><th>내용</th><th>담당</th><th>기한</th><th>상태</th></tr>`+
     items.map(a=>`<tr><td>${esc(a.what)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who">${esc(a.owner||'미정')}</td><td class="when">${esc(a.due||'미정')}</td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
 function tblDoc(items){if(!items||!items.length)return '';
-  return `<div class="block"><div class="block__l">작성 문서</div><table class="t"><tr><th>문서</th><th>담당</th><th>기한</th><th>목적</th></tr>`+
+  return `<div class="block"><div class="block__l">작성 문서</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col></colgroup><tr><th>문서</th><th>담당</th><th>기한</th><th>목적</th></tr>`+
     items.map(d=>`<tr><td>${esc(d.doc)} ${tag(d.status)}</td><td class="who">${esc(d.owner||'미정')}</td><td class="when">${esc(d.due||'미정')}</td><td>${esc(d.purpose||'')}</td></tr>`).join('')+`</table></div>`;}
 function tblDec(items){if(!items||!items.length)return '';
-  return `<div class="block"><div class="block__l">의사결정 필요</div><table class="t"><tr><th>안건</th><th>결정자</th><th>기한</th><th>선행조건</th></tr>`+
+  return `<div class="block"><div class="block__l">의사결정 필요</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col></colgroup><tr><th>안건</th><th>결정자</th><th>기한</th><th>선행조건</th></tr>`+
     items.map(d=>`<tr><td>${esc(d.topic)} ${tag(d.status)}</td><td class="who">${esc(d.decider||'미정')}</td><td class="when">${esc(d.due||'미정')}</td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
 function secH(n,t){return `<div class="sec-h"><span class="n mono">${n}</span><h3>${t}</h3><span class="rule"></span></div>`;}
 
