@@ -1,5 +1,6 @@
 /* 조정치 · 부서 커스터마이징 — 사용자 설정(customDepts/customMappings) → 프롬프트 블록 + localStorage 저장.
-   순수(DOM 접근 없음; load/save만 브라우저 스토리지를 씀). file:// 더블클릭 지원을 위해 클래식 스크립트. A·B 바이트 동일. */
+   순수(DOM 접근 없음; load/save만 브라우저 스토리지를 씀). file:// 더블클릭 지원을 위해 클래식 스크립트. A·B 바이트 동일.
+   보드 표시 유틸(fmtUpdatedAt 등)도 이 모듈이 겸한다. */
 (function (root) {
   'use strict';
 
@@ -96,12 +97,28 @@
     }
   }
 
+  // 2자리 zero-pad(시·분 전용). 월·일은 pad하지 않는다(명세).
+  function pad2(n) {
+    return n < 10 ? '0' + n : '' + n;
+  }
+
+  // 보드 업데이트 일시 → 한글 표시 문자열. 로컬 tz 게터 사용(뷰어 로컬 시각).
+  // "{YYYY}년 {M}월 {D}일 ({요일}) {HH}:{MM}" — 연 4자리, 월·일 no-pad, 시·분 2자리 pad.
+  // 방어: Date가 아니거나 Invalid Date/null/undefined면 '' (예외를 던지지 않는다).
+  function fmtUpdatedAt(date) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    var weekday = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
+    return date.getFullYear() + '년 ' + (date.getMonth() + 1) + '월 ' + date.getDate() + '일 (' +
+      weekday + ') ' + pad2(date.getHours()) + ':' + pad2(date.getMinutes());
+  }
+
   var api = {
     STD_DEPTS: STD_DEPTS,
     sanitize: sanitize,
     deptConfigToPrompt: deptConfigToPrompt,
     load: load,
-    save: save
+    save: save,
+    fmtUpdatedAt: fmtUpdatedAt
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.BoardCustom = api;

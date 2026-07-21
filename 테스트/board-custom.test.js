@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { STD_DEPTS, sanitize, deptConfigToPrompt, load, save } = require('../B_직접/앱/board-custom.js');
+const { STD_DEPTS, sanitize, deptConfigToPrompt, load, save, fmtUpdatedAt } = require('../B_직접/앱/board-custom.js');
 
 test('부서+매핑 둘 다 있으면 4줄 블록이 설계 문구와 정확히 일치한다', () => {
   const block = deptConfigToPrompt({
@@ -165,6 +165,42 @@ test('U+2028/U+2029(줄·문단 구분자)은 \\s+ 공백 접기 규칙에 의�
   // [ \t]+ 처럼 좁혀지면 이 구멍이 소리 없이 다시 열리므로, 이 동작을 못박아 둔다.
   const result = sanitize({ customDepts: ['a\u2028b\u2029c'] });
   assert.deepEqual(result.customDepts, ['a b c']);
+});
+
+test('fmtUpdatedAt: 기본 포맷 - 2026-07-21 14:30 화요일', () => {
+  const d = new Date(2026, 6, 21, 14, 30);
+  assert.equal(fmtUpdatedAt(d), '2026년 7월 21일 (화) 14:30');
+});
+
+test('fmtUpdatedAt: 월·일 no-pad + 시·분 pad', () => {
+  const d = new Date(2026, 0, 5, 9, 5);
+  const weekday = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+  assert.equal(fmtUpdatedAt(d), `2026년 1월 5일 (${weekday}) 09:05`);
+});
+
+test('fmtUpdatedAt: 자정은 00:00으로 zero-pad된다', () => {
+  const d = new Date(2026, 6, 21, 0, 0);
+  const weekday = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+  assert.equal(fmtUpdatedAt(d), `2026년 7월 21일 (${weekday}) 00:00`);
+});
+
+test('fmtUpdatedAt: 요일 매핑 - 연속 7일이 일~토를 전부 다르게 커버한다', () => {
+  const days = ['일', '월', '화', '수', '목', '금', '토'];
+  const covered = new Set();
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(2026, 6, 19 + i, 12, 0);
+    const expected = days[d.getDay()];
+    assert.ok(fmtUpdatedAt(d).includes(`(${expected})`), `${d.toDateString()} → (${expected}) 포함되어야 함`);
+    covered.add(d.getDay());
+  }
+  assert.equal(covered.size, 7, '연속 7일이면 요일이 7개 전부 달라야 한다');
+});
+
+test('fmtUpdatedAt: null·undefined·문자열·Invalid Date는 예외 없이 빈 문자열', () => {
+  assert.equal(fmtUpdatedAt(null), '');
+  assert.equal(fmtUpdatedAt(undefined), '');
+  assert.equal(fmtUpdatedAt('2026-07-21'), '');
+  assert.equal(fmtUpdatedAt(new Date('보드')), '');
 });
 
 test('A·B의 board-custom.js는 바이트 단위로 동일해야 한다 (복사 누락 방지)', () => {
