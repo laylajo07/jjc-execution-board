@@ -106,7 +106,8 @@
   // "{YYYY}년 {M}월 {D}일 ({요일}) {HH}:{MM}" — 연 4자리, 월·일 no-pad, 시·분 2자리 pad.
   // 방어: Date가 아니거나 Invalid Date/null/undefined면 '' (예외를 던지지 않는다).
   function fmtUpdatedAt(date) {
-    if (!(date instanceof Date) || Number.isNaN(date.getTime())) return '';
+    // toString 태그로 진짜 Date인지 확인(instanceof는 프로토타입만 봐서 스푸핑된 가짜가 getTime에서 던짐).
+    if (Object.prototype.toString.call(date) !== '[object Date]' || Number.isNaN(date.getTime())) return '';
     var weekday = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
     return date.getFullYear() + '년 ' + (date.getMonth() + 1) + '월 ' + date.getDate() + '일 (' +
       weekday + ') ' + pad2(date.getHours()) + ':' + pad2(date.getMinutes());
