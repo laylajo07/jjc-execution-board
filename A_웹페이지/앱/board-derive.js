@@ -88,6 +88,10 @@
     v = (v == null ? '' : String(v)).trim();
     return !v || v === '미정' || v === '미상' || v === '[미상]' || v === '-';
   }
+  // 예시(제안) 목표일은 확정된 기한이 아니므로 점수에선 '미확정'으로 집계한다.
+  function isUnsetDue(v) {
+    return isBlank(v) || /예시/.test(String(v == null ? '' : v));
+  }
 
   // 순수·결정적·DOM 미접근. board가 null/이상해도 예외를 던지지 않고 0점 상태를 돌려준다.
   function qualityScore(board) {
@@ -104,11 +108,11 @@
       var ownerMissing = 0, dueMissing = 0, decisionOpen = 0;
       items.forEach(function (it) {
         if (isBlank(it.owner)) ownerMissing++;
-        if (isBlank(it.due)) dueMissing++;
+        if (isUnsetDue(it.due)) dueMissing++;
       });
       decisions.forEach(function (dc) {
         if (isBlank(dc.decider)) ownerMissing++;
-        if (isBlank(dc.due)) dueMissing++;
+        if (isUnsetDue(dc.due)) dueMissing++;
         if (String(dc.status == null ? '' : dc.status).trim() !== '확정') decisionOpen++;
       });
       var ownerSlots = items.length + decisions.length;

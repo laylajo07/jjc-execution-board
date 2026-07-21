@@ -488,6 +488,23 @@ test('qualityScore: "미정" 판정은 빈값·미정·미상·[미상]·- 를 t
   assert.equal(qs.dueMissing, 0);
 });
 
+test('qualityScore: "예시" 목표일은 확정 기한이 아니므로 dueMissing에 포함된다', () => {
+  const board = { by_department: [
+    { dept: 'X',
+      action_items: [
+        { what: 'a', owner: '철수', due: '예시 2026-08-04' },   // 예시 → 미확정
+        { what: 'b', owner: '영희', due: '2026-08-04' },        // 확정 날짜 → 미확정 아님
+        { what: 'c', owner: '민수', due: '미정' },              // 빈값 → 미확정
+      ],
+      documents: [], decisions_needed: [
+        { topic: 't', decider: '대표', due: '(예시) 2026-08-11', status: '확정' },  // 예시 → 미확정
+      ],
+    },
+  ] };
+  const qs = qualityScore(board);
+  assert.equal(qs.dueMissing, 3, '예시 2건 + 미정 1건 = 3, 실제 날짜만 확정으로 인정');
+});
+
 test('qualityScore: 빈 보드/null은 예외 없이 score 100, 모든 카운트 0', () => {
   assert.deepEqual(qualityScore(null), { score: 100, ownerMissing: 0, dueMissing: 0, decisionOpen: 0, itemCount: 0, decisionCount: 0, total: 0 });
   assert.deepEqual(qualityScore(undefined), { score: 100, ownerMissing: 0, dueMissing: 0, decisionOpen: 0, itemCount: 0, decisionCount: 0, total: 0 });
