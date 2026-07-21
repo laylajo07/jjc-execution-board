@@ -279,6 +279,17 @@ test('renderDag: SVG에 viewBox와 일치하는 명시적 width·height가 붙�
   assert.match(svg, new RegExp('\\sheight="' + vb[2] + '"'), 'height 속성이 viewBox 높이와 일치해야 한다');
 });
 
+test('fuzzy 모드에서 선행이 전부 연결돼도(partial=false) 순환 같은 실제 경고는 계속 노출된다', () => {
+  // partial 아님(2/2 연결)이지만 순환이 있는 경우 — 경고 박스를 억제하면 안 된다.
+  const g = buildGraph([
+    { task: '데이터 정제', dept: '', blocked_by: ['모델 학습'] },
+    { task: '모델 학습', dept: '', blocked_by: ['데이터 정제'] },
+  ]);
+  assert.equal(g.stats.mode, 'fuzzy');
+  assert.equal(g.stats.edgeTotal, g.stats.edgeResolved, '이 케이스는 partial이 아니어야 한다(전부 연결)');
+  assert.match(renderDagWarnings(g), /순환 의존/, 'partial이 아니어도 순환 경고는 보여야 한다');
+});
+
 test('순환 경고는 화면에 노출된다', () => {
   const g = buildGraph([
     { id: 'T1', task: 'a', dept: '', blocked_by: ['T2'] },
