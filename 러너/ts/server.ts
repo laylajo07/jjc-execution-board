@@ -110,6 +110,21 @@ function deptPromptBlock(deptConfig: unknown): string {
   }
 }
 
+// 클라이언트(index.html) nowIso()와 동일 형식: 로컬 오프셋 ISO 8601, 초 단위.
+function nowIso(): string {
+  const d = new Date(), z = -d.getTimezoneOffset(), s = z < 0 ? '-' : '+';
+  const p = (n: number) => String(Math.abs(Math.trunc(n))).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}${s}${p(z/60)}:${p(z%60)}`;
+}
+
+// data가 dict/객체(배열 제외)면 updated_at(생성 시각)을 넣은 얕은 사본을 반환. 아니면 그대로.
+function stampUpdated(data: unknown): unknown {
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    return { ...(data as Record<string, unknown>), updated_at: nowIso() };
+  }
+  return data;
+}
+
 function extractJson(text: string): unknown {
   const m = text.match(/```json\s*([\s\S]*?)```/i);
   let cand: string | null = m ? m[1] : null;
@@ -222,7 +237,7 @@ const server = http.createServer(async (req, res) => {
         if (buf.trim()) { const text = collectText(buf); if (text) textParts.push(text); }
         const raw = textParts.join('');
         if (code !== 0 && !raw.trim()) { sse({ error: err.trim() || 'claude 실패' }); return res.end(); }
-        const data = extractJson(raw);
+        const data = stampUpdated(extractJson(raw));
         const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const stem = name ? path.basename(name).replace(/\.[^.]+$/, '').replace(/[^\w.\-]/g, '_') : '';
         const baseName = stem ? `${stem}__${ts}` : ts;

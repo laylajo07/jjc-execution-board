@@ -194,6 +194,16 @@ def extract_json(text):
     return None
 
 
+def stamp_updated(data, when=None):
+    """data가 dict면 updated_at(로컬 오프셋 ISO, 초 단위)을 넣은 얕은 사본을 반환. 아니면 그대로."""
+    if not isinstance(data, dict):
+        return data
+    ts = (when or datetime.datetime.now().astimezone()).isoformat(timespec='seconds')
+    out = dict(data)
+    out['updated_at'] = ts
+    return out
+
+
 def run_claude(prompt, model=None):
     args = ['claude', '-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages']
     use = model or MODEL
@@ -305,7 +315,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             err = proc.stderr.read().decode('utf-8', 'replace').strip()
             return sse({'error': err or 'claude 실행 실패'})
 
-        data = extract_json(raw)
+        data = stamp_updated(extract_json(raw))
         ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         stem = re.sub(r'[^\w.\-]', '_', os.path.splitext(os.path.basename(name))[0]) if name else ''
         base = os.path.join(RESULT_DIR, (stem + '__' + ts) if stem else ts)

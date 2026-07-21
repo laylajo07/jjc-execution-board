@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-import sys, os, json, unittest
+import sys, os, json, datetime, unittest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '러너', 'py'))
-from server import collect_text, collect_delta, dept_config_to_prompt, sanitize_dept_config
+from server import collect_text, collect_delta, dept_config_to_prompt, sanitize_dept_config, stamp_updated
 
 class TestCollectText(unittest.TestCase):
     def test_assistant_텍스트만_이어붙인다(self):
@@ -90,6 +90,31 @@ class TestDeptConfigToPrompt(unittest.TestCase):
         # 나중에 [ \t]+ 처럼 좁혀지면 이 구멍이 소리 없이 다시 열리므로 못박아 둔다.
         result = sanitize_dept_config({'customDepts': ['a b c']})
         self.assertEqual(result['customDepts'], ['a b c'])
+
+
+class TestStampUpdated(unittest.TestCase):
+    """Task 3: 러너(py)가 자동 모드 결과 dict에 생성 시각 updated_at을 순수하게 주입하는지."""
+
+    def test_dict_입력이면_updated_at이_ISO로_파싱_가능하다(self):
+        result = stamp_updated({'a': 1})
+        self.assertIn('updated_at', result)
+        datetime.datetime.fromisoformat(result['updated_at'])  # 파싱 실패 시 예외로 실패
+
+    def test_when을_고정하면_그_값이_그대로_나온다(self):
+        when = datetime.datetime(2026, 7, 21, 14, 30, 5, tzinfo=datetime.timezone(datetime.timedelta(hours=9)))
+        result = stamp_updated({'a': 1}, when=when)
+        self.assertEqual(result['updated_at'], '2026-07-21T14:30:05+09:00')
+
+    def test_원본_dict는_변형되지_않는다(self):
+        original = {'a': 1}
+        stamp_updated(original)
+        self.assertNotIn('updated_at', original)
+        self.assertEqual(original, {'a': 1})
+
+    def test_dict가_아니면_그대로_반환한다(self):
+        self.assertIsNone(stamp_updated(None))
+        self.assertEqual(stamp_updated([]), [])
+        self.assertEqual(stamp_updated('x'), 'x')
 
 
 if __name__ == '__main__':
