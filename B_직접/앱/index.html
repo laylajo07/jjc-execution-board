@@ -437,6 +437,8 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 <script src="board-derive.js"></script>
 <script src="board-custom.js"></script>
 <script src="dept-edit.js"></script>
+<script src="project-store.js"></script>
+<script src="board-diff.js"></script>
 </head>
 <body>
 <header class="top">
@@ -474,6 +476,12 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
           <select class="note" id="noteSelect" style="flex:1"></select>
           <button class="btn icon" id="reloadNotes" title="목록 새로고침">↻</button>
         </div>
+      </div>
+
+      <div class="field-label">프로젝트 <span class="hint">회차 누적</span></div>
+      <div class="row" style="gap:6px;margin-bottom:10px">
+        <select class="note" id="projSel" style="flex:1"><option value="">— 프로젝트 없음 —</option></select>
+        <button class="btn icon" id="newProjBtn" title="새 프로젝트">＋</button>
       </div>
 
       <div class="field-label">직접 붙여넣기</div>
@@ -569,6 +577,7 @@ const SYS = $('#sys-prompt').textContent.trim();
 const META = JSON.parse($('#app-meta').textContent);
 $('#approachTag').textContent = META.approach;
 let lastData=null, lastBoard=null, lastUpdatedIso=null, lastMarkdown='', AUTO=false;
+let projState=null;   // 프로젝트 히스토리(설계 §3-1) — ProjectStore가 다루는 {current, projects[]}
 // 부서 편집 상태. "편집됐는가"는 더 이상 래치 플래그가 아니라 boardSnapshot과의 스냅샷 비교(isEdited)로
 // 매번 판정한다 — 그래야 숨김→해제처럼 원본으로 되돌아간 진짜 왕복 편집이 "편집 없음"으로 정확히 잡힌다.
 let editMode=false, boardSnapshot=null;
@@ -1044,7 +1053,16 @@ function renderBoard(d, raw){
   lastBoard=d;
   // raw가 있을 때만 "새로 처음 그려지는 원본"이다 — 편집 재렌더(applyEdit·편집토글)는 raw 없이
   // renderBoard(lastBoard)로 불려서 여기 안 들어오므로, 편집 중 스냅샷이 계속 갱신되는 일은 없다.
-  if(raw!=null){ lastData=raw; boardSnapshot=canonBoard(d); lastUpdatedIso = (raw && raw.updated_at) || nowIso(); }
+  if(raw!=null){
+    lastData=raw; boardSnapshot=canonBoard(d); lastUpdatedIso = (raw && raw.updated_at) || nowIso();
+    // 회차 자동 저장 — 새 분석(raw!=null)에서만. 편집 재렌더(renderBoard(lastBoard), raw 없음)·
+    // 과거 회차 열람(Task 4)에서는 이 분기에 들어오지 않으므로 무한 누적되지 않는다(설계 §3-2).
+    if(projState && projState.current){
+      const title = (d.meeting||{}).title || raw.headline || '회차';
+      projState = ProjectStore.addRound(projState, projState.current, {title:title, raw:raw});
+      ProjectStore.saveProjects(projState);
+    }
+  }
   const accOpen=accOpenState();   // #result를 갈아끼우기 전에 열린 아코디언을 기록
   const mt=d.meeting||{};
   let h='';
@@ -1154,6 +1172,24 @@ $('#cmpNew').onclick=()=>cmpChoose('blank');
 $('#cmpSelf').onclick=()=>cmpChoose('self');
 $('#cmpOverlay').onclick=e=>{ if(e.target.id==='cmpOverlay') $('#cmpOverlay').classList.remove('on'); };
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') $('#cmpOverlay').classList.remove('on'); });
+
+/* 프로젝트 히스토리 — 선택 UI 배선(설계 §3-1). 회차 자동 저장은 renderBoard()의 raw!=null 분기(아래)가 맡는다. */
+function renderProjSelect(){
+  const sel=$('#projSel'); if(!sel)return;
+  sel.innerHTML='<option value="">— 프로젝트 없음 —</option>'+projState.projects.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+  sel.value=projState.current||'';
+}
+$('#projSel').onchange=e=>{ projState=ProjectStore.setCurrent(projState,e.target.value); ProjectStore.saveProjects(projState); };
+$('#newProjBtn').onclick=()=>{
+  const name=prompt('새 프로젝트 이름을 입력하세요');
+  if(!name||!name.trim())return;
+  const r=ProjectStore.createProject(projState,name);
+  projState=r.state;
+  ProjectStore.saveProjects(projState);
+  renderProjSelect();
+};
+projState=ProjectStore.loadProjects();
+renderProjSelect();
 
 initMode();
 </script>
