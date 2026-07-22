@@ -8,6 +8,7 @@
   var STORAGE_KEY = 'jjc-projects';
   var MAX_PROJECT_NAME_LEN = 40;
   var MAX_ROUND_TITLE_LEN = 120;
+  var MAX_NOTE_ID_LEN = 200; // 회의록 식별자(파일명) 길이 컷
   var MAX_ROUNDS = 20; // 회차 상한 — 초과 시 오래된 것부터 제거(설계 1절)
 
   // 제어문자·개행을 공백으로 치환 → 연속 공백 접기 → trim → 코드포인트 단위 길이 컷.
@@ -29,6 +30,15 @@
   function cloneRaw(raw) {
     if (raw === null || raw === undefined) return null;
     try { return JSON.parse(JSON.stringify(raw)); } catch (e) { return null; }
+  }
+
+  // 양의 정수로 강제(number·숫자문자열 허용). 아니면 null.
+  function toPosInt(v) {
+    var n;
+    if (typeof v === 'number') n = v;
+    else if (typeof v === 'string' && v.trim() !== '') n = Number(v);
+    else return null;
+    return (Number.isFinite(n) && n >= 1 && Math.floor(n) === n) ? n : null;
   }
 
   // 기존 id들 중 prefix로 시작하는 것의 최대 숫자 접미사 + 1. Date.now()/Math.random() 없이
@@ -58,9 +68,13 @@
     if (!id) return null;
     return {
       id: id,
+      roundNo: toPosInt(r.roundNo),          // null이면 sanitizeProject가 배정
+      noteId: cleanText(r.noteId, MAX_NOTE_ID_LEN),
       ts: typeof r.ts === 'string' ? r.ts : '',
       title: sanitizeRoundTitle(r.title),
-      raw: cloneRaw(r.raw)
+      raw: cloneRaw(r.raw),
+      baselineNo: toPosInt(r.baselineNo),
+      baselineStamp: typeof r.baselineStamp === 'string' ? r.baselineStamp : ''
     };
   }
 
@@ -77,6 +91,20 @@
       rounds.push(r);
     }
     if (rounds.length > MAX_ROUNDS) rounds = rounds.slice(rounds.length - MAX_ROUNDS);
+    // roundNo 정합: 유효·유일 값은 채택, 중복/누락/비정수는 미사용 최소 양의정수를 배열 순서대로 배정(멱등).
+    var usedNo = Object.create(null), i2;
+    for (i2 = 0; i2 < rounds.length; i2++) {
+      var rn = rounds[i2].roundNo;
+      if (rn !== null && !usedNo[rn]) usedNo[rn] = true;
+      else rounds[i2].roundNo = null;
+    }
+    var next = 1;
+    for (i2 = 0; i2 < rounds.length; i2++) {
+      if (rounds[i2].roundNo === null) {
+        while (usedNo[next]) next++;
+        rounds[i2].roundNo = next; usedNo[next] = true;
+      }
+    }
     return {
       id: id,
       name: sanitizeProjectName(p.name),

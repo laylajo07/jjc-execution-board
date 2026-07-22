@@ -270,6 +270,45 @@ test('sanitize: current가 존재하지 않는 프로젝트를 가리키면 빈 
   assert.equal(s.current, '');
 });
 
+// ── roundNo 마이그레이션/정합 (지시 16·17) ───────────────────────────────
+test('sanitize: roundNo 누락 회차는 배열 순서대로 1,2,3…을 배정한다(마이그레이션)', () => {
+  const s = sanitize({ projects: [{ id: 'p_1', name: 'X', createdAt: 't', rounds: [
+    { id: 'r_1', ts: 't1', title: 'a', raw: null },
+    { id: 'r_2', ts: 't2', title: 'b', raw: null },
+    { id: 'r_3', ts: 't3', title: 'c', raw: null }
+  ] }] });
+  const rs = s.projects[0].rounds;
+  assert.deepEqual(rs.map(r => r.roundNo), [1, 2, 3]);
+  assert.equal(rs[0].noteId, '');
+  assert.equal(rs[0].baselineNo, null);
+  assert.equal(rs[0].baselineStamp, '');
+});
+test('sanitize: 유효한 roundNo는 보존하고, 중복/비정수만 미사용 최소값으로 채운다', () => {
+  const s = sanitize({ projects: [{ id: 'p_1', name: 'X', createdAt: 't', rounds: [
+    { id: 'r_1', roundNo: 5, raw: null },
+    { id: 'r_2', roundNo: 5, raw: null },     // 중복 → 재배정
+    { id: 'r_3', roundNo: 'x', raw: null },   // 비정수 → 재배정
+    { id: 'r_4', roundNo: 2, raw: null }
+  ] }] });
+  assert.deepEqual(s.projects[0].rounds.map(r => r.roundNo), [5, 1, 3, 2]);
+});
+test('sanitize: roundNo 마이그레이션은 멱등이다(두 번 돌려도 같다)', () => {
+  const once = sanitize({ projects: [{ id: 'p_1', name: 'X', createdAt: 't', rounds: [
+    { id: 'r_1', raw: null }, { id: 'r_2', raw: null }
+  ] }] });
+  const twice = sanitize(once);
+  assert.deepEqual(twice, once);
+});
+test('sanitize: noteId/baselineStamp 문자열·baselineNo 양의정수를 정리한다', () => {
+  const s = sanitize({ projects: [{ id: 'p_1', name: 'X', createdAt: 't', rounds: [
+    { id: 'r_1', roundNo: 2, noteId: '  파일.md  ', baselineNo: 1, baselineStamp: 'ts1', raw: null }
+  ] }] });
+  const r = s.projects[0].rounds[0];
+  assert.equal(r.noteId, '파일.md');
+  assert.equal(r.baselineNo, 1);
+  assert.equal(r.baselineStamp, 'ts1');
+});
+
 // ── load/save: Node(localStorage 없음) ────────────────────────────────
 test('loadProjects(): Node(localStorage 없음)에서 예외 없이 빈 상태를 반환한다', () => {
   assert.equal(typeof localStorage, 'undefined');
