@@ -520,6 +520,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
       <div class="field-label">프로젝트 <span class="hint">회차 누적</span></div>
       <div class="row" style="gap:6px;margin-bottom:10px">
         <select class="note" id="projSel" style="flex:1"><option value="">— 프로젝트 없음 —</option></select>
+        <button class="btn icon" id="renameProjBtn" title="프로젝트 이름 수정">✎</button>
         <button class="btn icon" id="newProjBtn" title="새 프로젝트">＋</button>
       </div>
       <div id="projHistory" class="proj-history" hidden></div>
@@ -1305,6 +1306,18 @@ $('#newProjBtn').onclick=()=>{
   const r=ProjectStore.createProject(projState,name);
   projState=r.state;
   currentRoundId=null;
+  ProjectStore.saveProjects(projState);
+  renderProjSelect();
+  renderProjHistory();
+};
+$('#renameProjBtn').onclick=()=>{
+  const cur=projState&&projState.current;
+  if(!cur){ toast('이름을 수정할 프로젝트를 먼저 선택하세요'); return; }
+  const p=ProjectStore.getProject(projState,cur);
+  const name=prompt('프로젝트 이름 수정', p?p.name:'');
+  if(name===null)return;                 // 취소
+  if(!name.trim()){ toast('이름은 비울 수 없습니다'); return; }
+  projState=ProjectStore.renameProject(projState,cur,name);
   ProjectStore.saveProjects(projState);
   renderProjSelect();
   renderProjHistory();
