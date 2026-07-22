@@ -181,18 +181,38 @@
   // 해당 프로젝트의 rounds 뒤에 회차를 추가한다. id·ts는 이 함수가 채운다(호출자는 title·raw만 준다).
   // raw는 깊은 복제로 떼어 저장한다(cloneRaw) — 호출자가 이후 자기 raw를 변형해도 저장된 회차는 영향받지 않는다.
   // 20개 초과 시 오래된 것부터 제거. projectId가 없으면 아무 것도 바꾸지 않는다(no-op).
+  // 회차를 upsert한다. round.roundNo가 있고 이미 존재하면 교체(재분석, 같은 id 유지, ts는 새 처리시각,
+  // title/raw/noteId 갱신, baseline은 null/'' 초기화 → 호출자가 재설정). 없으면 max roundNo+1로 append
+  // (기존 r_N 순번·20캡 동작 유지). raw는 딥클론. projectId 없으면 no-op.
   function addRound(state, projectId, round) {
     var s = sanitize(state);
     var r = (round && typeof round === 'object' && !Array.isArray(round)) ? round : {};
     var raw = cloneRaw(r.raw);
+    var noteId = cleanText(r.noteId, MAX_NOTE_ID_LEN);
+    var title = sanitizeRoundTitle(r.title);
+    var ts = pickTs(raw);
     var found = false;
     var projects = s.projects.map(function (p) {
       if (p.id !== projectId) return p;
       found = true;
-      var rid = nextSeqId(p.rounds.map(function (x) { return x.id; }), 'r_');
-      var newRound = { id: rid, ts: pickTs(raw), title: sanitizeRoundTitle(r.title), raw: raw };
-      var rounds = p.rounds.concat([newRound]);
-      if (rounds.length > MAX_ROUNDS) rounds = rounds.slice(rounds.length - MAX_ROUNDS);
+      var maxNo = 0;
+      p.rounds.forEach(function (x) { if (x.roundNo > maxNo) maxNo = x.roundNo; });
+      var rn = toPosInt(r.roundNo);
+      if (rn === null) rn = maxNo + 1;
+      var exists = false;
+      p.rounds.forEach(function (x) { if (x.roundNo === rn) exists = true; });
+      var rounds;
+      if (exists) {
+        rounds = p.rounds.map(function (x) {
+          if (x.roundNo !== rn) return x;
+          return { id: x.id, roundNo: rn, noteId: noteId, ts: ts, title: title, raw: raw, baselineNo: null, baselineStamp: '' };
+        });
+      } else {
+        var rid = nextSeqId(p.rounds.map(function (x) { return x.id; }), 'r_');
+        var newRound = { id: rid, roundNo: rn, noteId: noteId, ts: ts, title: title, raw: raw, baselineNo: null, baselineStamp: '' };
+        rounds = p.rounds.concat([newRound]);
+        if (rounds.length > MAX_ROUNDS) rounds = rounds.slice(rounds.length - MAX_ROUNDS);
+      }
       return { id: p.id, name: p.name, createdAt: p.createdAt, rounds: rounds };
     });
     return { current: s.current, projects: found ? projects : s.projects };

@@ -163,6 +163,40 @@ test('[불변] 같은 이전 state에서 파생된 두 state는 공통 조상 �
   assert.equal(sB.projects[0].rounds[0].raw.val, 1, 'sA의 공통 조상 회차 raw를 직접 바꿔도 sB 쪽은 영향받지 않아야 한다(별개 객체)');
 });
 
+// ── addRound upsert by roundNo (지시 16) ────────────────────────────────
+test('addRound: roundNo 지정 시 저장되고, 같은 roundNo 재분석은 교체(같은 id·raw/ts 갱신)한다', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  state = addRound(state, pid, { roundNo: 3, noteId: 'n.md', title: '3차', raw: { updated_at: 't1' } });
+  let rs = getProject(state, pid).rounds;
+  assert.equal(rs.length, 1);
+  assert.equal(rs[0].roundNo, 3);
+  assert.equal(rs[0].noteId, 'n.md');
+  const firstId = rs[0].id;
+  state = addRound(state, pid, { roundNo: 3, title: '3차-재분석', raw: { updated_at: 't2' } });
+  rs = getProject(state, pid).rounds;
+  assert.equal(rs.length, 1, '같은 roundNo는 append가 아니라 교체');
+  assert.equal(rs[0].id, firstId, '교체 시 내부 id 유지');
+  assert.equal(rs[0].ts, 't2', 'ts는 새 처리시각으로 갱신');
+  assert.equal(rs[0].title, '3차-재분석');
+});
+test('addRound: roundNo 없이 부르면 max+1로 append(기존 순번 동작 유지)', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  state = addRound(state, pid, { title: 'a', raw: null });
+  state = addRound(state, pid, { title: 'b', raw: null });
+  const rs = getProject(state, pid).rounds;
+  assert.deepEqual(rs.map(r => r.roundNo), [1, 2]);
+  assert.deepEqual(rs.map(r => r.id), ['r_1', 'r_2']);
+});
+test('addRound: upsert 교체는 baseline을 null/""로 초기화한다(호출자가 재설정)', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  state = addRound(state, pid, { roundNo: 1, raw: null });
+  state = addRound(state, pid, { roundNo: 2, raw: null });
+  state = addRound(state, pid, { roundNo: 2, title: '재분석', raw: null });
+  const r2 = getProject(state, pid).rounds.find(r => r.roundNo === 2);
+  assert.equal(r2.baselineNo, null);
+  assert.equal(r2.baselineStamp, '');
+});
+
 // ── renameProject / deleteProject / setCurrent / getProject ──────────────
 test('renameProject: 이름을 바꾸고, 정리(trim·40자캡)를 거친다', () => {
   const { state: s1, id: pid } = createProject(emptyState, 'X');
