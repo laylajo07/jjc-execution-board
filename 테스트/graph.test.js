@@ -411,7 +411,7 @@ test('A·B의 board-derive.js는 바이트 단위로 동일해야 한다 (복사
 });
 
 // ── qualityScore (지시사항 14: 회의록 품질 점수) ──
-const { qualityScore } = require('../B_직접/앱/board-derive.js');
+const { qualityScore, friendlyTitle } = require('../B_직접/앱/board-derive.js');
 
 test('qualityScore: 담당·기한·의사결정이 전부 채워진 보드는 100점, missing 0', () => {
   const board = { by_department: [
@@ -528,6 +528,30 @@ test('qualityScore: 불변 — 입력 board를 변형하지 않는다', () => {
   const snapshot = JSON.parse(JSON.stringify(board));
   qualityScore(board);
   assert.deepEqual(board, snapshot);
+});
+
+// ── friendlyTitle (사용자 친화 타이틀) ──
+test('friendlyTitle: meeting.title을 그대로 쓴다(짧은 제목)', () => {
+  assert.equal(friendlyTitle({ meeting: { title: '신용평가 등급 알림 서비스 기획 회의' } }), '신용평가 등급 알림 서비스 기획 회의');
+});
+
+test('friendlyTitle: 앞머리 날짜 접두([2026-07-21] 등)를 떼어낸다', () => {
+  assert.equal(friendlyTitle({ meeting: { title: '[2026-07-21] 신용평가 알림 회의' } }), '신용평가 알림 회의');
+  assert.equal(friendlyTitle({ meeting: { title: '2026.07.21 킥오프' } }), '킥오프');
+});
+
+test('friendlyTitle: 34자를 넘으면 잘라 …를 붙인다', () => {
+  const longTitle = '가나다라마바사아자차카타파하가나다라마바사아자차카타파하가나다라마바사아자차카타파하';
+  const out = friendlyTitle({ meeting: { title: longTitle } });
+  assert.ok(out.length <= 36, '대략 34자+… 이내');
+  assert.ok(out.endsWith('…'), '말줄임표로 끝난다');
+});
+
+test('friendlyTitle: 제목이 없으면 headline으로, 그것도 없으면 기본값', () => {
+  assert.equal(friendlyTitle({ meeting: {}, headline: '짧은 요약' }), '짧은 요약');
+  assert.equal(friendlyTitle({ meeting: { title: '[미상]' }, headline: '' }), '회의 실행보드');
+  assert.equal(friendlyTitle({}), '회의 실행보드');
+  assert.equal(friendlyTitle(null), '회의 실행보드');
 });
 
 const { nodePanelHtml } = require('../B_직접/앱/dag-view.js');

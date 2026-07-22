@@ -127,7 +127,30 @@
     }
   }
 
-  var api = { buildDetailMap: buildDetailMap, rankItems: rankItems, qualityScore: qualityScore };
+  // ── 사용자 친화 타이틀 ──
+  // meeting.title에서 앞머리 날짜 표기([2026-07-21]/2026.7.21 등)를 떼고, 너무 길면 잘라
+  // 화면 상단 제목으로 쓰기 좋은 짧은 문자열을 만든다. 제목이 없으면 headline로 폴백,
+  // 그것도 없으면 '회의 실행보드'. 순수·결정적·DOM 미접근.
+  function friendlyTitle(board) {
+    try {
+      var mt = (board && board.meeting) || {};
+      var t = (mt.title == null ? '' : String(mt.title)).trim();
+      // 앞머리 날짜 접두 제거: "[2026-07-21] ", "2026.07.21 ", "7/21 " 등
+      t = t.replace(/^\[?\s*\d{4}\s*[-.\/]\s*\d{1,2}\s*[-.\/]\s*\d{1,2}\s*\]?\s*[-:·]?\s*/, '').trim();
+      if (!t || t === '[미상]' || t === '제목 미상') {
+        t = (board && board.headline != null ? String(board.headline) : '').trim();
+      }
+      if (!t) return '회의 실행보드';
+      var MAX = 34;
+      if (t.length > MAX) {
+        var cut = t.slice(0, MAX).replace(/[\s,·]+\S*$/, '');
+        t = (cut.length >= 12 ? cut : t.slice(0, MAX)) + '…';
+      }
+      return t || '회의 실행보드';
+    } catch (e) { return '회의 실행보드'; }
+  }
+
+  var api = { buildDetailMap: buildDetailMap, rankItems: rankItems, qualityScore: qualityScore, friendlyTitle: friendlyTitle };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.BoardDerive = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

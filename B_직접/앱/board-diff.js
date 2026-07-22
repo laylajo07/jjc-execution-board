@@ -138,7 +138,36 @@
     }
   }
 
-  var api = { diffBoards: diffBoards };
+  // ── 회차 간 주요 변경점 요약(메인 노출용) ──
+  // diffBoards의 결과(diff)와 현재 보드(curBoard)로부터 신규/변경/완료 건수와
+  // 대표 항목 목록을 만든다. 렌더러가 보드 최상단에 요약 카드로 표시한다.
+  //   { added, changed, done, total, items: [{tag, dept, kind, label, text, reason?}] }
+  //   tag: 'new'|'changed'|'done'. items는 신규→변경→완료 순, 최대 6개.
+  //   done 수는 diff.done(=confirmed+dropped) 길이. diff가 없으면 전부 0.
+  // 순수·불변·DOM 미접근. 기형 입력에도 예외를 던지지 않는다.
+  var KIND_LABEL = { action: '할 일', doc: '문서', decision: '의사결정' };
+  function changeDigest(diff, curBoard) {
+    var out = { added: 0, changed: 0, done: 0, total: 0, items: [] };
+    try {
+      if (!diff || !diff.tags) return out;
+      var cur = flatten(curBoard);
+      var adds = [], chgs = [];
+      cur.forEach(function (c) {
+        var t = diff.tags[key(c)];
+        if (t === 'new') { out.added++; adds.push({ tag: 'new', dept: c.dept, kind: c.kind, label: KIND_LABEL[c.kind] || '', text: c.text }); }
+        else if (t === 'changed') { out.changed++; chgs.push({ tag: 'changed', dept: c.dept, kind: c.kind, label: KIND_LABEL[c.kind] || '', text: c.text }); }
+      });
+      var dones = (diff.done || []).map(function (dn) {
+        return { tag: 'done', dept: dn.dept, kind: dn.kind, label: KIND_LABEL[dn.kind] || '', text: dn.text, reason: dn.reason };
+      });
+      out.done = dones.length;
+      out.total = out.added + out.changed + out.done;
+      out.items = adds.concat(chgs).concat(dones).slice(0, 6);
+      return out;
+    } catch (e) { return { added: 0, changed: 0, done: 0, total: 0, items: [] }; }
+  }
+
+  var api = { diffBoards: diffBoards, changeDigest: changeDigest };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.BoardDiff = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

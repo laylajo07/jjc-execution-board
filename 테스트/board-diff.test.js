@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const { diffBoards } = require('../B_직접/앱/board-diff.js');
+const { diffBoards, changeDigest } = require('../B_직접/앱/board-diff.js');
 
 // board-diff.js가 반환하는 key 포맷은 헤더 주석에 문서화된 공개 계약:
 // '<dept>::<kind(action|decision)>::<idx>' (idx는 그 부서·kind 배열 내 0-based 순번)
@@ -264,6 +264,54 @@ test('[특성화] prev 항목 2개가 모두 cur 항목 1개와 매칭 가능해
   // 두 prev 항목 모두 독립적으로(비배타적으로) cur의 그 하나와 매칭에 성공하므로
   // 이분매칭이었다면 dropped로 잡혔을 두 번째 prev 항목(CB2)도 dropped로 잡히지 않는다.
   assert.deepEqual(out.done, []);
+});
+
+// ---------------------------------------------------------------------------
+// 12-1. changeDigest — 회차 간 주요 변경점 요약(메인 노출용)
+// ---------------------------------------------------------------------------
+
+test('changeDigest: 신규/변경/완료 건수와 total을 집계한다', () => {
+  const prev = board([dept('CB본부', [
+    action('모델 재학습', 'CB1', '07-30', '진행중'),   // 그대로 → same
+    action('사라질 작업', 'CB2', '08-01', '진행중')     // cur에서 빠짐 → dropped(done)
+  ])]);
+  const cur = board([dept('CB본부', [
+    action('모델 재학습', 'CB1', '08-15', '진행중'),    // due 변경 → changed
+    action('완전 새 작업', 'CB9', '08-20', '진행중')     // 신규 → new
+  ])]);
+  const digest = changeDigest(diffBoards(prev, cur), cur);
+  assert.equal(digest.added, 1, '신규 1');
+  assert.equal(digest.changed, 1, '변경 1');
+  assert.equal(digest.done, 1, '완료(빠짐) 1');
+  assert.equal(digest.total, 3);
+});
+
+test('changeDigest: items는 신규→변경→완료 순이고 각 항목에 tag/dept/text가 있다', () => {
+  const prev = board([dept('법무실', [action('법률 검토', 'L1', '08-04', '진행중')])]);
+  const cur = board([dept('법무실', [
+    action('법률 검토', 'L1', '08-11', '진행중'),   // changed
+    action('가이드라인 수립', 'L2', '', '진행중')     // new
+  ])]);
+  const digest = changeDigest(diffBoards(prev, cur), cur);
+  assert.equal(digest.items[0].tag, 'new', '신규가 먼저');
+  assert.equal(digest.items[0].dept, '법무실');
+  assert.ok(digest.items[0].text.length > 0);
+  assert.equal(digest.items[1].tag, 'changed');
+});
+
+test('changeDigest: items는 최대 6개로 자른다', () => {
+  const acts = [];
+  for (let i = 0; i < 10; i++) acts.push(action('신규작업 ' + i, 'X', '', '진행중'));
+  const cur = board([dept('CB본부', acts)]);
+  const digest = changeDigest(diffBoards(board([]), cur), cur);
+  // 첫 회차(prev 비어있음) 대비지만 여기선 prev=빈 보드라 전부 new
+  assert.ok(digest.items.length <= 6, 'items 6개 이하');
+});
+
+test('changeDigest: diff가 null이거나 기형이어도 예외 없이 0을 돌려준다', () => {
+  assert.deepEqual(changeDigest(null, board([])), { added: 0, changed: 0, done: 0, total: 0, items: [] });
+  assert.deepEqual(changeDigest({}, board([])), { added: 0, changed: 0, done: 0, total: 0, items: [] });
+  assert.doesNotThrow(() => changeDigest({ tags: { 'x::action::0': 'new' } }, '문자열'));
 });
 
 // ---------------------------------------------------------------------------
