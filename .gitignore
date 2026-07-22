@@ -1,2 +1,9 @@
 node_modules/
 .superpowers/
+.claude/settings.local.json
+
+# 러너 분석 산출물(회의록 실행 결과) — 실행할 때마다 쌓이는 출력물, 소스 아님
+결과/
+# 로컬 도구 부산물
+__pycache__/
+.playwright-mcp/
