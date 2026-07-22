@@ -150,7 +150,17 @@
     } catch (e) { return '회의 실행보드'; }
   }
 
-  var api = { buildDetailMap: buildDetailMap, rankItems: rankItems, qualityScore: qualityScore, friendlyTitle: friendlyTitle };
+  // 회의록 파일명 등에서 회차 번호(양의 정수)를 추론한다. 없으면 null(지시 15).
+  // 우선순위: 'N차'/'N회차' → '버전 N' → 문자열 내 첫 정수. 순수 — 입력 문자열만 본다.
+  function inferRoundNo(name) {
+    var s = (name == null ? '' : String(name));
+    var m = s.match(/(\d+)\s*차/) || s.match(/버전\s*(\d+)/) || s.match(/(\d+)/);
+    if (!m) return null;
+    var n = parseInt(m[1], 10);
+    return (Number.isFinite(n) && n >= 1) ? n : null;
+  }
+
+  var api = { buildDetailMap: buildDetailMap, rankItems: rankItems, qualityScore: qualityScore, friendlyTitle: friendlyTitle, inferRoundNo: inferRoundNo };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.BoardDerive = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
