@@ -7,7 +7,8 @@
   "scripts": {
     "start": "tsx server.ts",
     "start:B": "tsx server.ts ../../B_직접/앱 8787",
-    "start:A": "tsx server.ts ../../A_웹페이지/앱 8788"
+    "start:A": "tsx server.ts ../../A_웹페이지/앱 8788",
+    "test": "tsx --test dept-prompt.test.ts"
   },
   "devDependencies": {
     "tsx": "^4.19.2",
