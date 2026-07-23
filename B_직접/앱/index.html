@@ -1172,7 +1172,15 @@ function renderBoard(d, raw){
   const mt=d.meeting||{};
   let h='';
   h+=`<div class="summary"><div class="eyebrow">SUMMARY · ${esc(mt.datetime||'일시 미상')}</div>`;
-  if(lastUpdatedIso){ const u=BoardCustom.fmtUpdatedAt(new Date(lastUpdatedIso)); if(u) h+=`<div class="updated mono">업데이트 ${esc(u)}</div>`; }
+  // 지시 24: 회차가 있으면 최초 분석 vs 마지막 업데이트를 구분 표기. 없으면 기존 board updated_at 라인.
+  let stampLine='';
+  if(curRound){
+    const created=curRound.createdTs||curRound.ts, updated=curRound.ts;
+    const cu=created?BoardCustom.fmtUpdatedAt(new Date(created)):'', uu=updated?BoardCustom.fmtUpdatedAt(new Date(updated)):'';
+    if(created&&updated&&created!==updated&&cu&&uu) stampLine=`최초 분석 ${esc(cu)} · 마지막 업데이트 ${esc(uu)}`;
+    else if(uu) stampLine=`분석 ${esc(uu)}`;
+  } else if(lastUpdatedIso){ const u=BoardCustom.fmtUpdatedAt(new Date(lastUpdatedIso)); if(u) stampLine=`업데이트 ${esc(u)}`; }
+  if(stampLine) h+=`<div class="updated mono">${stampLine}</div>`;
   const qs=BoardDerive.qualityScore(d);
   if(qs.total>0){
     const qBand=qs.score>=80?'good':(qs.score>=50?'mid':'low');
