@@ -466,8 +466,9 @@
       <div class="field-label">직접 붙여넣기</div>
       <textarea id="noteText" placeholder="여기에 회의록을 붙여넣으세요…"></textarea>
 
-      <div class="row" style="margin-top:14px">
-        <button class="btn primary block" id="analyzeBtn">회의록 분석</button>
+      <div class="row" style="margin-top:14px;gap:8px">
+        <button class="btn primary" id="analyzeBtn" style="flex:1">신규 분석</button>
+        <button class="btn update-btn" id="updateBtn" style="flex:1" disabled title="현재 열람 중인 회차를 수정된 회의록으로 덮어쓰기 재분석(새 회차 미생성)">업데이트</button>
       </div>
 
       <div class="flow" id="copyFlow" style="display:none">
@@ -480,7 +481,10 @@
         <button class="btn primary block" id="copyPromptBtn">프롬프트 복사</button>
         <div class="field-label">결과 붙여넣기</div>
         <textarea class="paste" id="pasteResult" placeholder="Claude 응답 전체 (JSON 블록 포함)"></textarea>
-        <div class="row" style="margin-top:8px"><button class="btn primary block" id="renderPasteBtn">보드 렌더링</button></div>
+        <div class="row" style="margin-top:8px;gap:8px">
+          <button class="btn primary" id="renderPasteBtn" style="flex:1">보드 렌더링</button>
+          <button class="btn update-btn" id="updatePasteBtn" style="flex:1" disabled title="붙여넣은 결과로 현재 열람 중인 회차에 덮어쓰기(새 회차 미생성)">업데이트</button>
+        </div>
       </div>
     </section>
   </aside>
@@ -558,6 +562,7 @@ $('#approachTag').textContent = META.approach;
 let lastData=null, lastBoard=null, lastUpdatedIso=null, lastMarkdown='', AUTO=false;
 let projState=null;   // 프로젝트 히스토리(설계 §3-1) — ProjectStore가 다루는 {current, projects[]}
 let suppressSave=false, currentRoundId=null;   // 과거 회차 열람 시 저장 억제 + "지금 보는 회차" id(Task 4, 설계 §3-2)
+let pendingUpdateRoundNo=null;   // "업데이트" 실행 시 대상 회차 roundNo(현재 회차 덮어쓰기, 지시 22·23). 저장 후 리셋.
 // 부서 편집 상태. "편집됐는가"는 더 이상 래치 플래그가 아니라 boardSnapshot과의 스냅샷 비교(isEdited)로
 // 매번 판정한다 — 그래야 숨김→해제처럼 원본으로 되돌아간 진짜 왕복 편집이 "편집 없음"으로 정확히 잡힌다.
 let editMode=false, boardSnapshot=null;
@@ -687,7 +692,7 @@ $('#roundNoInput').oninput=refreshRoundHint;
 /* analyze (auto) */
 async function analyze(){
   const note=$('#noteText').value.trim();
-  if(!note){toast('회의록을 입력하세요');return;}
+  if(!note){toast('회의록을 입력하세요');pendingUpdateRoundNo=null;return;}
   const model=$('#modelSel').value;
   setLoading(true);
   const pre=()=>document.getElementById('streamPre');
@@ -719,10 +724,11 @@ async function analyze(){
   }catch(e){renderError(e.message);}
   resetBtn();
 }
-function resetBtn(){$('#analyzeBtn').disabled=false;$('#analyzeBtn').innerHTML='회의록 분석';}
+function resetBtn(){$('#analyzeBtn').disabled=false;$('#analyzeBtn').innerHTML='신규 분석';refreshUpdateBtn();}
 function setLoading(on){
   $('#analyzeBtn').disabled=on;
-  $('#analyzeBtn').innerHTML= on?'<span class="spin"></span> 분석 중…':'회의록 분석';
+  if(on) document.querySelectorAll('.update-btn').forEach(b=>b.disabled=true);   // 분석 중 중복 트리거 방지
+  $('#analyzeBtn').innerHTML= on?'<span class="spin"></span> 분석 중…':'신규 분석';
   if(on)$('#result').innerHTML='<div class="streaming"><div class="stream-head"><span class="dots"><i></i><i></i><i></i></span>조정치가 회의록을 구조화하는 중… <span class="stream-sub">생성되는 내용이 아래에 실시간으로 표시됩니다</span></div><pre id="streamPre" class="stream-pre"></pre></div>';
 }
 
@@ -730,14 +736,18 @@ function setLoading(on){
 function deptBlock(){ var t=BoardCustom.deptConfigToPrompt(BoardCustom.load()); return t?('\n\n'+t):''; }
 function fullPrompt(note){return SYS+deptBlock()+'\n\n================================================================\n# 처리할 회의록 (형식 그대로)\n================================================================\n'+note+'\n\n위 지침에 따라 "A. 실행보드(마크다운)"와 "B. JSON" 두 블록을 순서대로 출력해줘.';}
 $('#copyPromptBtn').onclick=()=>{const n=$('#noteText').value.trim();if(!n){toast('회의록을 입력하세요');return;}copy(fullPrompt(n));};
-$('#renderPasteBtn').onclick=()=>{const t=$('#pasteResult').value.trim();if(!t){toast('결과를 붙여넣으세요');return;}
+function renderPasteFlow(){const t=$('#pasteResult').value.trim();if(!t){toast('결과를 붙여넣으세요');pendingUpdateRoundNo=null;return;}
   const d=parseResult(t);
   if(d){lastMarkdown=t.replace(/```json[\s\S]*?```/i,'').trim();render(d);return;}
+  pendingUpdateRoundNo=null;   // 렌더 실패 → 대기 중인 업데이트 대상 해제
   const s=t.indexOf('{'),e=t.lastIndexOf('}');
   if(s>=0&&e>s){let msg='';try{JSON.parse(t.slice(s,e+1));}catch(x){msg=' ('+x.message+')';}
     renderError('JSON은 찾았지만 형식이 깨져 있습니다 — 응답이 중간에 잘렸거나 복사가 일부 누락된 것 같습니다.'+msg+' Claude 응답을 처음부터 끝까지 전체 복사해 다시 붙여넣어 주세요. 러너 자동 모드를 쓰면 복사 없이 처리됩니다.');}
-  else renderError('붙여넣은 내용에서 JSON 블록을 찾지 못했습니다. Claude 응답의 "B. JSON" 블록(중괄호 { … })까지 포함해 붙여넣어 주세요.');};
-$('#analyzeBtn').onclick=analyze;
+  else renderError('붙여넣은 내용에서 JSON 블록을 찾지 못했습니다. Claude 응답의 "B. JSON" 블록(중괄호 { … })까지 포함해 붙여넣어 주세요.');}
+$('#renderPasteBtn').onclick=()=>{ pendingUpdateRoundNo=null; renderPasteFlow(); };   // 신규(붙여넣기)
+$('#analyzeBtn').onclick=()=>{ pendingUpdateRoundNo=null; analyze(); };                // 신규 분석(자동)
+$('#updateBtn').onclick=doUpdate;
+$('#updatePasteBtn').onclick=doUpdate;
 
 /* parse */
 function parseResult(text){
@@ -1063,10 +1073,14 @@ function renderBoard(d, raw){
     // 감싸 들어오므로 여기서 걸러진다(무한 누적·중복 저장 방지, 설계 §3-2).
     if(raw!=null && !suppressSave && projState && projState.current){
       const title = BoardDerive.friendlyTitle(d);
-      const el=$('#roundNoInput'); const rnIn=el?parseInt(el.value,10):NaN;
-      const roundNo = (Number.isFinite(rnIn)&&rnIn>=1)?rnIn:undefined; // 미입력이면 addRound가 max+1로 append
+      const note = ($('#noteText')&&$('#noteText').value)||'';   // 회의록 원문 보존(지시 21)
       const noteId = (document.querySelector('#noteSelect')&&document.querySelector('#noteSelect').value)||'';
-      projState = ProjectStore.addRound(projState, projState.current, {roundNo:roundNo, noteId:noteId, title:title, raw:raw});
+      // 대상 회차: 업데이트면 현재 회차 roundNo(덮어쓰기), 아니면 입력칸 값(미입력이면 addRound가 max+1로 append)
+      let roundNo;
+      if(pendingUpdateRoundNo!=null){ roundNo=pendingUpdateRoundNo; }
+      else { const el=$('#roundNoInput'); const rnIn=el?parseInt(el.value,10):NaN; roundNo=(Number.isFinite(rnIn)&&rnIn>=1)?rnIn:undefined; }
+      pendingUpdateRoundNo=null;   // 소비 후 리셋
+      projState = ProjectStore.addRound(projState, projState.current, {roundNo:roundNo, noteId:noteId, note:note, title:title, raw:raw});
       // 저장된 회차 특정 + 자기 기준 스탬프(지시 18·19)
       let proj = ProjectStore.getProject(projState, projState.current);
       const savedNo = (roundNo!=null)?roundNo:((ProjectStore.roundsSortedByNo(proj).slice(-1)[0]||{}).roundNo);
@@ -1090,7 +1104,15 @@ function renderBoard(d, raw){
   const mt=d.meeting||{};
   let h='';
   h+=`<div class="summary"><div class="eyebrow">SUMMARY · ${esc(mt.datetime||'일시 미상')}</div>`;
-  if(lastUpdatedIso){ const u=BoardCustom.fmtUpdatedAt(new Date(lastUpdatedIso)); if(u) h+=`<div class="updated mono">업데이트 ${esc(u)}</div>`; }
+  // 지시 24: 회차가 있으면 최초 분석 vs 마지막 업데이트를 구분 표기. 없으면 기존 board updated_at 라인.
+  let stampLine='';
+  if(curRound){
+    const created=curRound.createdTs||curRound.ts, updated=curRound.ts;
+    const cu=created?BoardCustom.fmtUpdatedAt(new Date(created)):'', uu=updated?BoardCustom.fmtUpdatedAt(new Date(updated)):'';
+    if(created&&updated&&created!==updated&&cu&&uu) stampLine=`최초 분석 ${esc(cu)} · 마지막 업데이트 ${esc(uu)}`;
+    else if(uu) stampLine=`분석 ${esc(uu)}`;
+  } else if(lastUpdatedIso){ const u=BoardCustom.fmtUpdatedAt(new Date(lastUpdatedIso)); if(u) stampLine=`업데이트 ${esc(u)}`; }
+  if(stampLine) h+=`<div class="updated mono">${stampLine}</div>`;
   const qs=BoardDerive.qualityScore(d);
   if(qs.total>0){
     const qBand=qs.score>=80?'good':(qs.score>=50?'mid':'low');
@@ -1236,6 +1258,20 @@ function refreshRoundHint(){
   if(proj && Number.isFinite(n) && ProjectStore.getRoundByNo(proj,n)){ hint.textContent='기존 '+n+'차 재분석'; hint.classList.add('warn'); }
   else { hint.textContent='숫자 · 파일명에서 자동 제안'; hint.classList.remove('warn'); }
 }
+// "업데이트" 버튼 활성 제어(지시 22): 현재 열람 회차가 실제로 프로젝트에 존재할 때만 활성.
+function refreshUpdateBtn(){
+  const proj=(projState&&projState.current)?ProjectStore.getProject(projState,projState.current):null;
+  const has = !!(proj && currentRoundId && proj.rounds.some(r=>r.id===currentRoundId));
+  document.querySelectorAll('.update-btn').forEach(b=>b.disabled=!has);
+}
+// "업데이트"(지시 22·23): 현재 열람 회차를 수정된 회의록으로 덮어쓰기 재분석(새 회차 미생성).
+function doUpdate(){
+  const proj=(projState&&projState.current)?ProjectStore.getProject(projState,projState.current):null;
+  const r=(proj&&currentRoundId)?proj.rounds.find(x=>x.id===currentRoundId):null;
+  if(!r){toast('업데이트할 회차를 먼저 열어주세요');return;}
+  pendingUpdateRoundNo=r.roundNo;        // 저장 분기가 이 회차에 덮어쓴다
+  if(AUTO){ analyze(); } else { renderPasteFlow(); }
+}
 // 회차가 stale(⚠ 기준 데이터 오래됨)인가: baselineNo가 찍힌(비-null) 회차인데, 저장된 (baselineNo,stamp)가
 // 현재 올바른 기준(findBaseline)의 (roundNo,ts)와 어긋날 때만. 미스탬프(null)·최소회차는 제외(지시 19).
 function isRoundStale(proj, r){
@@ -1264,6 +1300,7 @@ function maybeCascade(savedNo){
 // suppressSave로 감싸 렌더해 renderBoard의 자동저장 가드를 우회하지 않고 그냥 통과만 안 하게 한다
 // (과거 열람이 새 회차로 쌓이지 않음).
 function renderProjHistory(){
+  refreshUpdateBtn();   // 현재 회차 존재 여부에 따라 업데이트 버튼 활성 갱신(지시 22)
   const box=$('#projHistory'); if(!box)return;
   const proj=(projState&&projState.current)?ProjectStore.getProject(projState,projState.current):null;
   const rounds=proj?ProjectStore.roundsSortedByNo(proj):[];   // 지시 20: roundNo 오름차순
@@ -1289,6 +1326,10 @@ function renderProjHistory(){
         currentRoundId=round.id;
         editMode=false;
         renderBoard(normalize(round.raw), round.raw);   // raw 넘기되 저장은 suppressSave가 억제
+        // 지시 21: 열람 회차의 원문을 왼쪽 패널에 자동 로드(편집 가능) + 회차 번호 동기화
+        if($('#noteText')) $('#noteText').value = round.note||'';
+        if($('#roundNoInput')) $('#roundNoInput').value = round.roundNo;
+        refreshRoundHint(); refreshUpdateBtn();
       }finally{
         suppressSave=false;   // renderBoard가 도중에 throw해도 반드시 해제 — 안 그러면 이후 세션 내내 자동저장이 조용히 멈춘다
       }
