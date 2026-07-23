@@ -1415,6 +1415,11 @@ function renderProjHistory(){
         // 지시 21: 열람 회차의 원문을 왼쪽 패널에 자동 로드(편집 가능) + 회차 번호 동기화
         if($('#noteText')) $('#noteText').value = round.note||'';
         if($('#roundNoInput')) $('#roundNoInput').value = round.roundNo;
+        // 지시 17: noteSelect(자동 모드 파일 드롭다운)도 이 회차의 noteId로 동기화 — 안 하면
+        // 이후 "업데이트" 저장 시 드롭다운의 현재값(다른 파일이거나 빈값)이 noteId를 덮어써
+        // 회차의 회의록 ID가 조용히 유실/오염된다. 옵션이 없으면(파일 삭제·복붙 입력) 선택 해제.
+        const sel=$('#noteSelect');
+        if(sel){ const has=[...sel.options].some(o=>o.value===round.noteId); sel.value = has?round.noteId:''; }
         refreshRoundHint(); refreshUpdateBtn();
       }finally{
         suppressSave=false;   // renderBoard가 도중에 throw해도 반드시 해제 — 안 그러면 이후 세션 내내 자동저장이 조용히 멈춘다
