@@ -1144,12 +1144,11 @@ function renderBoard(d, raw){
       maybeCascade(savedNo);   // 재분석 연쇄(Task 9). 영향 회차 없으면 no-op.
     }
   }
-  // 히스토리 diff(Task 4, 설계 §3-4) — current 프로젝트 + "지금 보는 회차"(currentRoundId)의 직전 회차가
-  // 있으면 그 회차 대비 신규/변경/완료를 계산. 무프로젝트·첫 회차(직전 없음)면 diffTags=null → 배지 없음
-  // (기존 무diff 렌더와 바이트 동일 — 회귀 없음).
-  const histRounds = (projState && projState.current) ? (ProjectStore.getProject(projState,projState.current).rounds||[]) : [];
-  const histCurIdx = histRounds.findIndex(r=>r.id===currentRoundId);
-  const histPrev = histCurIdx>0 ? histRounds[histCurIdx-1] : null;
+  // 히스토리 diff 기준(지시 18) = 같은 프로젝트에서 "지금 보는 회차"의 roundNo보다 작은 것 중 roundNo 최대.
+  // 처리 순서와 무관. 무프로젝트·최소 회차(기준 없음)면 diffTags=null → 배지 없음(기존 무diff 렌더와 동일).
+  const histProj = (projState && projState.current) ? ProjectStore.getProject(projState,projState.current) : null;
+  const curRound = histProj ? (histProj.rounds||[]).find(r=>r.id===currentRoundId) : null;
+  const histPrev = (histProj && curRound) ? ProjectStore.findBaseline(histProj, curRound.roundNo) : null;
   const diff = histPrev ? BoardDiff.diffBoards(normalize(histPrev.raw), d) : null;
   const diffTags = diff ? diff.tags : null;
   const digest = diff ? BoardDiff.changeDigest(diff, d) : null;   // 회차 간 주요 변경점(메인 노출)
