@@ -1297,12 +1297,14 @@ function isRoundStale(proj, r){
   return r.baselineNo!==curNo || r.baselineStamp!==curStamp;
 }
 // 방금 저장한 회차(savedNo) 때문에 기존 회차의 diff 기준이 낡았으면 확인 후 정합화(지시 19).
-// 영향 = savedNo 제외한 회차 중, 저장된 (baselineNo,stamp)가 현재 올바른 기준과 어긋나는 것(=stale).
+// 영향 = savedNo를 baseline으로 "참조 중이던" 회차 중 실제로 stale해진 것만(roundsUsingBaseline로 범위 한정).
+// 전체 회차를 스캔하면 이 업데이트와 무관하게 이미 stale이던(다른 회차 재분석에서 거부된) 회차가
+// 잘못 섞여 들어간다 — 지시 19는 "이 회차를 baseline으로 참조 중인 다른 회차"로 범위를 명시함.
 function maybeCascade(savedNo){
   if(!projState||!projState.current)return;
   const proj=ProjectStore.getProject(projState,projState.current);
   if(!proj)return;
-  const affected=(proj.rounds||[]).filter(r=>r.roundNo!==savedNo && isRoundStale(proj,r));
+  const affected=ProjectStore.roundsUsingBaseline(proj, savedNo).filter(r=>isRoundStale(proj,r));
   if(!affected.length)return;
   const list=affected.map(r=>r.roundNo).sort((a,b)=>a-b).map(n=>n+'차').join(', ');
   if(confirm(`연쇄 재계산이 필요합니다 (영향 회차: ${list}) — 지금 다시 계산할까요?`)){
