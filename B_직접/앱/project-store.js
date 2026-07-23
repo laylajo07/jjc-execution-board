@@ -233,6 +233,53 @@
     return null;
   }
 
+  function getRoundByNo(project, roundNo) {
+    var rn = toPosInt(roundNo);
+    var rounds = (project && Array.isArray(project.rounds)) ? project.rounds : [];
+    for (var i = 0; i < rounds.length; i++) if (rounds[i].roundNo === rn) return rounds[i];
+    return null;
+  }
+
+  // roundNo보다 작은 회차 중 roundNo가 최대인 회차(지시 18). 없으면 null. 처리 순서 무관.
+  function findBaseline(project, roundNo) {
+    var rn = toPosInt(roundNo);
+    var rounds = (project && Array.isArray(project.rounds)) ? project.rounds : [];
+    if (rn === null) return null;
+    var best = null;
+    rounds.forEach(function (r) {
+      if (r.roundNo !== null && r.roundNo < rn && (!best || r.roundNo > best.roundNo)) best = r;
+    });
+    return best;
+  }
+
+  function roundsSortedByNo(project) {
+    var rounds = (project && Array.isArray(project.rounds)) ? project.rounds.slice() : [];
+    rounds.sort(function (a, b) { return a.roundNo - b.roundNo; });
+    return rounds;
+  }
+
+  function roundsUsingBaseline(project, roundNo) {
+    var rn = toPosInt(roundNo);
+    var rounds = (project && Array.isArray(project.rounds)) ? project.rounds : [];
+    return rounds.filter(function (r) { return r.baselineNo !== null && r.baselineNo === rn; });
+  }
+
+  // 정합 마커(baselineNo/baselineStamp)만 갱신하는 불변 세터.
+  function setRoundBaseline(state, projectId, roundId, baselineNo, baselineStamp) {
+    var s = sanitize(state);
+    var bn = toPosInt(baselineNo);
+    var bs = typeof baselineStamp === 'string' ? baselineStamp : '';
+    var projects = s.projects.map(function (p) {
+      if (p.id !== projectId) return p;
+      var rounds = p.rounds.map(function (r) {
+        if (r.id !== roundId) return r;
+        return { id: r.id, roundNo: r.roundNo, noteId: r.noteId, ts: r.ts, title: r.title, raw: r.raw, baselineNo: bn, baselineStamp: bs };
+      });
+      return { id: p.id, name: p.name, createdAt: p.createdAt, rounds: rounds };
+    });
+    return { current: s.current, projects: projects };
+  }
+
   var api = {
     loadProjects: loadProjects,
     saveProjects: saveProjects,
@@ -242,7 +289,12 @@
     addRound: addRound,
     setCurrent: setCurrent,
     getProject: getProject,
-    sanitize: sanitize
+    sanitize: sanitize,
+    getRoundByNo: getRoundByNo,
+    findBaseline: findBaseline,
+    roundsSortedByNo: roundsSortedByNo,
+    roundsUsingBaseline: roundsUsingBaseline,
+    setRoundBaseline: setRoundBaseline
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ProjectStore = api;
