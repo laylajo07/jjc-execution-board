@@ -1312,7 +1312,22 @@ function isRoundStale(proj, r){
   const curNo=b?b.roundNo:null, curStamp=b?b.ts:'';
   return r.baselineNo!==curNo || r.baselineStamp!==curStamp;
 }
-function maybeCascade(savedNo){ /* Task 9: 재분석 연쇄 확인창 */ }
+// 방금 저장한 회차(savedNo) 때문에 기존 회차의 diff 기준이 낡았으면 확인 후 정합화(지시 19).
+// 영향 = savedNo 제외한 회차 중, 저장된 (baselineNo,stamp)가 현재 올바른 기준과 어긋나는 것(=stale).
+function maybeCascade(savedNo){
+  if(!projState||!projState.current)return;
+  const proj=ProjectStore.getProject(projState,projState.current);
+  if(!proj)return;
+  const affected=(proj.rounds||[]).filter(r=>r.roundNo!==savedNo && isRoundStale(proj,r));
+  if(!affected.length)return;
+  const list=affected.map(r=>r.roundNo).sort((a,b)=>a-b).map(n=>n+'차').join(', ');
+  if(confirm(`연쇄 재계산이 필요합니다 (영향 회차: ${list}) — 지금 다시 계산할까요?`)){
+    affected.forEach(r=>{ const b=ProjectStore.findBaseline(proj, r.roundNo);
+      projState=ProjectStore.setRoundBaseline(projState, projState.current, r.id, b?b.roundNo:null, b?b.ts:''); });
+    ProjectStore.saveProjects(projState);
+  } // 거부 시: 그대로 두면 isRoundStale이 true라 히스토리에 ⚠ 배지가 남는다.
+  renderProjHistory();
+}
 // 회차 히스토리 패널(Task 4, 설계 §3-4). 프로젝트 미선택이거나 회차 0개면 숨김(가드). 항목 클릭은
 // suppressSave로 감싸 렌더해 renderBoard의 자동저장 가드를 우회하지 않고 그냥 통과만 안 하게 한다
 // (과거 열람이 새 회차로 쌓이지 않음).
