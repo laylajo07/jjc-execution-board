@@ -534,8 +534,9 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
       <div class="field-label">직접 붙여넣기</div>
       <textarea id="noteText" placeholder="여기에 회의록을 붙여넣으세요…"></textarea>
 
-      <div class="row" style="margin-top:14px">
-        <button class="btn primary block" id="analyzeBtn">회의록 분석</button>
+      <div class="row" style="margin-top:14px;gap:8px">
+        <button class="btn primary" id="analyzeBtn" style="flex:1">신규 분석</button>
+        <button class="btn update-btn" id="updateBtn" style="flex:1" disabled title="현재 열람 중인 회차를 수정된 회의록으로 덮어쓰기 재분석(새 회차 미생성)">업데이트</button>
       </div>
 
       <div class="flow" id="copyFlow" style="display:none">
@@ -548,7 +549,10 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
         <button class="btn primary block" id="copyPromptBtn">프롬프트 복사</button>
         <div class="field-label">결과 붙여넣기</div>
         <textarea class="paste" id="pasteResult" placeholder="Claude 응답 전체 (JSON 블록 포함)"></textarea>
-        <div class="row" style="margin-top:8px"><button class="btn primary block" id="renderPasteBtn">보드 렌더링</button></div>
+        <div class="row" style="margin-top:8px;gap:8px">
+          <button class="btn primary" id="renderPasteBtn" style="flex:1">보드 렌더링</button>
+          <button class="btn update-btn" id="updatePasteBtn" style="flex:1" disabled title="붙여넣은 결과로 현재 열람 중인 회차에 덮어쓰기(새 회차 미생성)">업데이트</button>
+        </div>
       </div>
     </section>
   </aside>
@@ -756,7 +760,7 @@ $('#roundNoInput').oninput=refreshRoundHint;
 /* analyze (auto) */
 async function analyze(){
   const note=$('#noteText').value.trim();
-  if(!note){toast('회의록을 입력하세요');return;}
+  if(!note){toast('회의록을 입력하세요');pendingUpdateRoundNo=null;return;}
   const model=$('#modelSel').value;
   setLoading(true);
   const pre=()=>document.getElementById('streamPre');
@@ -788,10 +792,11 @@ async function analyze(){
   }catch(e){renderError(e.message);}
   resetBtn();
 }
-function resetBtn(){$('#analyzeBtn').disabled=false;$('#analyzeBtn').innerHTML='회의록 분석';}
+function resetBtn(){$('#analyzeBtn').disabled=false;$('#analyzeBtn').innerHTML='신규 분석';refreshUpdateBtn();}
 function setLoading(on){
   $('#analyzeBtn').disabled=on;
-  $('#analyzeBtn').innerHTML= on?'<span class="spin"></span> 분석 중…':'회의록 분석';
+  if(on) document.querySelectorAll('.update-btn').forEach(b=>b.disabled=true);   // 분석 중 중복 트리거 방지
+  $('#analyzeBtn').innerHTML= on?'<span class="spin"></span> 분석 중…':'신규 분석';
   if(on)$('#result').innerHTML='<div class="streaming"><div class="stream-head"><span class="dots"><i></i><i></i><i></i></span>조정치가 회의록을 구조화하는 중… <span class="stream-sub">생성되는 내용이 아래에 실시간으로 표시됩니다</span></div><pre id="streamPre" class="stream-pre"></pre></div>';
 }
 
@@ -799,14 +804,18 @@ function setLoading(on){
 function deptBlock(){ var t=BoardCustom.deptConfigToPrompt(BoardCustom.load()); return t?('\n\n'+t):''; }
 function fullPrompt(note){return SYS+deptBlock()+'\n\n================================================================\n# 처리할 회의록 (형식 그대로)\n================================================================\n'+note+'\n\n위 지침에 따라 "A. 실행보드(마크다운)"와 "B. JSON" 두 블록을 순서대로 출력해줘.';}
 $('#copyPromptBtn').onclick=()=>{const n=$('#noteText').value.trim();if(!n){toast('회의록을 입력하세요');return;}copy(fullPrompt(n));};
-$('#renderPasteBtn').onclick=()=>{const t=$('#pasteResult').value.trim();if(!t){toast('결과를 붙여넣으세요');return;}
+function renderPasteFlow(){const t=$('#pasteResult').value.trim();if(!t){toast('결과를 붙여넣으세요');pendingUpdateRoundNo=null;return;}
   const d=parseResult(t);
   if(d){lastMarkdown=t.replace(/```json[\s\S]*?```/i,'').trim();render(d);return;}
+  pendingUpdateRoundNo=null;   // 렌더 실패 → 대기 중인 업데이트 대상 해제
   const s=t.indexOf('{'),e=t.lastIndexOf('}');
   if(s>=0&&e>s){let msg='';try{JSON.parse(t.slice(s,e+1));}catch(x){msg=' ('+x.message+')';}
     renderError('JSON은 찾았지만 형식이 깨져 있습니다 — 응답이 중간에 잘렸거나 복사가 일부 누락된 것 같습니다.'+msg+' Claude 응답을 처음부터 끝까지 전체 복사해 다시 붙여넣어 주세요. 러너 자동 모드를 쓰면 복사 없이 처리됩니다.');}
-  else renderError('붙여넣은 내용에서 JSON 블록을 찾지 못했습니다. Claude 응답의 "B. JSON" 블록(중괄호 { … })까지 포함해 붙여넣어 주세요.');};
-$('#analyzeBtn').onclick=analyze;
+  else renderError('붙여넣은 내용에서 JSON 블록을 찾지 못했습니다. Claude 응답의 "B. JSON" 블록(중괄호 { … })까지 포함해 붙여넣어 주세요.');}
+$('#renderPasteBtn').onclick=()=>{ pendingUpdateRoundNo=null; renderPasteFlow(); };   // 신규(붙여넣기)
+$('#analyzeBtn').onclick=()=>{ pendingUpdateRoundNo=null; analyze(); };                // 신규 분석(자동)
+$('#updateBtn').onclick=doUpdate;
+$('#updatePasteBtn').onclick=doUpdate;
 
 /* parse */
 function parseResult(text){
@@ -1311,9 +1320,17 @@ function refreshRoundHint(){
 }
 // "업데이트" 버튼 활성 제어(지시 22): 현재 열람 회차가 실제로 프로젝트에 존재할 때만 활성.
 function refreshUpdateBtn(){
-  const btn=$('#updateBtn'); if(!btn)return;
   const proj=(projState&&projState.current)?ProjectStore.getProject(projState,projState.current):null;
-  btn.disabled = !(proj && currentRoundId && proj.rounds.some(r=>r.id===currentRoundId));
+  const has = !!(proj && currentRoundId && proj.rounds.some(r=>r.id===currentRoundId));
+  document.querySelectorAll('.update-btn').forEach(b=>b.disabled=!has);
+}
+// "업데이트"(지시 22·23): 현재 열람 회차를 수정된 회의록으로 덮어쓰기 재분석(새 회차 미생성).
+function doUpdate(){
+  const proj=(projState&&projState.current)?ProjectStore.getProject(projState,projState.current):null;
+  const r=(proj&&currentRoundId)?proj.rounds.find(x=>x.id===currentRoundId):null;
+  if(!r){toast('업데이트할 회차를 먼저 열어주세요');return;}
+  pendingUpdateRoundNo=r.roundNo;        // 저장 분기가 이 회차에 덮어쓴다
+  if(AUTO){ analyze(); } else { renderPasteFlow(); }
 }
 // 회차가 stale(⚠ 기준 데이터 오래됨)인가: baselineNo가 찍힌(비-null) 회차인데, 저장된 (baselineNo,stamp)가
 // 현재 올바른 기준(findBaseline)의 (roundNo,ts)와 어긋날 때만. 미스탬프(null)·최소회차는 제외(지시 19).
