@@ -304,6 +304,9 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .change-digest .cd-txt{flex:1;line-height:1.35;min-width:0}
   .change-digest .cd-dept{font-size:10.5px;color:var(--muted);white-space:nowrap;flex:none}
   .change-digest .cd-more{font-size:10.5px;color:var(--muted);margin-top:8px}
+  .cd-filter-btn{border:none;font:inherit;cursor:pointer;-webkit-appearance:none;appearance:none}
+  .cd-filter-btn:hover{filter:brightness(0.92)}
+  .cd-filter-btn[aria-pressed="true"]{box-shadow:0 0 0 2px currentColor inset}
   @media(max-width:560px){.change-digest .cd-dept{display:none}}
 
   /* section heading */
@@ -1194,12 +1197,16 @@ function renderBoard(d, raw){
   // ── 이전 회차 대비 주요 변경점 (메인 노출, 회차 2+에서만) ──
   if(digest && digest.total>0){
     h+='<div class="change-digest"><div class="cd-h"><span class="cd-eyebrow">이전 회차 대비 주요 변경점</span>'+
-       `<span class="cd-counts"><span class="tag ok">신규 ${digest.added}</span><span class="tag est">변경 ${digest.changed}</span><span class="tag cd-done">완료 ${digest.done}</span></span></div>`;
+       `<span class="cd-counts">`+
+         `<button type="button" class="tag ok cd-filter-btn" data-filter="new" aria-pressed="false">신규 ${digest.added}</button>`+
+         `<button type="button" class="tag est cd-filter-btn" data-filter="changed" aria-pressed="false">변경 ${digest.changed}</button>`+
+         `<button type="button" class="tag cd-done cd-filter-btn" data-filter="done" aria-pressed="false">완료 ${digest.done}</button>`+
+       `</span></div>`;
     h+='<div class="cd-items">'+digest.items.map(it=>{
       const cls=it.tag==='new'?'ok':(it.tag==='changed'?'est':'cd-done');
       const lab=it.tag==='new'?'신규':(it.tag==='changed'?'변경':'완료');
       const strike=(it.tag==='done'&&it.reason==='dropped')?' style="text-decoration:line-through"':'';
-      return `<div class="cd-it"><span class="tag ${cls}">${lab}</span><span class="cd-txt"${strike}>${esc(it.text)}</span><span class="cd-dept mono">${esc(it.dept)}${it.label?' · '+esc(it.label):''}</span></div>`;
+      return `<div class="cd-it" data-tag="${it.tag}"><span class="tag ${cls}">${lab}</span><span class="cd-txt"${strike}>${esc(it.text)}</span><span class="cd-dept mono">${esc(it.dept)}${it.label?' · '+esc(it.label):''}</span></div>`;
     }).join('')+'</div>';
     if(digest.total>digest.items.length) h+=`<div class="cd-more mono">외 ${digest.total-digest.items.length}건 더 — 아래 부서별 항목에서 확인</div>`;
     h+='</div>';
@@ -1267,6 +1274,15 @@ function renderBoard(d, raw){
   restoreAccOpen(accOpen);   // 편집할 때마다 부서 목록이 접히면 못 쓴다
   bindDeptEdit(allDepts);
   document.querySelectorAll('.msg .cp').forEach(b=>b.onclick=()=>copy($('#'+b.dataset.c).textContent));
+  // 신규/변경/완료 필터(변경점 카드): 클릭한 태그의 항목만 표시, 같은 태그 재클릭 시 전체 표시로 해제.
+  let cdActiveFilter=null;
+  document.querySelectorAll('.cd-filter-btn').forEach(btn=>{
+    btn.onclick=()=>{
+      cdActiveFilter = (cdActiveFilter===btn.dataset.filter) ? null : btn.dataset.filter;
+      document.querySelectorAll('.cd-filter-btn').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.filter===cdActiveFilter)));
+      document.querySelectorAll('.cd-it[data-tag]').forEach(it=>{ it.style.display=(!cdActiveFilter||it.dataset.tag===cdActiveFilter)?'':'none'; });
+    };
+  });
   closePanel();
   const detail=BoardDerive.buildDetailMap(g,vb.by_department);
   document.querySelectorAll('#result .dag-n[data-id]').forEach(el=>{
