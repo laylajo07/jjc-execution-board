@@ -218,6 +218,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .console .lead{margin:0 0 14px;font-size:12.5px;color:var(--muted)}
   .field-label{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;font-weight:700;color:var(--ink2);margin:14px 0 6px}
   .field-label .hint{font-weight:500;color:var(--faint)}
+  .field-label .hint.warn{color:var(--est);font-weight:700}
   select.note, textarea, .paste{width:100%;font-family:var(--sans);font-size:13.5px;color:var(--ink);
     background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:11px}
   select.note{appearance:none;cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
@@ -525,6 +526,9 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
       </div>
       <div id="projHistory" class="proj-history" hidden></div>
 
+      <div class="field-label">회차 번호 <span class="hint" id="roundHint">숫자 · 파일명에서 자동 제안</span></div>
+      <input class="note" id="roundNoInput" type="number" min="1" step="1" inputmode="numeric" placeholder="예: 2" style="width:100%">
+
       <div class="field-label">직접 붙여넣기</div>
       <textarea id="noteText" placeholder="여기에 회의록을 붙여넣으세요…"></textarea>
 
@@ -742,7 +746,9 @@ async function loadNotes(){
 }
 $('#reloadNotes').onclick=loadNotes;
 $('#noteSelect').onchange=async e=>{const name=e.target.value;if(!name)return;
-  try{const j=await (await fetch('/api/note?name='+encodeURIComponent(name))).json();$('#noteText').value=j.content||'';}catch(e){}};
+  try{const j=await (await fetch('/api/note?name='+encodeURIComponent(name))).json();$('#noteText').value=j.content||'';}catch(e){}
+  setDefaultRoundNo();};
+$('#roundNoInput').oninput=refreshRoundHint;
 
 /* analyze (auto) */
 async function analyze(){
@@ -1270,6 +1276,24 @@ function renderProjSelect(){
   sel.innerHTML='<option value="">— 프로젝트 없음 —</option>'+projState.projects.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
   sel.value=projState.current||'';
 }
+// 회차 번호 기본값: 선택된 회의록 파일명에서 추론 → 없으면 현재 프로젝트 max roundNo+1 → 1(지시 15).
+function defaultRoundNo(){
+  const name=(document.querySelector('#noteSelect')&&document.querySelector('#noteSelect').value)||'';
+  const inferred=BoardDerive.inferRoundNo(name);
+  if(inferred!=null) return inferred;
+  const proj=(projState&&projState.current)?ProjectStore.getProject(projState,projState.current):null;
+  const sorted=proj?ProjectStore.roundsSortedByNo(proj):[];
+  return sorted.length? sorted[sorted.length-1].roundNo+1 : 1;
+}
+function setDefaultRoundNo(){ const el=$('#roundNoInput'); if(el){ el.value=defaultRoundNo(); refreshRoundHint(); } }
+// 입력한 roundNo가 현재 프로젝트에 이미 있으면 "기존 N차 재분석" 힌트로 알려준다.
+function refreshRoundHint(){
+  const el=$('#roundNoInput'), hint=$('#roundHint'); if(!el||!hint)return;
+  const proj=(projState&&projState.current)?ProjectStore.getProject(projState,projState.current):null;
+  const n=parseInt(el.value,10);
+  if(proj && Number.isFinite(n) && ProjectStore.getRoundByNo(proj,n)){ hint.textContent='기존 '+n+'차 재분석'; hint.classList.add('warn'); }
+  else { hint.textContent='숫자 · 파일명에서 자동 제안'; hint.classList.remove('warn'); }
+}
 // 회차 히스토리 패널(Task 4, 설계 §3-4). 프로젝트 미선택이거나 회차 0개면 숨김(가드). 항목 클릭은
 // suppressSave로 감싸 렌더해 renderBoard의 자동저장 가드를 우회하지 않고 그냥 통과만 안 하게 한다
 // (과거 열람이 새 회차로 쌓이지 않음).
@@ -1299,7 +1323,7 @@ function renderProjHistory(){
     };
   });
 }
-$('#projSel').onchange=e=>{ projState=ProjectStore.setCurrent(projState,e.target.value); currentRoundId=null; ProjectStore.saveProjects(projState); renderProjHistory(); };
+$('#projSel').onchange=e=>{ projState=ProjectStore.setCurrent(projState,e.target.value); currentRoundId=null; ProjectStore.saveProjects(projState); renderProjHistory(); setDefaultRoundNo(); };
 $('#newProjBtn').onclick=()=>{
   const name=prompt('새 프로젝트 이름을 입력하세요');
   if(!name||!name.trim())return;
@@ -1309,6 +1333,7 @@ $('#newProjBtn').onclick=()=>{
   ProjectStore.saveProjects(projState);
   renderProjSelect();
   renderProjHistory();
+  setDefaultRoundNo();
 };
 $('#renameProjBtn').onclick=()=>{
   const cur=projState&&projState.current;
@@ -1325,6 +1350,7 @@ $('#renameProjBtn').onclick=()=>{
 projState=ProjectStore.loadProjects();
 renderProjSelect();
 renderProjHistory();
+setDefaultRoundNo();
 
 initMode();
 </script>
