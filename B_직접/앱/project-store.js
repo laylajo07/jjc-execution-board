@@ -75,6 +75,7 @@
     if (!id) return null;
     return {
       id: id,
+      projectId: '',                         // sanitizeProject가 실제 소속 프로젝트 id로 강제 통일(지시 17)
       roundNo: toPosInt(r.roundNo),          // null이면 sanitizeProject가 배정
       noteId: cleanText(r.noteId, MAX_NOTE_ID_LEN),
       note: cleanNote(r.note),
@@ -100,6 +101,8 @@
       rounds.push(r);
     }
     if (rounds.length > MAX_ROUNDS) rounds = rounds.slice(rounds.length - MAX_ROUNDS);
+    // projectId는 항상 실제 소속(이 프로젝트의 id)으로 강제 통일 — 입력값(누락·오염)은 신뢰하지 않는다(지시 17).
+    for (i = 0; i < rounds.length; i++) rounds[i].projectId = id;
     // roundNo 정합: 유효·유일 값은 채택, 중복/누락/비정수는 미사용 최소 양의정수를 배열 순서대로 배정(멱등).
     var usedNo = Object.create(null), i2;
     for (i2 = 0; i2 < rounds.length; i2++) {
@@ -218,11 +221,11 @@
           if (x.roundNo !== rn) return x;
           // 덮어쓰기(재분석): createdTs는 최초값 보존(없으면 ts로 폴백), ts만 갱신.
           var createdTs = argCreatedTs || x.createdTs || ts;
-          return { id: x.id, roundNo: rn, noteId: noteId, note: note, ts: ts, createdTs: createdTs, title: title, raw: raw, baselineNo: null, baselineStamp: '' };
+          return { id: x.id, projectId: p.id, roundNo: rn, noteId: noteId, note: note, ts: ts, createdTs: createdTs, title: title, raw: raw, baselineNo: null, baselineStamp: '' };
         });
       } else {
         var rid = nextSeqId(p.rounds.map(function (x) { return x.id; }), 'r_');
-        var newRound = { id: rid, roundNo: rn, noteId: noteId, note: note, ts: ts, createdTs: argCreatedTs || ts, title: title, raw: raw, baselineNo: null, baselineStamp: '' };
+        var newRound = { id: rid, projectId: p.id, roundNo: rn, noteId: noteId, note: note, ts: ts, createdTs: argCreatedTs || ts, title: title, raw: raw, baselineNo: null, baselineStamp: '' };
         rounds = p.rounds.concat([newRound]);
         if (rounds.length > MAX_ROUNDS) rounds = rounds.slice(rounds.length - MAX_ROUNDS);
       }
@@ -286,7 +289,7 @@
       if (p.id !== projectId) return p;
       var rounds = p.rounds.map(function (r) {
         if (r.id !== roundId) return r;
-        return { id: r.id, roundNo: r.roundNo, noteId: r.noteId, note: r.note, ts: r.ts, createdTs: r.createdTs, title: r.title, raw: r.raw, baselineNo: bn, baselineStamp: bs };
+        return { id: r.id, projectId: r.projectId, roundNo: r.roundNo, noteId: r.noteId, note: r.note, ts: r.ts, createdTs: r.createdTs, title: r.title, raw: r.raw, baselineNo: bn, baselineStamp: bs };
       });
       return { id: p.id, name: p.name, createdAt: p.createdAt, rounds: rounds };
     });

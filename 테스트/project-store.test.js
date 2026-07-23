@@ -230,6 +230,28 @@ test('sanitize: note/createdTs 인자를 보존하고, 없으면 기본값(빈 �
   assert.equal(rs[1].createdTs, '');
 });
 
+// ── projectId (지시 17: "각 분석 결과 저장 시 프로젝트 ID... 포함") ─────────
+test('addRound: 저장된 회차는 소속 프로젝트의 id를 projectId로 갖는다', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  state = addRound(state, pid, { roundNo: 1, raw: null });
+  assert.equal(getProject(state, pid).rounds[0].projectId, pid);
+});
+test('sanitize: round.projectId가 실제 소속 프로젝트와 다르거나 없어도 부모 프로젝트 id로 강제 통일한다', () => {
+  const s = sanitize({ projects: [{ id: 'p_1', name: 'X', createdAt: 't', rounds: [
+    { id: 'r_1', roundNo: 1, projectId: 'p_엉뚱한값', raw: null },
+    { id: 'r_2', roundNo: 2, raw: null }   // projectId 아예 없음
+  ] }] });
+  assert.equal(s.projects[0].rounds[0].projectId, 'p_1', '잘못된 값도 실제 소속으로 교정');
+  assert.equal(s.projects[0].rounds[1].projectId, 'p_1', '없으면 실제 소속으로 채움');
+});
+test('setRoundBaseline은 projectId를 보존한다', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  state = addRound(state, pid, { roundNo: 1, raw: null });
+  const rid = getRoundByNo(getProject(state, pid), 1).id;
+  state = setRoundBaseline(state, pid, rid, null, '');
+  assert.equal(getProject(state, pid).rounds[0].projectId, pid);
+});
+
 // ── renameProject / deleteProject / setCurrent / getProject ──────────────
 test('renameProject: 이름을 바꾸고, 정리(trim·40자캡)를 거친다', () => {
   const { state: s1, id: pid } = createProject(emptyState, 'X');
