@@ -163,6 +163,40 @@ test('[불변] 같은 이전 state에서 파생된 두 state는 공통 조상 �
   assert.equal(sB.projects[0].rounds[0].raw.val, 1, 'sA의 공통 조상 회차 raw를 직접 바꿔도 sB 쪽은 영향받지 않아야 한다(별개 객체)');
 });
 
+// ── addRound upsert by roundNo (지시 16) ────────────────────────────────
+test('addRound: roundNo 지정 시 저장되고, 같은 roundNo 재분석은 교체(같은 id·raw/ts 갱신)한다', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  state = addRound(state, pid, { roundNo: 3, noteId: 'n.md', title: '3차', raw: { updated_at: 't1' } });
+  let rs = getProject(state, pid).rounds;
+  assert.equal(rs.length, 1);
+  assert.equal(rs[0].roundNo, 3);
+  assert.equal(rs[0].noteId, 'n.md');
+  const firstId = rs[0].id;
+  state = addRound(state, pid, { roundNo: 3, title: '3차-재분석', raw: { updated_at: 't2' } });
+  rs = getProject(state, pid).rounds;
+  assert.equal(rs.length, 1, '같은 roundNo는 append가 아니라 교체');
+  assert.equal(rs[0].id, firstId, '교체 시 내부 id 유지');
+  assert.equal(rs[0].ts, 't2', 'ts는 새 처리시각으로 갱신');
+  assert.equal(rs[0].title, '3차-재분석');
+});
+test('addRound: roundNo 없이 부르면 max+1로 append(기존 순번 동작 유지)', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  state = addRound(state, pid, { title: 'a', raw: null });
+  state = addRound(state, pid, { title: 'b', raw: null });
+  const rs = getProject(state, pid).rounds;
+  assert.deepEqual(rs.map(r => r.roundNo), [1, 2]);
+  assert.deepEqual(rs.map(r => r.id), ['r_1', 'r_2']);
+});
+test('addRound: upsert 교체는 baseline을 null/""로 초기화한다(호출자가 재설정)', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  state = addRound(state, pid, { roundNo: 1, raw: null });
+  state = addRound(state, pid, { roundNo: 2, raw: null });
+  state = addRound(state, pid, { roundNo: 2, title: '재분석', raw: null });
+  const r2 = getProject(state, pid).rounds.find(r => r.roundNo === 2);
+  assert.equal(r2.baselineNo, null);
+  assert.equal(r2.baselineStamp, '');
+});
+
 // ── renameProject / deleteProject / setCurrent / getProject ──────────────
 test('renameProject: 이름을 바꾸고, 정리(trim·40자캡)를 거친다', () => {
   const { state: s1, id: pid } = createProject(emptyState, 'X');
@@ -270,6 +304,45 @@ test('sanitize: current가 존재하지 않는 프로젝트를 가리키면 빈 
   assert.equal(s.current, '');
 });
 
+// ── roundNo 마이그레이션/정합 (지시 16·17) ───────────────────────────────
+test('sanitize: roundNo 누락 회차는 배열 순서대로 1,2,3…을 배정한다(마이그레이션)', () => {
+  const s = sanitize({ projects: [{ id: 'p_1', name: 'X', createdAt: 't', rounds: [
+    { id: 'r_1', ts: 't1', title: 'a', raw: null },
+    { id: 'r_2', ts: 't2', title: 'b', raw: null },
+    { id: 'r_3', ts: 't3', title: 'c', raw: null }
+  ] }] });
+  const rs = s.projects[0].rounds;
+  assert.deepEqual(rs.map(r => r.roundNo), [1, 2, 3]);
+  assert.equal(rs[0].noteId, '');
+  assert.equal(rs[0].baselineNo, null);
+  assert.equal(rs[0].baselineStamp, '');
+});
+test('sanitize: 유효한 roundNo는 보존하고, 중복/비정수만 미사용 최소값으로 채운다', () => {
+  const s = sanitize({ projects: [{ id: 'p_1', name: 'X', createdAt: 't', rounds: [
+    { id: 'r_1', roundNo: 5, raw: null },
+    { id: 'r_2', roundNo: 5, raw: null },     // 중복 → 재배정
+    { id: 'r_3', roundNo: 'x', raw: null },   // 비정수 → 재배정
+    { id: 'r_4', roundNo: 2, raw: null }
+  ] }] });
+  assert.deepEqual(s.projects[0].rounds.map(r => r.roundNo), [5, 1, 3, 2]);
+});
+test('sanitize: roundNo 마이그레이션은 멱등이다(두 번 돌려도 같다)', () => {
+  const once = sanitize({ projects: [{ id: 'p_1', name: 'X', createdAt: 't', rounds: [
+    { id: 'r_1', raw: null }, { id: 'r_2', raw: null }
+  ] }] });
+  const twice = sanitize(once);
+  assert.deepEqual(twice, once);
+});
+test('sanitize: noteId/baselineStamp 문자열·baselineNo 양의정수를 정리한다', () => {
+  const s = sanitize({ projects: [{ id: 'p_1', name: 'X', createdAt: 't', rounds: [
+    { id: 'r_1', roundNo: 2, noteId: '  파일.md  ', baselineNo: 1, baselineStamp: 'ts1', raw: null }
+  ] }] });
+  const r = s.projects[0].rounds[0];
+  assert.equal(r.noteId, '파일.md');
+  assert.equal(r.baselineNo, 1);
+  assert.equal(r.baselineStamp, 'ts1');
+});
+
 // ── load/save: Node(localStorage 없음) ────────────────────────────────
 test('loadProjects(): Node(localStorage 없음)에서 예외 없이 빈 상태를 반환한다', () => {
   assert.equal(typeof localStorage, 'undefined');
@@ -302,6 +375,53 @@ test('loadProjects(): 손상된 JSON이 저장돼 있어도 예외 없이 빈 �
     global.localStorage.setItem('jjc-projects', '{이건 json이 아님');
     assert.deepEqual(loadProjects(), emptyState);
   });
+});
+
+// ── findBaseline / 정렬 / 정합 헬퍼 (지시 18·19·20) ─────────────────────
+const {
+  findBaseline, getRoundByNo, roundsSortedByNo, roundsUsingBaseline, setRoundBaseline
+} = require('../B_직접/앱/project-store.js');
+
+test('findBaseline: 지시 18 규칙 — 처리 순서와 무관하게 roundNo로만 기준을 잡는다', () => {
+  // 2→5→3→1→4 순서로 분석해도 "처리 순서 무관, roundNo로만" 규칙상 최종 집합 {1..5}에서
+  //   5기준=4, 4기준=3, 3기준=2, 2기준=1, 1=없음.
+  // (지시 18 예시의 "5회차는 3회차를"은 규칙과 모순 — 규칙상 5의 하위 최대는 4다. 규칙 텍스트를 따른다.)
+  let { state, id: pid } = createProject(emptyState, 'X');
+  [2, 5, 3, 1, 4].forEach(no => { state = addRound(state, pid, { roundNo: no, raw: { updated_at: 't' + no } }); });
+  const proj = getProject(state, pid);
+  assert.equal(findBaseline(proj, 5).roundNo, 4);
+  assert.equal(findBaseline(proj, 4).roundNo, 3);  // 예시와 일치
+  assert.equal(findBaseline(proj, 3).roundNo, 2);  // 예시와 일치
+  assert.equal(findBaseline(proj, 2).roundNo, 1);
+  assert.equal(findBaseline(proj, 1), null);       // 최소 회차 = 기준 없음(예시와 일치)
+});
+test('getRoundByNo / roundsSortedByNo', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  [3, 1, 2].forEach(no => { state = addRound(state, pid, { roundNo: no, title: no + '차', raw: null }); });
+  const proj = getProject(state, pid);
+  assert.equal(getRoundByNo(proj, 2).title, '2차');
+  assert.equal(getRoundByNo(proj, 99), null);
+  assert.deepEqual(roundsSortedByNo(proj).map(r => r.roundNo), [1, 2, 3]);
+});
+test('setRoundBaseline + roundsUsingBaseline', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  state = addRound(state, pid, { roundNo: 1, raw: { updated_at: 't1' } });
+  state = addRound(state, pid, { roundNo: 2, raw: { updated_at: 't2' } });
+  const r2id = getRoundByNo(getProject(state, pid), 2).id;
+  state = setRoundBaseline(state, pid, r2id, 1, 't1');
+  const proj = getProject(state, pid);
+  assert.equal(getRoundByNo(proj, 2).baselineNo, 1);
+  assert.equal(getRoundByNo(proj, 2).baselineStamp, 't1');
+  assert.deepEqual(roundsUsingBaseline(proj, 1).map(r => r.roundNo), [2]);
+  assert.deepEqual(roundsUsingBaseline(proj, 2), []);
+});
+test('setRoundBaseline은 입력 state를 변형하지 않는다(불변)', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  state = addRound(state, pid, { roundNo: 1, raw: null });
+  const snap = JSON.parse(JSON.stringify(state));
+  const rid = getRoundByNo(getProject(state, pid), 1).id;
+  setRoundBaseline(state, pid, rid, null, '');
+  assert.deepEqual(state, snap);
 });
 
 // ── A·B 바이트 동일성 ───────────────────────────────────────────────────

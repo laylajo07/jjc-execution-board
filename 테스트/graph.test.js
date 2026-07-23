@@ -633,3 +633,20 @@ test('[박스회피] 샘플01: 어떤 엣지 route 점도 노드 박스 내부�
     });
   });
 });
+
+// ── inferRoundNo (지시 15) ──────────────────────────────────────────────
+const { inferRoundNo } = require('../B_직접/앱/board-derive.js');
+test('inferRoundNo: "N차"·"버전 N"·첫 정수 우선순위로 회차 번호를 뽑는다', () => {
+  assert.equal(inferRoundNo('진행 2차 - 중간 점검 (2026-08-04).md'), 2);
+  assert.equal(inferRoundNo('진행 1차 - 킥오프 기획 (2026-07-21).md'), 1);
+  assert.equal(inferRoundNo('버전 1 매우 꼼꼼한 버전 (풀 디테일).md'), 1);
+  assert.equal(inferRoundNo('버전 2-중간 버전 (실무형 간결 정리).md'), 2);
+  assert.equal(inferRoundNo('진행 10차 실행'), 10);
+  assert.equal(inferRoundNo('2026-07-21 진행 3차'), 3); // 날짜 속 숫자보다 'N차' 우선
+});
+test('inferRoundNo: 숫자가 없으면 null, 0/음수는 null', () => {
+  assert.equal(inferRoundNo('킥오프 메모.md'), null);
+  assert.equal(inferRoundNo(''), null);
+  assert.equal(inferRoundNo(null), null);
+  assert.equal(inferRoundNo('0차'), null);
+});

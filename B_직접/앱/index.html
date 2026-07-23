@@ -191,6 +191,8 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .hist-item .hist-title{font-size:12.5px;color:var(--ink2);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .hist-item.on{background:var(--primary-soft);border-color:transparent}
   .hist-item.on .hist-title{color:var(--primary-ink);font-weight:700}
+  .hist-item .hist-no{font-size:11px;font-weight:800;color:var(--primary)}
+  .hist-item .hist-stale{font-size:10px;font-weight:700;color:var(--chk)}
   .pill.on{color:var(--ok);background:var(--ok-bg);border-color:transparent}
   .pill.off{color:var(--est);background:var(--est-bg);border-color:transparent}
   .selwrap{position:relative;display:inline-flex;align-items:center}
@@ -218,6 +220,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .console .lead{margin:0 0 14px;font-size:12.5px;color:var(--muted)}
   .field-label{display:flex;justify-content:space-between;align-items:baseline;font-size:11.5px;font-weight:700;color:var(--ink2);margin:14px 0 6px}
   .field-label .hint{font-weight:500;color:var(--faint)}
+  .field-label .hint.warn{color:var(--est);font-weight:700}
   select.note, textarea, .paste{width:100%;font-family:var(--sans);font-size:13.5px;color:var(--ink);
     background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:11px}
   select.note{appearance:none;cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
@@ -525,6 +528,9 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
       </div>
       <div id="projHistory" class="proj-history" hidden></div>
 
+      <div class="field-label">회차 번호 <span class="hint" id="roundHint">숫자 · 파일명에서 자동 제안</span></div>
+      <input class="note" id="roundNoInput" type="number" min="1" step="1" inputmode="numeric" placeholder="예: 2" style="width:100%">
+
       <div class="field-label">직접 붙여넣기</div>
       <textarea id="noteText" placeholder="여기에 회의록을 붙여넣으세요…"></textarea>
 
@@ -742,7 +748,9 @@ async function loadNotes(){
 }
 $('#reloadNotes').onclick=loadNotes;
 $('#noteSelect').onchange=async e=>{const name=e.target.value;if(!name)return;
-  try{const j=await (await fetch('/api/note?name='+encodeURIComponent(name))).json();$('#noteText').value=j.content||'';}catch(e){}};
+  try{const j=await (await fetch('/api/note?name='+encodeURIComponent(name))).json();$('#noteText').value=j.content||'';}catch(e){}
+  setDefaultRoundNo();};
+$('#roundNoInput').oninput=refreshRoundHint;
 
 /* analyze (auto) */
 async function analyze(){
@@ -1123,18 +1131,26 @@ function renderBoard(d, raw){
     // 감싸 들어오므로 여기서 걸러진다(무한 누적·중복 저장 방지, 설계 §3-2).
     if(raw!=null && !suppressSave && projState && projState.current){
       const title = BoardDerive.friendlyTitle(d);
-      projState = ProjectStore.addRound(projState, projState.current, {title:title, raw:raw});
+      const el=$('#roundNoInput'); const rnIn=el?parseInt(el.value,10):NaN;
+      const roundNo = (Number.isFinite(rnIn)&&rnIn>=1)?rnIn:undefined; // 미입력이면 addRound가 max+1로 append
+      const noteId = (document.querySelector('#noteSelect')&&document.querySelector('#noteSelect').value)||'';
+      projState = ProjectStore.addRound(projState, projState.current, {roundNo:roundNo, noteId:noteId, title:title, raw:raw});
+      // 저장된 회차 특정 + 자기 기준 스탬프(지시 18·19)
+      let proj = ProjectStore.getProject(projState, projState.current);
+      const savedNo = (roundNo!=null)?roundNo:((ProjectStore.roundsSortedByNo(proj).slice(-1)[0]||{}).roundNo);
+      const saved = ProjectStore.getRoundByNo(proj, savedNo);
+      currentRoundId = saved ? saved.id : null;
+      if(saved){ const b=ProjectStore.findBaseline(proj, savedNo);
+        projState = ProjectStore.setRoundBaseline(projState, projState.current, saved.id, b?b.roundNo:null, b?b.ts:''); }
       ProjectStore.saveProjects(projState);
-      const savedRounds = ProjectStore.getProject(projState, projState.current).rounds;
-      currentRoundId = savedRounds.length ? savedRounds[savedRounds.length-1].id : null;
+      maybeCascade(savedNo);   // 재분석 연쇄(Task 9). 영향 회차 없으면 no-op.
     }
   }
-  // 히스토리 diff(Task 4, 설계 §3-4) — current 프로젝트 + "지금 보는 회차"(currentRoundId)의 직전 회차가
-  // 있으면 그 회차 대비 신규/변경/완료를 계산. 무프로젝트·첫 회차(직전 없음)면 diffTags=null → 배지 없음
-  // (기존 무diff 렌더와 바이트 동일 — 회귀 없음).
-  const histRounds = (projState && projState.current) ? (ProjectStore.getProject(projState,projState.current).rounds||[]) : [];
-  const histCurIdx = histRounds.findIndex(r=>r.id===currentRoundId);
-  const histPrev = histCurIdx>0 ? histRounds[histCurIdx-1] : null;
+  // 히스토리 diff 기준(지시 18) = 같은 프로젝트에서 "지금 보는 회차"의 roundNo보다 작은 것 중 roundNo 최대.
+  // 처리 순서와 무관. 무프로젝트·최소 회차(기준 없음)면 diffTags=null → 배지 없음(기존 무diff 렌더와 동일).
+  const histProj = (projState && projState.current) ? ProjectStore.getProject(projState,projState.current) : null;
+  const curRound = histProj ? (histProj.rounds||[]).find(r=>r.id===currentRoundId) : null;
+  const histPrev = (histProj && curRound) ? ProjectStore.findBaseline(histProj, curRound.roundNo) : null;
   const diff = histPrev ? BoardDiff.diffBoards(normalize(histPrev.raw), d) : null;
   const diffTags = diff ? diff.tags : null;
   const digest = diff ? BoardDiff.changeDigest(diff, d) : null;   // 회차 간 주요 변경점(메인 노출)
@@ -1270,19 +1286,67 @@ function renderProjSelect(){
   sel.innerHTML='<option value="">— 프로젝트 없음 —</option>'+projState.projects.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
   sel.value=projState.current||'';
 }
+// 회차 번호 기본값: 선택된 회의록 파일명에서 추론 → 없으면 현재 프로젝트 max roundNo+1 → 1(지시 15).
+function defaultRoundNo(){
+  const name=(document.querySelector('#noteSelect')&&document.querySelector('#noteSelect').value)||'';
+  const inferred=BoardDerive.inferRoundNo(name);
+  if(inferred!=null) return inferred;
+  const proj=(projState&&projState.current)?ProjectStore.getProject(projState,projState.current):null;
+  const sorted=proj?ProjectStore.roundsSortedByNo(proj):[];
+  return sorted.length? sorted[sorted.length-1].roundNo+1 : 1;
+}
+function setDefaultRoundNo(){ const el=$('#roundNoInput'); if(el){ el.value=defaultRoundNo(); refreshRoundHint(); } }
+// 입력한 roundNo가 현재 프로젝트에 이미 있으면 "기존 N차 재분석" 힌트로 알려준다.
+function refreshRoundHint(){
+  const el=$('#roundNoInput'), hint=$('#roundHint'); if(!el||!hint)return;
+  const proj=(projState&&projState.current)?ProjectStore.getProject(projState,projState.current):null;
+  const n=parseInt(el.value,10);
+  if(proj && Number.isFinite(n) && ProjectStore.getRoundByNo(proj,n)){ hint.textContent='기존 '+n+'차 재분석'; hint.classList.add('warn'); }
+  else { hint.textContent='숫자 · 파일명에서 자동 제안'; hint.classList.remove('warn'); }
+}
+// 회차가 stale(⚠ 기준 데이터 오래됨)인가: baselineNo가 찍힌(비-null) 회차인데, 저장된 (baselineNo,stamp)가
+// 현재 올바른 기준(findBaseline)의 (roundNo,ts)와 어긋날 때만. 미스탬프(null)·최소회차는 제외(지시 19).
+function isRoundStale(proj, r){
+  if(!proj||!r||r.baselineNo==null) return false;
+  const b=ProjectStore.findBaseline(proj, r.roundNo);
+  const curNo=b?b.roundNo:null, curStamp=b?b.ts:'';
+  return r.baselineNo!==curNo || r.baselineStamp!==curStamp;
+}
+// 방금 저장한 회차(savedNo) 때문에 기존 회차의 diff 기준이 낡았으면 확인 후 정합화(지시 19).
+// 영향 = savedNo 제외한 회차 중, 저장된 (baselineNo,stamp)가 현재 올바른 기준과 어긋나는 것(=stale).
+function maybeCascade(savedNo){
+  if(!projState||!projState.current)return;
+  const proj=ProjectStore.getProject(projState,projState.current);
+  if(!proj)return;
+  const affected=(proj.rounds||[]).filter(r=>r.roundNo!==savedNo && isRoundStale(proj,r));
+  if(!affected.length)return;
+  const list=affected.map(r=>r.roundNo).sort((a,b)=>a-b).map(n=>n+'차').join(', ');
+  if(confirm(`연쇄 재계산이 필요합니다 (영향 회차: ${list}) — 지금 다시 계산할까요?`)){
+    affected.forEach(r=>{ const b=ProjectStore.findBaseline(proj, r.roundNo);
+      projState=ProjectStore.setRoundBaseline(projState, projState.current, r.id, b?b.roundNo:null, b?b.ts:''); });
+    ProjectStore.saveProjects(projState);
+  } // 거부 시: 그대로 두면 isRoundStale이 true라 히스토리에 ⚠ 배지가 남는다.
+  renderProjHistory();
+}
 // 회차 히스토리 패널(Task 4, 설계 §3-4). 프로젝트 미선택이거나 회차 0개면 숨김(가드). 항목 클릭은
 // suppressSave로 감싸 렌더해 renderBoard의 자동저장 가드를 우회하지 않고 그냥 통과만 안 하게 한다
 // (과거 열람이 새 회차로 쌓이지 않음).
 function renderProjHistory(){
   const box=$('#projHistory'); if(!box)return;
   const proj=(projState&&projState.current)?ProjectStore.getProject(projState,projState.current):null;
-  const rounds=proj?proj.rounds:[];
+  const rounds=proj?ProjectStore.roundsSortedByNo(proj):[];   // 지시 20: roundNo 오름차순
   if(!rounds.length){box.hidden=true;box.innerHTML='';return;}
   box.hidden=false;
   box.innerHTML='<div class="field-label">회차 히스토리 <span class="hint">'+rounds.length+'개</span></div>'
-    +'<div class="hist-list">'+rounds.map(r=>
-      `<button type="button" class="hist-item${r.id===currentRoundId?' on':''}" data-rid="${esc(r.id)}"><span class="hist-t">${esc(BoardCustom.fmtUpdatedAt(new Date(r.ts)))}</span><span class="hist-title">${esc(r.title||'회차')}</span></button>`
-    ).join('')+'</div>';
+    +'<div class="hist-list">'+rounds.map(r=>{
+      const stale=isRoundStale(proj,r);
+      return `<button type="button" class="hist-item${r.id===currentRoundId?' on':''}" data-rid="${esc(r.id)}">`
+        +`<span class="hist-no">${esc(String(r.roundNo))}차</span>`
+        +`<span class="hist-t">${esc(BoardCustom.fmtUpdatedAt(new Date(r.ts)))}</span>`
+        +`<span class="hist-title">${esc(r.title||'회차')}</span>`
+        +(stale?`<span class="hist-stale" title="기준 회차가 재분석됨 — 재분석 시 정합화됩니다">⚠ 기준 데이터 오래됨</span>`:'')
+        +`</button>`;
+    }).join('')+'</div>';
   box.querySelectorAll('.hist-item').forEach(btn=>{
     btn.onclick=()=>{
       const p=ProjectStore.getProject(projState,projState.current);
@@ -1299,7 +1363,7 @@ function renderProjHistory(){
     };
   });
 }
-$('#projSel').onchange=e=>{ projState=ProjectStore.setCurrent(projState,e.target.value); currentRoundId=null; ProjectStore.saveProjects(projState); renderProjHistory(); };
+$('#projSel').onchange=e=>{ projState=ProjectStore.setCurrent(projState,e.target.value); currentRoundId=null; ProjectStore.saveProjects(projState); renderProjHistory(); setDefaultRoundNo(); };
 $('#newProjBtn').onclick=()=>{
   const name=prompt('새 프로젝트 이름을 입력하세요');
   if(!name||!name.trim())return;
@@ -1309,6 +1373,7 @@ $('#newProjBtn').onclick=()=>{
   ProjectStore.saveProjects(projState);
   renderProjSelect();
   renderProjHistory();
+  setDefaultRoundNo();
 };
 $('#renameProjBtn').onclick=()=>{
   const cur=projState&&projState.current;
@@ -1325,6 +1390,7 @@ $('#renameProjBtn').onclick=()=>{
 projState=ProjectStore.loadProjects();
 renderProjSelect();
 renderProjHistory();
+setDefaultRoundNo();
 
 initMode();
 </script>
