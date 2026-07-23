@@ -1159,7 +1159,8 @@ function renderBoard(d, raw){
       currentRoundId = saved ? saved.id : null;
       if(saved){ const b=ProjectStore.findBaseline(proj, savedNo);
         projState = ProjectStore.setRoundBaseline(projState, projState.current, saved.id, b?b.roundNo:null, b?b.ts:''); }
-      ProjectStore.saveProjects(projState);
+      // note(회의록 원문) 추가로 저장 용량이 커져 quota 초과 가능성이 높아짐 — 실패를 조용히 삼키지 않는다.
+      if(!ProjectStore.saveProjects(projState)) toast('⚠ 브라우저 저장 공간이 부족해 이 회차를 저장하지 못했습니다');
       maybeCascade(savedNo);   // 재분석 연쇄(Task 9). 영향 회차 없으면 no-op.
     }
   }
@@ -1378,7 +1379,7 @@ function maybeCascade(savedNo){
   if(confirm(`연쇄 재계산이 필요합니다 (영향 회차: ${list}) — 지금 다시 계산할까요?`)){
     affected.forEach(r=>{ const b=ProjectStore.findBaseline(proj, r.roundNo);
       projState=ProjectStore.setRoundBaseline(projState, projState.current, r.id, b?b.roundNo:null, b?b.ts:''); });
-    ProjectStore.saveProjects(projState);
+    if(!ProjectStore.saveProjects(projState)) toast('⚠ 브라우저 저장 공간이 부족해 정합화 결과를 저장하지 못했습니다');
   } // 거부 시: 그대로 두면 isRoundStale이 true라 히스토리에 ⚠ 배지가 남는다.
   renderProjHistory();
 }
