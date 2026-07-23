@@ -340,6 +340,69 @@ test('A·B의 dag-view.js는 바이트 단위로 동일해야 한다', () => {
   assert.equal(a, b, 'A와 B의 dag-view.js가 다릅니다 — 한쪽만 고쳤습니다');
 });
 
+// ── fitLines: 박스 폭 기준 줄바꿈·말줄임 (크리티컬 패스 박스 텍스트 오버플로 수정) ──────
+const { fitLines } = require('../B_직접/앱/dag-view.js');
+const WIDE_RE = /[ᄀ-ᇿ　-〿぀-ヿ㄰-㆏一-鿿가-힣＀-￯]/;
+function estWidth(line, fontSize) {
+  return Array.from(line).reduce((sum, ch) => sum + (WIDE_RE.test(ch) ? fontSize : fontSize * 0.58), 0);
+}
+
+test('fitLines: 폭 안에 들어가는 짧은 텍스트는 1줄, 말줄임 없다', () => {
+  const lines = fitLines('짧은제목', 13.5, 144, 2);
+  assert.deepEqual(lines, ['짧은제목']);
+});
+
+test('fitLines: 2줄에 걸치는 텍스트는 잘림 없이 2줄로 나뉘고 말줄임이 없다', () => {
+  const text = '가'.repeat(20);
+  const lines = fitLines(text, 13.5, 144, 2);
+  assert.equal(lines.length, 2);
+  assert.ok(!lines[lines.length - 1].endsWith('…'));
+  assert.equal(lines.join(''), text, '분해해도 원래 글자가 전부 보존돼야 한다(잘림 없이)');
+});
+
+test('fitLines: maxLines를 넘는 텍스트는 마지막 줄에 말줄임(…)을 붙이고, 어떤 줄도 폭을 넘지 않는다', () => {
+  const text = '가'.repeat(40);
+  const lines = fitLines(text, 13.5, 144, 2);
+  assert.equal(lines.length, 2, '최대 2줄까지만');
+  assert.ok(lines[1].endsWith('…'), '초과 시 마지막 줄이 말줄임 처리돼야 한다');
+  lines.forEach(ln => {
+    assert.ok(estWidth(ln, 13.5) <= 144 + 0.01, `줄 "${ln}"이 박스 폭(144)을 넘으면 안 된다(요구사항: 박스 밖으로 안 샘)`);
+  });
+});
+
+test('fitLines: 빈 텍스트·null은 빈 배열', () => {
+  assert.deepEqual(fitLines('', 13.5, 144, 2), []);
+  assert.deepEqual(fitLines(null, 13.5, 144, 2), []);
+  assert.deepEqual(fitLines(undefined, 13.5, 144, 2), []);
+});
+
+test('fitLines: maxLines=1이면 아무리 길어도 1줄 이하(부서명 등 단일행 필드용)', () => {
+  const lines = fitLines('아주 긴 부서명(팀·본부·소속 표기 다 포함해서 상당히 길게)', 12, 144, 1);
+  assert.ok(lines.length <= 1);
+  if (lines.length) assert.ok(estWidth(lines[0], 12) <= 144 + 0.01);
+});
+
+test('renderDag: 매우 긴 task는 박스 안에서 최대 2줄(tspan 2개)까지만 표시되고, 넘치면 말줄임 처리된다', () => {
+  const g = buildGraph([
+    { id: 'T1', task: '가나다라마바사아자차카타파하거너더러머버서어저처커터퍼허그느드르므브스으즈츠크트프흐', dept: 'ICT본부', blocked_by: [] },
+  ]);
+  const svg = renderDag(g);
+  const m = svg.match(/<text class="dag-t">([\s\S]*?)<\/text>/);
+  assert.ok(m, 'dag-t 텍스트 요소가 있어야 한다');
+  const tspanCount = (m[1].match(/<tspan/g) || []).length;
+  assert.ok(tspanCount <= 2, '최대 2줄(tspan 2개 이하)이어야 한다 — 실제 ' + tspanCount);
+  assert.match(m[1], /…<\/tspan>/, '넘치는 텍스트는 말줄임(…) 처리돼야 한다');
+});
+
+test('renderDag: 짧은 task는 1줄(tspan 1개)로 표시되고 말줄임이 없다', () => {
+  const g = buildGraph([{ id: 'T1', task: '짧은작업', dept: 'ICT본부', blocked_by: [] }]);
+  const svg = renderDag(g);
+  const m = svg.match(/<text class="dag-t">([\s\S]*?)<\/text>/);
+  const tspanCount = (m[1].match(/<tspan/g) || []).length;
+  assert.equal(tspanCount, 1);
+  assert.doesNotMatch(m[1], /…/);
+});
+
 const { normalize, containment } = require('../B_직접/앱/graph.js');
 
 test('graph.js가 normalize·containment를 노출한다 (board-derive 재사용용)', () => {

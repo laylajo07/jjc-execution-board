@@ -12,6 +12,46 @@
   }
   function clip(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
 
+  // 전각(한글·한자·가나 등) 문자 판정 — 폭 추정에만 쓴다. 실제 canvas measureText 없이
+  // 순수하게 줄바꿈 지점을 계산해야 해서(테스트 재현성·file:// 지원), 전각은 폰트 크기와
+  // 거의 같은 폭, 그 외(영문·숫자·기호)는 대략 0.58배로 잡는 근사치를 쓴다.
+  function isWideChar(ch) {
+    var c = ch.codePointAt(0);
+    return (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3000 && c <= 0x303F) ||
+      (c >= 0x3040 && c <= 0x30FF) || (c >= 0x3130 && c <= 0x318F) ||
+      (c >= 0x4E00 && c <= 0x9FFF) || (c >= 0xAC00 && c <= 0xD7A3) ||
+      (c >= 0xFF00 && c <= 0xFFEF);
+  }
+  function charW(ch, fontSize) { return isWideChar(ch) ? fontSize : fontSize * 0.58; }
+
+  // text를 폭 maxWidth(px) 기준으로 최대 maxLines줄까지 줄바꿈한다. 다 담지 못하면 마지막
+  // 줄을 말줄임(…) 처리해 폭 안에 맞춘다 — 박스 밖으로 텍스트가 새지 않게 하기 위함.
+  // 순수·결정적(입력 문자열과 숫자만 본다).
+  function fitLines(text, fontSize, maxWidth, maxLines) {
+    var chars = Array.from(String(text == null ? '' : text));
+    if (!chars.length) return [];
+    var lines = [], i = 0;
+    while (i < chars.length && lines.length < maxLines) {
+      var cur = '', w = 0, j = i;
+      while (j < chars.length) {
+        var cw = charW(chars[j], fontSize);
+        if (w + cw > maxWidth && cur) break;
+        cur += chars[j]; w += cw; j++;
+      }
+      if (!cur) { cur = chars[j]; j++; } // 극단적으로 좁아 한 글자도 못 들어가면 강제로 1글자
+      lines.push(cur);
+      i = j;
+    }
+    if (i < chars.length) {
+      var last = Array.from(lines[lines.length - 1]);
+      var ew = charW('…', fontSize);
+      var lw = 0; last.forEach(function (c) { lw += charW(c, fontSize); });
+      while (last.length && lw + ew > maxWidth) { lw -= charW(last[last.length - 1], fontSize); last.pop(); }
+      lines[lines.length - 1] = last.join('') + '…';
+    }
+    return lines;
+  }
+
   var DEPT_COLORS = ['#2563eb','#d97706','#0d9488','#7c3aed','#16a34a','#db2777','#0891b2','#ca8a04'];
   function deptColor(dept) {
     var s = 0, d = String(dept || '');
@@ -20,6 +60,12 @@
   }
 
   var TOP = 28;
+
+  // 노드 박스 안 텍스트 레이아웃(요구사항: 박스 밖으로 안 새고, task는 최대 2줄+말줄임,
+  // 텍스트 크기는 기존 대비 +2). index.html의 .dag-t/.dag-d/.dag-b font-size와 반드시 맞춰야 한다.
+  var TASK_FS = 13.5, DEPT_FS = 12, BOTT_FS = 11.5;
+  var TEXT_X_PAD = 14, TEXT_R_PAD = 12;                 // 좌측 인디케이터바 + 여백 / 우측 여백
+  var TASK_Y1 = 17, TASK_LINE_H = 15, DEPT_Y = 45, BOTT_Y = 59;
 
   // 폴리라인 P를 스무스 곡선(Catmull-Rom→cubic bezier)으로. 2점이면 수평 접선 곡선.
   function smoothPath(P) {
@@ -70,14 +116,20 @@
   });
 
   // 노드
+  var textMaxW = W - TEXT_X_PAD - TEXT_R_PAD;
   g.nodes.forEach(function(n){
     var x = 20+n.x, y = TOP+n.y;
+    var taskLines = fitLines(n.task, TASK_FS, textMaxW, 2);
+    var deptLines = fitLines(n.dept, DEPT_FS, textMaxW, 1);
     out += '<g class="dag-n'+(n.isBottleneck?' bott':'')+'" data-id="'+esc(n.id)+'" role="button" tabindex="0" aria-label="'+esc(n.task+' · '+n.dept)+'">'
         +  '<rect x="'+x+'" y="'+y+'" width="'+W+'" height="'+H+'" rx="8"/>'
         +  '<rect x="'+x+'" y="'+y+'" width="4" height="'+H+'" rx="2" fill="'+deptColor(n.dept)+'"/>'
-        +  '<text x="'+(x+14)+'" y="'+(y+18)+'" class="dag-t">'+esc(clip(n.task,22))+'</text>'
-        +  '<text x="'+(x+14)+'" y="'+(y+32)+'" class="dag-d">'+esc(clip(n.dept,18))+'</text>';
-    if (n.isBottleneck) out += '<text x="'+(x+14)+'" y="'+(y+44)+'" class="dag-b">⚠ 후행 '+n.downstream+'개가 이걸 기다림</text>';
+        +  '<text class="dag-t">'+taskLines.map(function(ln,i){ return '<tspan x="'+(x+TEXT_X_PAD)+'" y="'+(y+TASK_Y1+i*TASK_LINE_H)+'">'+esc(ln)+'</tspan>'; }).join('')+'</text>'
+        +  '<text class="dag-d">'+deptLines.map(function(ln){ return '<tspan x="'+(x+TEXT_X_PAD)+'" y="'+(y+DEPT_Y)+'">'+esc(ln)+'</tspan>'; }).join('')+'</text>';
+    if (n.isBottleneck) {
+      var bottLines = fitLines('⚠ 후행 '+n.downstream+'개가 이걸 기다림', BOTT_FS, textMaxW, 1);
+      out += '<text class="dag-b">'+bottLines.map(function(ln){ return '<tspan x="'+(x+TEXT_X_PAD)+'" y="'+(y+BOTT_Y)+'">'+esc(ln)+'</tspan>'; }).join('')+'</text>';
+    }
     out += '</g>';
     // external 스텁
     n.externals.forEach(function(lb, k){
@@ -147,7 +199,7 @@
     return h;
   }
 
-  var api = { renderDag: renderDag, renderDagWarnings: renderDagWarnings, deptColor: deptColor, nodePanelHtml: nodePanelHtml };
+  var api = { renderDag: renderDag, renderDagWarnings: renderDagWarnings, deptColor: deptColor, nodePanelHtml: nodePanelHtml, fitLines: fitLines };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DagView = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

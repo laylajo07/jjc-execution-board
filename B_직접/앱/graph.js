@@ -4,7 +4,7 @@
 (function (root) {
   'use strict';
 
-  var NODE_W = 170, NODE_H = 48, GAP_X = 100, GAP_Y = 32;
+  var NODE_W = 170, NODE_H = 68, GAP_X = 100, GAP_Y = 32;
 
   var SUFFIX = /(작성|확정|준비|검토|완료|진행)$/;
 
