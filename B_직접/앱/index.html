@@ -191,6 +191,8 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .hist-item .hist-title{font-size:12.5px;color:var(--ink2);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .hist-item.on{background:var(--primary-soft);border-color:transparent}
   .hist-item.on .hist-title{color:var(--primary-ink);font-weight:700}
+  .hist-item .hist-no{font-size:11px;font-weight:800;color:var(--primary)}
+  .hist-item .hist-stale{font-size:10px;font-weight:700;color:var(--chk)}
   .pill.on{color:var(--ok);background:var(--ok-bg);border-color:transparent}
   .pill.off{color:var(--est);background:var(--est-bg);border-color:transparent}
   .selwrap{position:relative;display:inline-flex;align-items:center}
@@ -1302,6 +1304,14 @@ function refreshRoundHint(){
   if(proj && Number.isFinite(n) && ProjectStore.getRoundByNo(proj,n)){ hint.textContent='기존 '+n+'차 재분석'; hint.classList.add('warn'); }
   else { hint.textContent='숫자 · 파일명에서 자동 제안'; hint.classList.remove('warn'); }
 }
+// 회차가 stale(⚠ 기준 데이터 오래됨)인가: baselineNo가 찍힌(비-null) 회차인데, 저장된 (baselineNo,stamp)가
+// 현재 올바른 기준(findBaseline)의 (roundNo,ts)와 어긋날 때만. 미스탬프(null)·최소회차는 제외(지시 19).
+function isRoundStale(proj, r){
+  if(!proj||!r||r.baselineNo==null) return false;
+  const b=ProjectStore.findBaseline(proj, r.roundNo);
+  const curNo=b?b.roundNo:null, curStamp=b?b.ts:'';
+  return r.baselineNo!==curNo || r.baselineStamp!==curStamp;
+}
 function maybeCascade(savedNo){ /* Task 9: 재분석 연쇄 확인창 */ }
 // 회차 히스토리 패널(Task 4, 설계 §3-4). 프로젝트 미선택이거나 회차 0개면 숨김(가드). 항목 클릭은
 // suppressSave로 감싸 렌더해 renderBoard의 자동저장 가드를 우회하지 않고 그냥 통과만 안 하게 한다
@@ -1309,13 +1319,19 @@ function maybeCascade(savedNo){ /* Task 9: 재분석 연쇄 확인창 */ }
 function renderProjHistory(){
   const box=$('#projHistory'); if(!box)return;
   const proj=(projState&&projState.current)?ProjectStore.getProject(projState,projState.current):null;
-  const rounds=proj?proj.rounds:[];
+  const rounds=proj?ProjectStore.roundsSortedByNo(proj):[];   // 지시 20: roundNo 오름차순
   if(!rounds.length){box.hidden=true;box.innerHTML='';return;}
   box.hidden=false;
   box.innerHTML='<div class="field-label">회차 히스토리 <span class="hint">'+rounds.length+'개</span></div>'
-    +'<div class="hist-list">'+rounds.map(r=>
-      `<button type="button" class="hist-item${r.id===currentRoundId?' on':''}" data-rid="${esc(r.id)}"><span class="hist-t">${esc(BoardCustom.fmtUpdatedAt(new Date(r.ts)))}</span><span class="hist-title">${esc(r.title||'회차')}</span></button>`
-    ).join('')+'</div>';
+    +'<div class="hist-list">'+rounds.map(r=>{
+      const stale=isRoundStale(proj,r);
+      return `<button type="button" class="hist-item${r.id===currentRoundId?' on':''}" data-rid="${esc(r.id)}">`
+        +`<span class="hist-no">${esc(String(r.roundNo))}차</span>`
+        +`<span class="hist-t">${esc(BoardCustom.fmtUpdatedAt(new Date(r.ts)))}</span>`
+        +`<span class="hist-title">${esc(r.title||'회차')}</span>`
+        +(stale?`<span class="hist-stale" title="기준 회차가 재분석됨 — 재분석 시 정합화됩니다">⚠ 기준 데이터 오래됨</span>`:'')
+        +`</button>`;
+    }).join('')+'</div>';
   box.querySelectorAll('.hist-item').forEach(btn=>{
     btn.onclick=()=>{
       const p=ProjectStore.getProject(projState,projState.current);
