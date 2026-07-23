@@ -197,6 +197,39 @@ test('addRound: upsert 교체는 baseline을 null/""로 초기화한다(호출�
   assert.equal(r2.baselineStamp, '');
 });
 
+// ── note(회의록 원문) + createdTs (지시 21·24) ──────────────────────────
+test('addRound: note(원문)를 공백·개행 보존하며 저장한다', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  const note = '  줄1\n  - 항목  \n\n줄3\t탭  ';
+  state = addRound(state, pid, { roundNo: 1, note: note, raw: null });
+  assert.equal(getProject(state, pid).rounds[0].note, note, '원문은 collapse 없이 그대로 보존');
+});
+test('addRound: createdTs는 생성 시 ts와 같고, 덮어쓰기 재분석 때 보존되며 ts만 갱신된다', () => {
+  let { state, id: pid } = createProject(emptyState, 'X');
+  state = addRound(state, pid, { roundNo: 1, note: '원문1', raw: { updated_at: 't1' } });
+  let r = getProject(state, pid).rounds[0];
+  assert.equal(r.ts, 't1');
+  assert.equal(r.createdTs, 't1', '최초 생성 시 createdTs=ts');
+  // 같은 roundNo 재분석(덮어쓰기)
+  state = addRound(state, pid, { roundNo: 1, note: '원문2', raw: { updated_at: 't2' } });
+  r = getProject(state, pid).rounds[0];
+  assert.equal(getProject(state, pid).rounds.length, 1, '덮어쓰기(새 회차 미생성)');
+  assert.equal(r.createdTs, 't1', 'createdTs는 최초값 보존');
+  assert.equal(r.ts, 't2', 'ts는 마지막 처리시각으로 갱신');
+  assert.equal(r.note, '원문2', 'note는 갱신');
+});
+test('sanitize: note/createdTs 인자를 보존하고, 없으면 기본값(빈 문자열)으로 마이그레이션한다', () => {
+  const s = sanitize({ projects: [{ id: 'p_1', name: 'X', createdAt: 't', rounds: [
+    { id: 'r_1', roundNo: 1, note: '보존\n원문', createdTs: 'c1', raw: null },
+    { id: 'r_2', roundNo: 2, raw: null }   // 구 데이터: note/createdTs 없음
+  ] }] });
+  const rs = s.projects[0].rounds;
+  assert.equal(rs[0].note, '보존\n원문');
+  assert.equal(rs[0].createdTs, 'c1');
+  assert.equal(rs[1].note, '');
+  assert.equal(rs[1].createdTs, '');
+});
+
 // ── renameProject / deleteProject / setCurrent / getProject ──────────────
 test('renameProject: 이름을 바꾸고, 정리(trim·40자캡)를 거친다', () => {
   const { state: s1, id: pid } = createProject(emptyState, 'X');

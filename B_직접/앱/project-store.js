@@ -9,6 +9,7 @@
   var MAX_PROJECT_NAME_LEN = 40;
   var MAX_ROUND_TITLE_LEN = 120;
   var MAX_NOTE_ID_LEN = 200; // 회의록 식별자(파일명) 길이 컷
+  var MAX_NOTE_LEN = 100000; // 회의록 원문 길이 컷(공백·개행은 보존, 길이만 제한)
   var MAX_ROUNDS = 20; // 회차 상한 — 초과 시 오래된 것부터 제거(설계 1절)
 
   // 제어문자·개행을 공백으로 치환 → 연속 공백 접기 → trim → 코드포인트 단위 길이 컷.
@@ -30,6 +31,12 @@
   function cloneRaw(raw) {
     if (raw === null || raw === undefined) return null;
     try { return JSON.parse(JSON.stringify(raw)); } catch (e) { return null; }
+  }
+
+  // 회의록 원문: 문자열만 통과(제어문자·개행 보존 — cleanText 금지), 길이만 컷. 아니면 빈 문자열.
+  function cleanNote(s) {
+    if (typeof s !== 'string') return '';
+    return s.length > MAX_NOTE_LEN ? s.slice(0, MAX_NOTE_LEN) : s;
   }
 
   // 양의 정수로 강제(number·숫자문자열 허용). 아니면 null.
@@ -70,7 +77,9 @@
       id: id,
       roundNo: toPosInt(r.roundNo),          // null이면 sanitizeProject가 배정
       noteId: cleanText(r.noteId, MAX_NOTE_ID_LEN),
+      note: cleanNote(r.note),
       ts: typeof r.ts === 'string' ? r.ts : '',
+      createdTs: typeof r.createdTs === 'string' ? r.createdTs : '',
       title: sanitizeRoundTitle(r.title),
       raw: cloneRaw(r.raw),
       baselineNo: toPosInt(r.baselineNo),
@@ -189,8 +198,10 @@
     var r = (round && typeof round === 'object' && !Array.isArray(round)) ? round : {};
     var raw = cloneRaw(r.raw);
     var noteId = cleanText(r.noteId, MAX_NOTE_ID_LEN);
+    var note = cleanNote(r.note);
     var title = sanitizeRoundTitle(r.title);
     var ts = pickTs(raw);
+    var argCreatedTs = (typeof r.createdTs === 'string' && r.createdTs) ? r.createdTs : null;
     var found = false;
     var projects = s.projects.map(function (p) {
       if (p.id !== projectId) return p;
@@ -205,11 +216,13 @@
       if (exists) {
         rounds = p.rounds.map(function (x) {
           if (x.roundNo !== rn) return x;
-          return { id: x.id, roundNo: rn, noteId: noteId, ts: ts, title: title, raw: raw, baselineNo: null, baselineStamp: '' };
+          // 덮어쓰기(재분석): createdTs는 최초값 보존(없으면 ts로 폴백), ts만 갱신.
+          var createdTs = argCreatedTs || x.createdTs || ts;
+          return { id: x.id, roundNo: rn, noteId: noteId, note: note, ts: ts, createdTs: createdTs, title: title, raw: raw, baselineNo: null, baselineStamp: '' };
         });
       } else {
         var rid = nextSeqId(p.rounds.map(function (x) { return x.id; }), 'r_');
-        var newRound = { id: rid, roundNo: rn, noteId: noteId, ts: ts, title: title, raw: raw, baselineNo: null, baselineStamp: '' };
+        var newRound = { id: rid, roundNo: rn, noteId: noteId, note: note, ts: ts, createdTs: argCreatedTs || ts, title: title, raw: raw, baselineNo: null, baselineStamp: '' };
         rounds = p.rounds.concat([newRound]);
         if (rounds.length > MAX_ROUNDS) rounds = rounds.slice(rounds.length - MAX_ROUNDS);
       }
@@ -273,7 +286,7 @@
       if (p.id !== projectId) return p;
       var rounds = p.rounds.map(function (r) {
         if (r.id !== roundId) return r;
-        return { id: r.id, roundNo: r.roundNo, noteId: r.noteId, ts: r.ts, title: r.title, raw: r.raw, baselineNo: bn, baselineStamp: bs };
+        return { id: r.id, roundNo: r.roundNo, noteId: r.noteId, note: r.note, ts: r.ts, createdTs: r.createdTs, title: r.title, raw: r.raw, baselineNo: bn, baselineStamp: bs };
       });
       return { id: p.id, name: p.name, createdAt: p.createdAt, rounds: rounds };
     });
