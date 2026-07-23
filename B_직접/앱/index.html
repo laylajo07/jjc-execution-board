@@ -1129,10 +1129,19 @@ function renderBoard(d, raw){
     // 감싸 들어오므로 여기서 걸러진다(무한 누적·중복 저장 방지, 설계 §3-2).
     if(raw!=null && !suppressSave && projState && projState.current){
       const title = BoardDerive.friendlyTitle(d);
-      projState = ProjectStore.addRound(projState, projState.current, {title:title, raw:raw});
+      const el=$('#roundNoInput'); const rnIn=el?parseInt(el.value,10):NaN;
+      const roundNo = (Number.isFinite(rnIn)&&rnIn>=1)?rnIn:undefined; // 미입력이면 addRound가 max+1로 append
+      const noteId = (document.querySelector('#noteSelect')&&document.querySelector('#noteSelect').value)||'';
+      projState = ProjectStore.addRound(projState, projState.current, {roundNo:roundNo, noteId:noteId, title:title, raw:raw});
+      // 저장된 회차 특정 + 자기 기준 스탬프(지시 18·19)
+      let proj = ProjectStore.getProject(projState, projState.current);
+      const savedNo = (roundNo!=null)?roundNo:((ProjectStore.roundsSortedByNo(proj).slice(-1)[0]||{}).roundNo);
+      const saved = ProjectStore.getRoundByNo(proj, savedNo);
+      currentRoundId = saved ? saved.id : null;
+      if(saved){ const b=ProjectStore.findBaseline(proj, savedNo);
+        projState = ProjectStore.setRoundBaseline(projState, projState.current, saved.id, b?b.roundNo:null, b?b.ts:''); }
       ProjectStore.saveProjects(projState);
-      const savedRounds = ProjectStore.getProject(projState, projState.current).rounds;
-      currentRoundId = savedRounds.length ? savedRounds[savedRounds.length-1].id : null;
+      maybeCascade(savedNo);   // 재분석 연쇄(Task 9). 영향 회차 없으면 no-op.
     }
   }
   // 히스토리 diff(Task 4, 설계 §3-4) — current 프로젝트 + "지금 보는 회차"(currentRoundId)의 직전 회차가
@@ -1294,6 +1303,7 @@ function refreshRoundHint(){
   if(proj && Number.isFinite(n) && ProjectStore.getRoundByNo(proj,n)){ hint.textContent='기존 '+n+'차 재분석'; hint.classList.add('warn'); }
   else { hint.textContent='숫자 · 파일명에서 자동 제안'; hint.classList.remove('warn'); }
 }
+function maybeCascade(savedNo){ /* Task 9: 재분석 연쇄 확인창 */ }
 // 회차 히스토리 패널(Task 4, 설계 §3-4). 프로젝트 미선택이거나 회차 0개면 숨김(가드). 항목 클릭은
 // suppressSave로 감싸 렌더해 renderBoard의 자동저장 가드를 우회하지 않고 그냥 통과만 안 하게 한다
 // (과거 열람이 새 회차로 쌓이지 않음).
