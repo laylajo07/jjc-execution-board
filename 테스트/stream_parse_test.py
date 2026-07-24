@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-import sys, os, json, datetime, unittest
+import sys, os, json, datetime, unittest, threading, socketserver, http.client
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '러너', 'py'))
 from server import collect_text, collect_delta, dept_config_to_prompt, sanitize_dept_config, stamp_updated
+import server as server_mod
 
 class TestCollectText(unittest.TestCase):
     def test_assistant_텍스트만_이어붙인다(self):
@@ -115,6 +116,64 @@ class TestStampUpdated(unittest.TestCase):
         self.assertIsNone(stamp_updated(None))
         self.assertEqual(stamp_updated([]), [])
         self.assertEqual(stamp_updated('x'), 'x')
+
+
+class TestAnalyzeErrorHandling(unittest.TestCase):
+    """자체감사 발견: do_POST가 SSE 응답(send_response)을 시작하기 전 단계(AGENT_MD 읽기·
+    JSON 파싱)에서 예외가 나면, try/except 없이는 응답을 하나도 못 보낸 채 소켓만 끊겨
+    브라우저 쪽엔 원인불명 네트워크 에러("Failed to fetch")만 보인다(server.ts는 이미
+    try/except로 감싸 500 JSON을 주는데 이쪽만 기능 동등성이 깨져 있었다). 실제 HTTP
+    서버를 임시 포트로 띄워 재현·검증한다(단순 함수 단위 테스트로는 이 경로가 안 잡힌다)."""
+
+    def _start_server(self):
+        server_mod.APP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '러너', 'py'))
+        server_mod.NOTES_DIR = server_mod.APP_DIR
+        server_mod.RESULT_DIR = os.path.join(server_mod.APP_DIR, '결과')
+        server_mod.APPROACH = 'test'
+        server_mod.MODEL = None
+        httpd = socketserver.ThreadingTCPServer(('127.0.0.1', 0), server_mod.H)
+        t = threading.Thread(target=httpd.serve_forever, daemon=True)
+        t.start()
+        return httpd, t
+
+    def test_AGENT_MD_경로가_잘못돼도_소켓만_끊기지_않고_500_JSON을_응답한다(self):
+        httpd, t = self._start_server()
+        server_mod.AGENT_MD = os.path.join(server_mod.APP_DIR, '__없는_AGENT_MD__.md')  # 일부러 존재하지 않는 경로
+        try:
+            port = httpd.server_address[1]
+            conn = http.client.HTTPConnection('127.0.0.1', port, timeout=5)
+            body = json.dumps({'note': '테스트 회의록'}).encode('utf-8')
+            conn.request('POST', '/api/analyze', body=body, headers={'Content-Type': 'application/json'})
+            resp = conn.getresponse()
+            data = resp.read()
+            self.assertEqual(resp.status, 500, 'AGENT_MD가 없으면 500 JSON을 응답해야 한다(연결이 그냥 끊기면 안 된다)')
+            parsed = json.loads(data.decode('utf-8'))
+            self.assertIn('error', parsed)
+            conn.close()
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+    def test_body가_JSON이_아니어도_500_JSON을_응답한다(self):
+        # json.loads가 read(AGENT_MD)보다 먼저 실행되므로 AGENT_MD 자체는 이 테스트의 관심사가
+        # 아니지만, "AGENT_MD 문제와 섞이지 않고 순수하게 JSON 파싱 실패만" 확인하려 실제
+        # 존재하는 파일을 가리켜 둔다.
+        server_mod.AGENT_MD = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'B_직접', '앱', 'AGENT.md'))
+        httpd, t = self._start_server()
+        try:
+            port = httpd.server_address[1]
+            conn = http.client.HTTPConnection('127.0.0.1', port, timeout=5)
+            body = '이건 JSON이 아님'.encode('utf-8')
+            conn.request('POST', '/api/analyze', body=body, headers={'Content-Type': 'application/json'})
+            resp = conn.getresponse()
+            data = resp.read()
+            self.assertEqual(resp.status, 500)
+            parsed = json.loads(data.decode('utf-8'))
+            self.assertIn('error', parsed)
+            conn.close()
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
 
 
 if __name__ == '__main__':

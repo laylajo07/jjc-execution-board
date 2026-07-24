@@ -252,21 +252,30 @@ class H(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         if urllib.parse.urlparse(self.path).path != '/api/analyze':
             return self._send(404, {'error': 'unknown'})
-        ln = int(self.headers.get('Content-Length', '0'))
-        body = json.loads(self.rfile.read(ln) or b'{}')
-        note = (body.get('note') or '').strip()
-        model = (body.get('model') or '').strip() or None
-        name = (body.get('name') or '').strip()  # 선택한 회의록 파일명(있으면 결과 파일명에 사용)
-        if model and not re.match(r'^[\w.:-]+$', model):  # 셸 주입 방지: 모델명 화이트리스트
-            model = None
-        if not note:
-            return self._send(400, {'error': 'empty note'})
-        dept_block = dept_prompt_block(body.get('deptConfig'))
-        prompt = (read(AGENT_MD) + dept_block +
-                  "\n\n================================================================\n"
-                  "# 처리할 회의록 (형식 그대로)\n"
-                  "================================================================\n" + note +
-                  "\n\n위 지침에 따라 \"A. 실행보드(마크다운)\"와 \"B. JSON\" 두 블록을 순서대로 출력해줘.")
+        # SSE 응답(send_response)을 시작하기 전 단계다 — 여기서 예외가 나면(예: AGENT_MD가
+        # 앱 폴더 경로 오지정 등으로 없거나, body가 JSON이 아니거나) try/except 없이는 아직
+        # 아무 응답도 안 보낸 채로 소켓만 끊겨, 브라우저 쪽엔 {error:...} JSON이 아니라
+        # 원인불명 네트워크 에러("Failed to fetch")만 보인다. server.ts는 핸들러 전체를
+        # try/except로 감싸 이 경로에서도 깔끔한 500 JSON을 주는데, 여기는 안 그래서 자동모드
+        # 기능 동등성이 깨져 있었다(자체감사 발견) — 같은 방식으로 감싼다.
+        try:
+            ln = int(self.headers.get('Content-Length', '0'))
+            body = json.loads(self.rfile.read(ln) or b'{}')
+            note = (body.get('note') or '').strip()
+            model = (body.get('model') or '').strip() or None
+            name = (body.get('name') or '').strip()  # 선택한 회의록 파일명(있으면 결과 파일명에 사용)
+            if model and not re.match(r'^[\w.:-]+$', model):  # 셸 주입 방지: 모델명 화이트리스트
+                model = None
+            if not note:
+                return self._send(400, {'error': 'empty note'})
+            dept_block = dept_prompt_block(body.get('deptConfig'))
+            prompt = (read(AGENT_MD) + dept_block +
+                      "\n\n================================================================\n"
+                      "# 처리할 회의록 (형식 그대로)\n"
+                      "================================================================\n" + note +
+                      "\n\n위 지침에 따라 \"A. 실행보드(마크다운)\"와 \"B. JSON\" 두 블록을 순서대로 출력해줘.")
+        except Exception as e:
+            return self._send(500, {'error': str(e)})
         # ── SSE 스트리밍 응답 ──
         self.send_response(200)
         self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
