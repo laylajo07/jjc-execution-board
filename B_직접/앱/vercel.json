@@ -1,0 +1,8 @@
+{
+  "functions": {
+    "api/analyze.js": {
+      "includeFiles": "AGENT.md",
+      "maxDuration": 300
+    }
+  }
+}
