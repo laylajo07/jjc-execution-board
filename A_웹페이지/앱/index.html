@@ -1456,6 +1456,11 @@ renderProjSelect();
 renderProjHistory();
 setDefaultRoundNo();
 
+// 배포(Vercel 등 공개 도메인) 환경에서는 CMP_URL(localhost:8787) 비교가 항상 실패하므로
+// 버튼 자체를 숨긴다 — 로컬 실행(file:// 더블클릭, 러너 localhost)에서만 의미 있는 기능이다.
+if(!(location.protocol==='file:'||location.hostname==='localhost'||location.hostname==='127.0.0.1')){
+  const cb=$('#compareBtn'); if(cb) cb.style.display='none';
+}
 initMode();
 </script>
 </body>
