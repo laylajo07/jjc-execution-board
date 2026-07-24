@@ -713,3 +713,12 @@ test('inferRoundNo: 숫자가 없으면 null, 0/음수는 null', () => {
   assert.equal(inferRoundNo(null), null);
   assert.equal(inferRoundNo('0차'), null);
 });
+test('[자체감사] inferRoundNo: "N차"·"버전 N" 패턴이 전혀 없는 날짜형 파일명은 연도/날짜를 회차번호로 오인하지 않고 null을 반환한다', () => {
+  // 'N차'/'버전 N'이 없을 때만 쓰는 최후 폴백(첫 정수)이 날짜에서 연도(4자리 이상)를 뽑아버리면,
+  // 그 값이 그대로 저장 회차번호가 되어 이후 자동 채번(maxNo+1)까지 전부 오염된다(자체감사 발견).
+  assert.equal(inferRoundNo('2026-03-15 회의.md'), null, '연도만 있고 N차/버전N이 없으면 null');
+  assert.equal(inferRoundNo('2026년 3월 회의록'), null);
+  assert.equal(inferRoundNo('20260315_회의록.md'), null, '전체 날짜(8자리)도 회차번호로 오인하면 안 된다');
+  // 'N차'/'버전 N'가 있으면 날짜가 같이 있어도 여전히 그쪽이 우선(기존 동작 유지, 회귀 없음).
+  assert.equal(inferRoundNo('2026-03-15 3차 회의.md'), 3);
+});

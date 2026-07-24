@@ -5,11 +5,13 @@
    diffBoards(prevBoard, curBoard) → { tags, done }
 
    반환 형태:
-   - tags: { '<dept>::<kind>::<idx>': 'new'|'changed'|'done'|'same' }
-       curBoard의 항목별 태그. key는 그 항목이 속한 부서명(dept) + 종류(kind) +
-       그 부서·종류 배열 안에서의 0-based 순번(idx)으로 만든다(렌더러가 by_department를
-       그대로 순회하며 조회할 수 있게 하기 위함 — by_department 배열 순서가 바뀌어도
-       dept명이 안 바뀌면 key는 안정적이다).
+   - tags: { '<deptIdx>::<dept>::<kind>::<idx>': 'new'|'changed'|'done'|'same' }
+       curBoard의 항목별 태그. key는 그 항목이 속한 by_department 배열 내 0-based
+       순번(deptIdx) + 부서명(dept) + 종류(kind) + 그 부서·종류 배열 안에서의
+       0-based 순번(idx)으로 만든다(렌더러가 curBoard.by_department를 그대로 순회하며
+       조회할 수 있게 하기 위함). deptIdx가 있어 같은 dept명이 by_department에
+       두 번 이상 나와도(모델이 부서를 중복 출력하는 경우가 실제로 있다) key가 충돌하지
+       않는다 — dept명만으로는 어느 항목의 태그인지 구분이 안 돼 서로 덮어써 버린다.
        kind: 'action'(action_items) | 'doc'(documents) | 'decision'(decisions_needed)
    - done: [{ dept, kind, idx, text, owner, due, status, reason }]
        '완료'로 판정된 항목 목록. reason:
@@ -57,30 +59,30 @@
     return a === b;
   }
 
-  // by_department → 평탄화된 항목 목록 [{dept, kind, idx, text, owner, due, status}]
+  // by_department → 평탄화된 항목 목록 [{deptIdx, dept, kind, idx, text, owner, due, status}]
   function flatten(board) {
     var depts = (board && Array.isArray(board.by_department)) ? board.by_department : [];
     var out = [];
-    depts.forEach(function (d) {
+    depts.forEach(function (d, di) {
       if (!d) return;
       var dept = str(d.dept);
       (Array.isArray(d.action_items) ? d.action_items : []).forEach(function (a, i) {
         if (!a) return;
-        out.push({ dept: dept, kind: 'action', idx: i, text: str(a.what), owner: str(a.owner), due: str(a.due), status: str(a.status) });
+        out.push({ deptIdx: di, dept: dept, kind: 'action', idx: i, text: str(a.what), owner: str(a.owner), due: str(a.due), status: str(a.status) });
       });
       (Array.isArray(d.documents) ? d.documents : []).forEach(function (doc, i) {
         if (!doc) return;
-        out.push({ dept: dept, kind: 'doc', idx: i, text: str(doc.doc), owner: str(doc.owner), due: str(doc.due), status: str(doc.status) });
+        out.push({ deptIdx: di, dept: dept, kind: 'doc', idx: i, text: str(doc.doc), owner: str(doc.owner), due: str(doc.due), status: str(doc.status) });
       });
       (Array.isArray(d.decisions_needed) ? d.decisions_needed : []).forEach(function (dc, i) {
         if (!dc) return;
-        out.push({ dept: dept, kind: 'decision', idx: i, text: str(dc.topic), owner: str(dc.decider), due: str(dc.due), status: str(dc.status) });
+        out.push({ deptIdx: di, dept: dept, kind: 'decision', idx: i, text: str(dc.topic), owner: str(dc.decider), due: str(dc.due), status: str(dc.status) });
       });
     });
     return out;
   }
 
-  function key(it) { return it.dept + '::' + it.kind + '::' + it.idx; }
+  function key(it) { return it.deptIdx + '::' + it.dept + '::' + it.kind + '::' + it.idx; }
 
   function bestOf(item, candidates) {
     var best = null, bestScore = 0;

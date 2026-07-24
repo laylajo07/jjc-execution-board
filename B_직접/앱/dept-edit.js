@@ -186,8 +186,12 @@
     var mergedTo = assign({}, to, {
       action_items: (to.action_items || []).concat(from.action_items || []),
       documents: (to.documents || []).concat(from.documents || []),
-      decisions_needed: (to.decisions_needed || []).concat(from.decisions_needed || [])
-    }); // to._hidden·to._rd는 손대지 않아 그대로 유지된다
+      decisions_needed: (to.decisions_needed || []).concat(from.decisions_needed || []),
+      // 둘 다 숨김이었을 때만 숨김을 유지한다. from이 보이는 부서였다면(실제 항목을
+      // 갖고 있었다면) 병합 결과를 계속 숨겨두면 그 항목들이 visibleBoard()에서 통째로
+      // 사라져 사용자가 알아챌 수 없다 — 병합은 "합치기"지 "가리기"가 아니다.
+      _hidden: !!(to._hidden && from._hidden)
+    }); // to._rd는 손대지 않아 그대로 유지된다
 
     var newDepts = depts
       .map(function (d, i) { return i === toIdx ? mergedTo : d; })

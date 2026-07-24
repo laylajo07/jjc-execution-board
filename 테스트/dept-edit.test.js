@@ -64,7 +64,7 @@ test('deleteDept: 단일부서 엔트리를 참조하는 부서를 지우면 by_
   assert.ok(!out.by_department.some(d => d.dept === '경영본부'));
 });
 
-test('mergeDepts: to에 action_items/documents/decisions_needed가 순서대로 이어붙고, to._rd·to._hidden은 보존된다', () => {
+test('mergeDepts: to에 action_items/documents/decisions_needed가 순서대로 이어붙고, to._rd는 보존되며, _hidden은 한쪽이라도 visible이면 visible이 된다', () => {
   const board = makeBoard();
   // to(CB본부)·from(ICT본부) 둘 다 세 배열 전부에 값을 채워야 "이어붙임"이 실제로 검증된다
   // (원래 fixture는 documents/decisions_needed 쪽이 비어 있어 뮤턴트가 안 잡혔다).
@@ -76,15 +76,52 @@ test('mergeDepts: to에 action_items/documents/decisions_needed가 순서대로 
   board.by_department[3]._hidden = false;
   board.by_department[3]._rd = ['from-rd'];
 
-  const out = mergeDepts(board, 3, 1); // ICT본부 → CB본부
+  const out = mergeDepts(board, 3, 1); // ICT본부(visible) → CB본부(hidden)
   const to = out.by_department.find(d => d.dept === 'CB본부');
 
   assert.deepEqual(to.action_items.map(a => a.what), ['모델 재학습', 'API 최적화']);
   assert.deepEqual(to.documents.map(d => d.doc), ['단가표', 'API 명세']);
   assert.deepEqual(to.decisions_needed.map(d => d.topic), ['단가승인', '배포일정']);
-  assert.equal(to._hidden, true, 'to._hidden은 from에 덮이지 않고 보존되어야 한다');
+  // to는 숨김이었지만 from은 보이는(실제 항목을 가진) 부서였으므로, 병합 결과는 visible이어야
+  // 한다 — 그렇지 않으면 from의 항목들이 visibleBoard()에서 통째로 사라지는 자체 감사 버그가 된다.
+  assert.equal(to._hidden, false, '숨김 to + 보이는 from을 병합하면 결과는 visible이어야 한다(데이터 소실 방지)');
   assert.deepEqual(to._rd, ['to-rd'], 'to._rd는 from._rd로 덮이면 안 된다');
   assert.equal(out.by_department.length, 3);
+});
+
+test('mergeDepts: 둘 다 숨김이었으면 병합 결과도 숨김을 유지한다', () => {
+  const board = makeBoard();
+  board.by_department[1]._hidden = true; // to
+  board.by_department[3]._hidden = true; // from
+  const out = mergeDepts(board, 3, 1);
+  const to = out.by_department.find(d => d.dept === 'CB본부');
+  assert.equal(to._hidden, true, '둘 다 숨김이면 합쳐도 숨김 그대로여야 한다');
+});
+
+test('mergeDepts: to가 visible이고 from이 숨김이면 결과는 그대로 visible(회귀 없음)', () => {
+  const board = makeBoard();
+  board.by_department[1]._hidden = false; // to
+  board.by_department[3]._hidden = true;  // from
+  const out = mergeDepts(board, 3, 1);
+  const to = out.by_department.find(d => d.dept === 'CB본부');
+  assert.equal(to._hidden, false);
+});
+
+test('[자체감사] mergeDepts: 보이는 부서를 숨김 부서로 병합해도 항목이 visibleBoard()에서 사라지지 않는다', () => {
+  // 실제 버그 재현: A본부(visible, 실제 항목 있음) → B본부(hidden)로 병합.
+  // 이전 구현은 to._hidden을 무조건 보존해 병합 결과가 계속 숨겨져, A본부의 항목이
+  // visibleBoard() 결과에서 통째로 사라졌다(사용자에게 아무 경고도 없이).
+  const board = {
+    by_department: [
+      { dept: 'A본부', action_items: [{ what: '중요 작업', owner: '', due: '', status: '확정' }], documents: [], decisions_needed: [], _rd: [] },
+      { dept: 'B본부', action_items: [], documents: [], decisions_needed: [], _hidden: true, _rd: [] }
+    ],
+    sequence: []
+  };
+  const merged = mergeDepts(board, 0, 1); // A본부 → B본부
+  const vis = visibleBoard(merged);
+  assert.equal(vis.by_department.length, 1, '병합된 부서가 visibleBoard에서 사라지면 안 된다');
+  assert.deepEqual(vis.by_department[0].action_items.map(a => a.what), ['중요 작업']);
 });
 
 test('addDept: 끝에 빈 부서를 추가한다', () => {

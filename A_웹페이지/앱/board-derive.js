@@ -154,7 +154,16 @@
   // 우선순위: 'N차'/'N회차' → '버전 N' → 문자열 내 첫 정수. 순수 — 입력 문자열만 본다.
   function inferRoundNo(name) {
     var s = (name == null ? '' : String(name));
-    var m = s.match(/(\d+)\s*차/) || s.match(/버전\s*(\d+)/) || s.match(/(\d+)/);
+    var m = s.match(/(\d+)\s*차/) || s.match(/버전\s*(\d+)/);
+    if (!m) {
+      var m2 = s.match(/(\d+)/);
+      // 'N차'/'버전 N'처럼 회차를 명시하는 패턴이 전혀 없을 때만 쓰는 최후 폴백이라, 날짜 형식
+      // 파일명("2026-03-15 회의.md", "20260315_회의록.md" 등)에서 연도나 전체 날짜를 회차번호로
+      // 오인하기 쉽다(자체감사 발견 — 여기서 잘못 뽑히면 이후 자동 채번까지 전부 오염된다).
+      // 4자리 이상 숫자는 실제 회차번호로 보기 어려우니 신뢰하지 않는다.
+      if (m2 && m2[1].length >= 4) return null;
+      m = m2;
+    }
     if (!m) return null;
     var n = parseInt(m[1], 10);
     return (Number.isFinite(n) && n >= 1) ? n : null;

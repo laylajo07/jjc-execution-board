@@ -103,8 +103,10 @@ test('addRound: 존재하지 않는 projectId면 아무 변화 없이 그대로 
 // ── 20개 상한 ───────────────────────────────────────────────────────────
 test('[상한] 회차가 20개를 넘으면 오래된 것부터 제거해 20개로 유지한다', () => {
   let { state, id: pid } = createProject(emptyState, 'X');
+  // ts는 문자열 사전순으로 비교되므로(capRounds), 실제 ISO 타임스탬프처럼 자릿수를 맞춘다
+  // ('t1'..'t25'처럼 안 맞추면 't10' < 't2'가 되어 의도한 시간순과 어긋난다).
   for (let i = 1; i <= 25; i++) {
-    state = addRound(state, pid, { title: '회차' + i, raw: { updated_at: 't' + i } });
+    state = addRound(state, pid, { title: '회차' + i, raw: { updated_at: 't' + String(i).padStart(2, '0') } });
   }
   const rounds = getProject(state, pid).rounds;
   assert.equal(rounds.length, 20, '20개로 캡되어야 한다');
@@ -347,11 +349,26 @@ test('sanitize: 같은 id가 중복되면 먼저 온 것만 남긴다', () => {
 
 test('sanitize: 손상된 저장값의 rounds가 20개를 넘으면 최신 20개만 남긴다', () => {
   const rounds = [];
-  for (let i = 1; i <= 25; i++) rounds.push({ id: 'r_' + i, ts: 't' + i, title: '', raw: null });
+  // ts 자릿수를 맞춘다(capRounds가 문자열 사전순 비교 — 위 [상한] 테스트와 동일 이유).
+  for (let i = 1; i <= 25; i++) rounds.push({ id: 'r_' + i, ts: 't' + String(i).padStart(2, '0'), title: '', raw: null });
   const s = sanitize({ projects: [{ id: 'p_1', name: 'X', createdAt: 't', rounds: rounds }] });
   assert.equal(s.projects[0].rounds.length, 20);
   assert.equal(s.projects[0].rounds[0].id, 'r_6');
   assert.equal(s.projects[0].rounds[19].id, 'r_25');
+});
+
+test('[자체감사] sanitize: rounds 배열 순서가 실제 처리시각(ts) 순서와 반대로 저장돼 있어도, 배열 위치가 아니라 ts 기준으로 가장 오래된 것부터 제거한다', () => {
+  const rounds = [];
+  // 일부러 배열을 역순으로 구성: 위치 0(r_1)이 ts상 가장 최신, 위치 24(r_25)가 가장 오래됨.
+  // 배열 위치 기준(예전 버그)이었다면 slice(len-20)이 앞쪽 5개(r_1..r_5, 실제로는 가장 최신인
+  // 회차들)를 잘못 제거했을 것이다 — 이 테스트는 그 반대(ts가 가장 오래된 r_21..r_25가 제거됨)를 확인한다.
+  for (let i = 1; i <= 25; i++) rounds.push({ id: 'r_' + i, ts: 't' + String(26 - i).padStart(2, '0'), title: '', raw: null });
+  const s = sanitize({ projects: [{ id: 'p_1', name: 'X', createdAt: 't', rounds: rounds }] });
+  const ids = s.projects[0].rounds.map(r => r.id);
+  assert.equal(ids.length, 20);
+  assert.deepEqual(ids.slice().sort(), Array.from({ length: 20 }, (_, k) => 'r_' + (k + 1)).sort(),
+    'ts가 가장 최신인 r_1..r_20이 남아야 한다(배열 위치상으로는 앞쪽이지만 ts상 최신이므로)');
+  assert.ok(!ids.includes('r_25'), 'ts가 가장 오래된 r_25는 배열 맨 끝에 있어도 제거돼야 한다');
 });
 
 test('sanitize: current가 존재하지 않는 프로젝트를 가리키면 빈 문자열로 초기화한다', () => {
