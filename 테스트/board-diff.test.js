@@ -5,8 +5,10 @@ const path = require('node:path');
 const { diffBoards, changeDigest } = require('../B_직접/앱/board-diff.js');
 
 // board-diff.js가 반환하는 key 포맷은 헤더 주석에 문서화된 공개 계약:
-// '<dept>::<kind(action|decision)>::<idx>' (idx는 그 부서·kind 배열 내 0-based 순번)
-function key(dept, kind, idx) { return dept + '::' + kind + '::' + idx; }
+// '<deptIdx>::<dept>::<kind(action|decision)>::<idx>'
+// (deptIdx는 by_department 배열 내 0-based 순번, idx는 그 부서·kind 배열 내 0-based 순번)
+// 이 파일의 기존 테스트는 전부 부서 1개짜리 board라 deptIdx=0 고정.
+function key(deptIdx, dept, kind, idx) { return deptIdx + '::' + dept + '::' + kind + '::' + idx; }
 
 function board(depts) {
   return { meeting: { title: '테스트', date: '2026-07-21' }, by_department: depts, sequence: [], gaps: [] };
@@ -41,8 +43,8 @@ test('신규: prev에 없는 cur 항목은 new 태그', () => {
     action('예산 편성 검토', 'CB2', '08-05', '')
   ])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('CB본부', 'action', 0)], 'same');
-  assert.equal(out.tags[key('CB본부', 'action', 1)], 'new');
+  assert.equal(out.tags[key(0, 'CB본부', 'action', 0)], 'same');
+  assert.equal(out.tags[key(0, 'CB본부', 'action', 1)], 'new');
 });
 
 // ---------------------------------------------------------------------------
@@ -53,28 +55,28 @@ test('변경: owner만 달라져도 changed', () => {
   const prev = board([dept('CB본부', [action('모델 재학습', 'CB1', '07-30', '진행중')])]);
   const cur = board([dept('CB본부', [action('모델 재학습', 'CB2', '07-30', '진행중')])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('CB본부', 'action', 0)], 'changed');
+  assert.equal(out.tags[key(0, 'CB본부', 'action', 0)], 'changed');
 });
 
 test('변경: due만 달라져도 changed', () => {
   const prev = board([dept('CB본부', [action('모델 재학습', 'CB1', '07-30', '진행중')])]);
   const cur = board([dept('CB본부', [action('모델 재학습', 'CB1', '08-10', '진행중')])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('CB본부', 'action', 0)], 'changed');
+  assert.equal(out.tags[key(0, 'CB본부', 'action', 0)], 'changed');
 });
 
 test('변경: status만 달라져도(확정이 아닌 경우) changed', () => {
   const prev = board([dept('CB본부', [action('모델 재학습', 'CB1', '07-30', '진행중')])]);
   const cur = board([dept('CB본부', [action('모델 재학습', 'CB1', '07-30', '검토중')])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('CB본부', 'action', 0)], 'changed');
+  assert.equal(out.tags[key(0, 'CB본부', 'action', 0)], 'changed');
 });
 
 test('의사결정 항목도 decider/due/status 변경을 changed로 잡는다', () => {
   const prev = board([dept('경영본부', [], [decision('가격정책', '경영1', '07-30', '확인필요')])]);
   const cur = board([dept('경영본부', [], [decision('가격정책', '경영2', '07-30', '확인필요')])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('경영본부', 'decision', 0)], 'changed');
+  assert.equal(out.tags[key(0, '경영본부', 'decision', 0)], 'changed');
 });
 
 // ---------------------------------------------------------------------------
@@ -85,7 +87,7 @@ test('동일: owner/due/status 모두 같으면 same', () => {
   const prev = board([dept('CB본부', [action('모델 재학습', 'CB1', '07-30', '진행중')])]);
   const cur = board([dept('CB본부', [action('모델 재학습', 'CB1', '07-30', '진행중')])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('CB본부', 'action', 0)], 'same');
+  assert.equal(out.tags[key(0, 'CB본부', 'action', 0)], 'same');
 });
 
 // ---------------------------------------------------------------------------
@@ -96,7 +98,7 @@ test('완료: 매칭된 항목의 status가 확정으로 바뀌면 done 태그 +
   const prev = board([dept('CB본부', [action('모델 재학습', 'CB1', '07-30', '진행중')])]);
   const cur = board([dept('CB본부', [action('모델 재학습', 'CB1', '07-30', '확정')])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('CB본부', 'action', 0)], 'done');
+  assert.equal(out.tags[key(0, 'CB본부', 'action', 0)], 'done');
   assert.equal(out.done.length, 1);
   assert.equal(out.done[0].reason, 'confirmed');
   assert.equal(out.done[0].dept, 'CB본부');
@@ -109,7 +111,7 @@ test('완료: 이미 확정이었고 계속 확정이면(전이 아님) done이 
   const prev = board([dept('CB본부', [action('모델 재학습', 'CB1', '07-30', '확정')])]);
   const cur = board([dept('CB본부', [action('모델 재학습', 'CB1', '07-30', '확정')])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('CB본부', 'action', 0)], 'same');
+  assert.equal(out.tags[key(0, 'CB본부', 'action', 0)], 'same');
   assert.equal(out.done.length, 0);
 });
 
@@ -129,7 +131,7 @@ test('완료: prev에만 있던 항목(cur에서 사라짐)은 done[]에 dropped
   assert.equal(out.done[0].dept, 'CB본부');
   assert.equal(out.done[0].text, '레거시 정리');
   // 남은 항목은 same으로 정상 매칭
-  assert.equal(out.tags[key('CB본부', 'action', 0)], 'same');
+  assert.equal(out.tags[key(0, 'CB본부', 'action', 0)], 'same');
 });
 
 // ---------------------------------------------------------------------------
@@ -139,8 +141,8 @@ test('완료: prev에만 있던 항목(cur에서 사라짐)은 done[]에 dropped
 test('첫 회차: prevBoard가 null이면 cur 전부 same이고 new는 하나도 없다', () => {
   const cur = board([dept('CB본부', [action('모델 재학습', 'CB1', '07-30', '진행중')], [decision('가격정책', '경영1', '07-30', '')])]);
   const out = diffBoards(null, cur);
-  assert.equal(out.tags[key('CB본부', 'action', 0)], 'same');
-  assert.equal(out.tags[key('CB본부', 'decision', 0)], 'same');
+  assert.equal(out.tags[key(0, 'CB본부', 'action', 0)], 'same');
+  assert.equal(out.tags[key(0, 'CB본부', 'decision', 0)], 'same');
   assert.ok(!Object.values(out.tags).includes('new'), '첫 회차는 비교 대상이 없으므로 new가 없어야 한다');
   assert.deepEqual(out.done, []);
 });
@@ -153,22 +155,22 @@ test('퍼지 매칭: 문구가 살짝 늘어나도(접두 보존) 같은 항목�
   const prev = board([dept('법무실', [action('대체데이터 검토의견 작성', '법무1', '07-25', '진행중')])]);
   const cur = board([dept('법무실', [action('대체데이터 검토의견 최종 작성', '법무1', '07-25', '진행중')])]);
   const out = diffBoards(prev, cur);
-  assert.notEqual(out.tags[key('법무실', 'action', 0)], 'new', '퍼지 매칭돼야 하므로 new가 아니어야 한다');
+  assert.notEqual(out.tags[key(0, '법무실', 'action', 0)], 'new', '퍼지 매칭돼야 하므로 new가 아니어야 한다');
 });
 
 test('퍼지 매칭: 부서가 바뀌어도(개명/이동) 전체 폴백으로 매칭된다', () => {
   const prev = board([dept('법무실', [action('대체데이터 검토의견 작성', '법무1', '07-25', '진행중')])]);
   const cur = board([dept('리스크본부', [action('대체데이터 검토의견 작성', '법무1', '07-25', '진행중')])]);
   const out = diffBoards(prev, cur);
-  assert.notEqual(out.tags[key('리스크본부', 'action', 0)], 'new', '부서명이 바뀌어도 전체 폴백으로 매칭돼야 한다');
-  assert.equal(out.tags[key('리스크본부', 'action', 0)], 'same');
+  assert.notEqual(out.tags[key(0, '리스크본부', 'action', 0)], 'new', '부서명이 바뀌어도 전체 폴백으로 매칭돼야 한다');
+  assert.equal(out.tags[key(0, '리스크본부', 'action', 0)], 'same');
 });
 
 test('전혀 다른 문구는 매칭되지 않고 new로 남는다', () => {
   const prev = board([dept('CB본부', [action('모델 재학습', 'CB1', '07-30', '진행중')])]);
   const cur = board([dept('CB본부', [action('예산 편성 검토', 'CB2', '08-05', '')])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('CB본부', 'action', 0)], 'new');
+  assert.equal(out.tags[key(0, 'CB본부', 'action', 0)], 'new');
 });
 
 // ---------------------------------------------------------------------------
@@ -214,21 +216,21 @@ test('문서: prev에 없는 cur 문서는 new 태그(kind=doc)', () => {
   const prev = board([dept('CB본부', [], [], [])]);
   const cur = board([dept('CB본부', [], [], [document('이사회 보고자료', '라일라', '07-18', '확정')])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('CB본부', 'doc', 0)], 'new');
+  assert.equal(out.tags[key(0, 'CB본부', 'doc', 0)], 'new');
 });
 
 test('문서: owner/due가 달라지면 changed', () => {
   const prev = board([dept('CB본부', [], [], [document('이사회 보고자료', '라일라', '07-18', '추정')])]);
   const cur = board([dept('CB본부', [], [], [document('이사회 보고자료', '김대리', '07-20', '추정')])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('CB본부', 'doc', 0)], 'changed');
+  assert.equal(out.tags[key(0, 'CB본부', 'doc', 0)], 'changed');
 });
 
 test('문서: status가 확정으로 바뀌면 done + done[]에 confirmed로 기록(kind=doc)', () => {
   const prev = board([dept('CB본부', [], [], [document('이사회 보고자료', '라일라', '07-18', '추정')])]);
   const cur = board([dept('CB본부', [], [], [document('이사회 보고자료', '라일라', '07-18', '확정')])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('CB본부', 'doc', 0)], 'done');
+  assert.equal(out.tags[key(0, 'CB본부', 'doc', 0)], 'done');
   assert.equal(out.done.length, 1);
   assert.equal(out.done[0].reason, 'confirmed');
   assert.equal(out.done[0].kind, 'doc');
@@ -242,7 +244,7 @@ test("동치: owner가 ''→'미정'으로 바뀐 것뿐이면(나머지 동일)
   const prev = board([dept('CB본부', [action('모델 재학습', '', '07-30', '진행중')])]);
   const cur = board([dept('CB본부', [action('모델 재학습', '미정', '07-30', '진행중')])]);
   const out = diffBoards(prev, cur);
-  assert.equal(out.tags[key('CB본부', 'action', 0)], 'same');
+  assert.equal(out.tags[key(0, 'CB본부', 'action', 0)], 'same');
 });
 
 // ---------------------------------------------------------------------------
@@ -260,7 +262,7 @@ test('[특성화] prev 항목 2개가 모두 cur 항목 1개와 매칭 가능해
   ])]);
   const out = diffBoards(prev, cur);
   // 현재 실제 동작 고정: cur의 유일한 항목은 prev의 첫 항목(CB1)과 매칭돼 same.
-  assert.deepEqual(out.tags, { [key('CB본부', 'action', 0)]: 'same' });
+  assert.deepEqual(out.tags, { [key(0, 'CB본부', 'action', 0)]: 'same' });
   // 두 prev 항목 모두 독립적으로(비배타적으로) cur의 그 하나와 매칭에 성공하므로
   // 이분매칭이었다면 dropped로 잡혔을 두 번째 prev 항목(CB2)도 dropped로 잡히지 않는다.
   assert.deepEqual(out.done, []);
@@ -312,6 +314,24 @@ test('changeDigest: diff가 null이거나 기형이어도 예외 없이 0을 돌
   assert.deepEqual(changeDigest(null, board([])), { added: 0, changed: 0, done: 0, total: 0, items: [] });
   assert.deepEqual(changeDigest({}, board([])), { added: 0, changed: 0, done: 0, total: 0, items: [] });
   assert.doesNotThrow(() => changeDigest({ tags: { 'x::action::0': 'new' } }, '문자열'));
+});
+
+// ---------------------------------------------------------------------------
+// 12-2. 중복 부서명 — by_department에 같은 dept명이 두 번 나와도(모델이 실제로 이렇게
+//       출력하는 경우가 관찰됨) 각 항목이 독립적으로 태그돼야 한다(key 충돌 금지)
+// ---------------------------------------------------------------------------
+
+test('중복 부서명: 같은 dept명이 by_department에 두 번 있어도 각 항목이 독립적으로 태그된다(key 충돌 없음)', () => {
+  const prev = board([
+    dept('ICT본부', [action('시스템 점검', 'P1', '07-30', '진행중')]),
+  ]);
+  const cur = board([
+    dept('ICT본부', [action('시스템 점검', 'P1', '07-30', '진행중')]),        // deptIdx 0: same
+    dept('ICT본부', [action('완전 새로운 작업', 'P9', '08-20', '')]),          // deptIdx 1: new
+  ]);
+  const out = diffBoards(prev, cur);
+  assert.equal(out.tags[key(0, 'ICT본부', 'action', 0)], 'same', '첫 번째 ICT본부 항목은 same이어야 한다');
+  assert.equal(out.tags[key(1, 'ICT본부', 'action', 0)], 'new', '두 번째 ICT본부(다른 deptIdx) 항목은 new여야 한다 — deptIdx가 없으면 같은 key로 충돌해 이 값이 덮어써진다');
 });
 
 // ---------------------------------------------------------------------------

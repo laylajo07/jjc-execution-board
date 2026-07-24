@@ -48,6 +48,26 @@
     return (Number.isFinite(n) && n >= 1 && Math.floor(n) === n) ? n : null;
   }
 
+  // MAX_ROUNDS 초과분을 ts(처리시각) 기준으로 가장 오래된 것부터 제거한다. 배열 순번이 아니라
+  // ts로 판단하는 이유: roundNo는 처리순서와 무관한 사용자 식별자(지시 16)라 재분석 등으로
+  // 회차가 배열 끝이 아닌 자리에서 갱신되거나, 저장된 데이터가 어떤 경로로든 삽입순과 다르게
+  // 정렬돼 있어도 "실제로 가장 오래 전에 처리된" 회차가 항상 먼저 잘리게 하기 위함이다.
+  // 살아남는 회차의 상대 순서는 원래 배열 순서를 그대로 보존한다(다른 불변식에 영향 없음).
+  function capRounds(rounds) {
+    if (rounds.length <= MAX_ROUNDS) return rounds;
+    var withIdx = rounds.map(function (r, i) { return { r: r, i: i }; });
+    withIdx.sort(function (a, b) {
+      var ta = a.r.ts || '', tb = b.r.ts || '';
+      if (ta < tb) return -1;
+      if (ta > tb) return 1;
+      return a.i - b.i; // ts가 같으면(또는 둘 다 비어있으면) 원래 배열상 앞쪽을 오래된 것으로 취급
+    });
+    var dropCount = rounds.length - MAX_ROUNDS;
+    var dropSet = Object.create(null);
+    for (var k = 0; k < dropCount; k++) dropSet[withIdx[k].i] = true;
+    return rounds.filter(function (r, i) { return !dropSet[i]; });
+  }
+
   // 기존 id들 중 prefix로 시작하는 것의 최대 숫자 접미사 + 1. Date.now()/Math.random() 없이
   // state에 이미 있는 id만으로 다음 id를 결정적으로 뽑는다(테스트 재현성).
   function nextSeqId(ids, prefix) {
@@ -100,7 +120,7 @@
       seen[r.id] = true;
       rounds.push(r);
     }
-    if (rounds.length > MAX_ROUNDS) rounds = rounds.slice(rounds.length - MAX_ROUNDS);
+    rounds = capRounds(rounds);
     // projectId는 항상 실제 소속(이 프로젝트의 id)으로 강제 통일 — 입력값(누락·오염)은 신뢰하지 않는다(지시 17).
     for (i = 0; i < rounds.length; i++) rounds[i].projectId = id;
     // roundNo 정합: 유효·유일 값은 채택, 중복/누락/비정수는 미사용 최소 양의정수를 배열 순서대로 배정(멱등).
@@ -226,8 +246,7 @@
       } else {
         var rid = nextSeqId(p.rounds.map(function (x) { return x.id; }), 'r_');
         var newRound = { id: rid, projectId: p.id, roundNo: rn, noteId: noteId, note: note, ts: ts, createdTs: argCreatedTs || ts, title: title, raw: raw, baselineNo: null, baselineStamp: '' };
-        rounds = p.rounds.concat([newRound]);
-        if (rounds.length > MAX_ROUNDS) rounds = rounds.slice(rounds.length - MAX_ROUNDS);
+        rounds = capRounds(p.rounds.concat([newRound]));
       }
       return { id: p.id, name: p.name, createdAt: p.createdAt, rounds: rounds };
     });
