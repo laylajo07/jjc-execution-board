@@ -3,14 +3,28 @@
 const fs = require('fs');
 const path = require('path');
 
-const SAMPLE_DIR = path.join(process.cwd(), '샘플');
+// notes.js와 동일한 이유로 여러 후보 경로를 시도한다(process.cwd()가 항상 프로젝트
+// 루트라는 보장이 없음이 실제로 확인됨).
+var CANDIDATES = [
+  path.join(process.cwd(), '샘플'),
+  path.join(__dirname, '..', '샘플'),
+  path.join(__dirname, '샘플')
+];
+function findSampleDir() {
+  for (var i = 0; i < CANDIDATES.length; i++) {
+    try { if (fs.statSync(CANDIDATES[i]).isDirectory()) return CANDIDATES[i]; } catch (e) {}
+  }
+  return null;
+}
 
 module.exports = (req, res) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   const url = new URL(req.url, 'http://x');
   const name = path.basename(url.searchParams.get('name') || '');
   if (!name) { res.statusCode = 400; return res.end(JSON.stringify({ error: 'name required' })); }
-  const fp = path.join(SAMPLE_DIR, name);
+  const dir = findSampleDir();
+  if (!dir) { res.statusCode = 404; return res.end(JSON.stringify({ error: 'not found' })); }
+  const fp = path.join(dir, name);
   try {
     const content = fs.readFileSync(fp, 'utf-8');
     res.statusCode = 200;

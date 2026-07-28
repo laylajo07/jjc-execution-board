@@ -24,6 +24,20 @@ const DEFAULT_MODEL = 'gpt-4o';
 const MAX_NOTE_LEN = 100000;   // project-store.js MAX_NOTE_LEN과 동일 기준(과도한 요청·비용 방지)
 const MAX_TOKENS = 8192;
 
+// Vercel Node 함수의 process.cwd()가 프로젝트 루트와 항상 같다는 보장이 없어(같은 폴더를
+// 쓰는 notes.js/note.js에서 실제로 빈 결과가 나와 확인됨) __dirname 기준 후보도 같이 시도한다.
+var AGENT_MD_CANDIDATES = [
+  path.join(process.cwd(), 'AGENT.md'),
+  path.join(__dirname, '..', 'AGENT.md'),
+  path.join(__dirname, 'AGENT.md')
+];
+function readAgentMd() {
+  for (var i = 0; i < AGENT_MD_CANDIDATES.length; i++) {
+    try { return fs.readFileSync(AGENT_MD_CANDIDATES[i], 'utf-8'); } catch (e) {}
+  }
+  throw new Error('시도한 경로: ' + AGENT_MD_CANDIDATES.join(', '));
+}
+
 function sendJson(res, status, obj) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -58,7 +72,7 @@ module.exports = async (req, res) => {
 
   let system;
   try {
-    const agentMd = fs.readFileSync(path.join(process.cwd(), 'AGENT.md'), 'utf-8');
+    const agentMd = readAgentMd();
     let deptText = '';
     try { deptText = BoardCustom.deptConfigToPrompt(body.deptConfig); } catch (e) { deptText = ''; }
     system = agentMd + (deptText ? ('\n\n' + deptText) : '');
