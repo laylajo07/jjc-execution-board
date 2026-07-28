@@ -923,8 +923,8 @@ $('#npClose').onclick=closePanel;$('#npOverlay').onclick=closePanel;
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanel();});
 // extraHtml: 제목 오른쪽 컨트롤 슬롯(부서 편집 토글). 안 넘기면 기존과 같은 마크업.
 // data-acc: 재렌더 후 열림 상태를 되살리는 키. 제목은 코드 상수라 사용자 입력이 아니다.
-function acc(title,count,bodyHtml,extraHtml){
-  return `<details class="acc" data-acc="${esc(title)}"><summary><span class="acc-t">${esc(title)}</span>${extraHtml||''}<span class="cnt">${count}</span></summary><div class="acc-body">${bodyHtml}</div></details>`;
+function acc(title,count,bodyHtml,extraHtml,openDefault){
+  return `<details class="acc" data-acc="${esc(title)}"${openDefault?' open':''}><summary><span class="acc-t">${esc(title)}</span>${extraHtml||''}<span class="cnt">${count}</span></summary><div class="acc-body">${bodyHtml}</div></details>`;
 }
 /* 우선순위 칩(#3): 랭킹 → top5 + 더보기 */
 function rankedChips(items,cls,graph){
@@ -1254,7 +1254,7 @@ function renderBoard(d, raw){
       +`<div class="panelbox"><div class="block__l">❓ 확인 필요 (gaps)</div><div class="chips">${rankedChips(d.gaps,'gap',g)}</div></div>`
       +`<div class="panelbox"><div class="block__l">🧩 가정 (assumptions)</div><div class="chips">${rankedChips(d.assumptions,'asm',g)}</div></div>`
       +'</div>';
-    hSummary+=acc('확인 필요 · 가정', gc+asmc, body);
+    hSummary+=acc('확인 필요 · 가정', gc+asmc, body, null, accOpen['확인 필요 · 가정']!==false);   // 기본 펼침 — 사용자가 접었던 경우(재렌더)만 유지
   }
 
   // ── 탭2: 크리티컬 패스 DAG ──
