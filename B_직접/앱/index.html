@@ -735,30 +735,19 @@ $('#themeBtn').onclick=()=>{const cur=document.documentElement.getAttribute('dat
   const next=cur==='dark'?'light':(cur==='light'?'dark':(matchMedia('(prefers-color-scheme:dark)').matches?'light':'dark'));
   document.documentElement.setAttribute('data-theme',next);localStorage.setItem('jjc-theme',next);};
 
-/* mode detect + 수동 토글 */
-let runnerUp=false;
-async function probeRunner(){try{const r=await fetch('/api/health',{cache:'no-store'});runnerUp=!!r.ok;}catch(e){runnerUp=false;}return runnerUp;}
-function applyMode(auto){
-  AUTO=auto;
-  if(auto){
-    $('#mode').className='pill on';$('#mode').textContent='⚡ 자동 모드';
-    $('#autoBox').style.display='block';$('#copyFlow').style.display='none';$('#analyzeBtn').style.display='';
-    $('#lead').textContent='러너가 로컬에 로그인된 Claude를 대신 실행합니다. API 키가 필요 없습니다.';
-    $('#modelSel').disabled=false;loadNotes();
-  }else{
-    $('#mode').className='pill off';$('#mode').textContent='📋 복붙 모드';
-    $('#autoBox').style.display='none';$('#copyFlow').style.display='block';$('#analyzeBtn').style.display='none';
-    $('#lead').textContent='러너 없이 바로 쓰는 방식입니다. 아래에서 프롬프트를 복사해 로그인된 Claude에 붙여넣어 실행한 뒤, 나온 결과를 다시 붙여넣으면 실행보드가 만들어집니다.';
-    $('#modelSel').disabled=true;
-  }
+/* mode: 자동 모드 고정 노출 — 복붙 모드 UI(#copyFlow)는 화면에서 숨김 */
+async function probeRunner(){try{const r=await fetch('/api/health',{cache:'no-store'});return r.ok;}catch(e){return false;}}
+function applyMode(){
+  AUTO=true;
+  $('#mode').className='pill on';$('#mode').textContent='⚡ 자동 모드';
+  $('#autoBox').style.display='block';$('#copyFlow').style.display='none';$('#analyzeBtn').style.display='';
+  $('#lead').textContent='러너가 로컬에 로그인된 Claude를 대신 실행합니다. API 키가 필요 없습니다.';
+  $('#modelSel').disabled=false;loadNotes();
 }
-$('#mode').style.cursor='pointer';$('#mode').title='클릭해서 자동/복붙 모드 전환';
-$('#mode').onclick=async()=>{
-  if(AUTO){applyMode(false);return;}
-  if(await probeRunner())applyMode(true);
-  else toast('러너가 실행 중이 아니어서 자동 모드를 켤 수 없습니다. 러너를 켜거나 복붙 모드로 진행하세요.');
-};
-function initMode(){ applyMode(false); }  // 기본은 복붙 모드. 러너가 있으면 헤더 표시등 클릭으로 자동 전환.
+function initMode(){
+  applyMode();
+  probeRunner().then(ok=>{ if(!ok) toast('자동 모드 서버 상태를 확인할 수 없습니다 — 분석 시 오류가 나면 API 키 설정을 확인하세요.'); });
+}
 async function loadNotes(){
   try{const list=await (await fetch('/api/notes',{cache:'no-store'})).json();
     $('#noteSelect').innerHTML='<option value="">— 회의록 선택 —</option>'+list.map(n=>`<option>${esc(n.name)}</option>`).join('');
