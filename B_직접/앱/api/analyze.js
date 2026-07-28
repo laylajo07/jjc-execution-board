@@ -1,26 +1,23 @@
-/* 조정치 · Vercel 서버리스 자동 모드 — 로컬 러너의 `claude -p` 대신 OpenAI Chat Completions API를
-   OPENAI_API_KEY(Vercel 환경변수)로 직접 호출한다. 클라이언트(index.html)는 SSE 이벤트
+/* 조정치 · Vercel 서버리스 자동 모드 — 로컬 러너의 `claude -p` 대신 Anthropic Messages API를
+   ANTHROPIC_API_KEY(Vercel 환경변수)로 직접 호출한다. 클라이언트(index.html)는 SSE 이벤트
    {t:조각} / {error} / {done,markdown}만 보고 동작하므로, 이 셋만 로컬 러너와 동일하게
    맞추면 클라이언트 코드는 한 글자도 안 건드려도 된다(analyze()가 이미 이 셋만 소비함).
 
    로컬 러너(server.py)와의 차이:
-   - AGENT.md를 system 메시지로, 회의록을 user 메시지로 분리해서 보낸다(러너는 CLI 특성상
-     하나로 이어붙임 — Chat Completions는 system/user 분리가 정석이라 더 정확한 사용법).
+   - AGENT.md를 system 프롬프트로, 회의록을 user 메시지로 분리해서 보낸다(러너는 CLI 특성상
+     하나로 이어붙임 — API는 system/user 분리가 정석이라 더 정확한 사용법).
    - json/savedTo는 안 보낸다 — 클라이언트가 markdown만으로 parseResult()를 스스로 돌린다
      (복붙 모드와 동일 경로, 이미 검증된 로직이라 서버에서 또 파싱할 필요가 없다).
    - 결과 파일 저장은 없다(서버리스 파일시스템은 영속적이지 않다).
-   - 모델 드롭다운(index.html #modelSel)은 Claude 모델명을 그대로 보내므로, 여기서 OpenAI
-     모델명으로 매핑한다(속도/균형/정밀 의도는 유지) — 모르는 값·빈 값은 기본 모델로 폴백. */
+
+   (한때 OpenAI Chat Completions로 전환했었으나, 그 OpenAI 키가 조직 IP 허용목록에 걸려
+   Vercel에서 401 ip_not_authorized가 나 다시 Anthropic으로 되돌림 — Vercel Settings →
+   Environment Variables에 ANTHROPIC_API_KEY를 설정해야 자동 모드가 켜진다.) */
 const fs = require('fs');
 const path = require('path');
 const BoardCustom = require('../board-custom.js');
 
-const OPENAI_MODEL_MAP = {
-  'claude-haiku-4-5-20251001': 'gpt-4o-mini',   // 최속
-  'claude-sonnet-5': 'gpt-4o',                  // 균형
-  'claude-opus-4-8': 'gpt-4.1'                  // 정밀
-};
-const DEFAULT_MODEL = 'gpt-4o';
+const DEFAULT_MODEL = 'claude-sonnet-5';
 const MAX_NOTE_LEN = 100000;   // project-store.js MAX_NOTE_LEN과 동일 기준(과도한 요청·비용 방지)
 const MAX_TOKENS = 8192;
 
@@ -62,13 +59,14 @@ module.exports = async (req, res) => {
     return sendJson(res, 400, { error: `회의록이 너무 깁니다(${note.length}자). ${MAX_NOTE_LEN}자 이하로 줄여주세요.` });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return sendJson(res, 500, { error: '서버에 OPENAI_API_KEY 환경변수가 설정되어 있지 않습니다. Vercel 프로젝트 Settings → Environment Variables에서 추가 후 재배포하세요.' });
+    return sendJson(res, 500, { error: '서버에 ANTHROPIC_API_KEY 환경변수가 설정되어 있지 않습니다. Vercel 프로젝트 Settings → Environment Variables에서 추가 후 재배포하세요.' });
   }
 
-  const reqModel = (typeof body.model === 'string' ? body.model : '').trim();
-  const model = OPENAI_MODEL_MAP[reqModel] || DEFAULT_MODEL;
+  let model = (typeof body.model === 'string' ? body.model : '').trim();
+  if (model && !/^[\w.:-]+$/.test(model)) model = ''; // 값 화이트리스트(형식 검증)
+  model = model || DEFAULT_MODEL;
 
   let system;
   try {
@@ -93,36 +91,29 @@ module.exports = async (req, res) => {
 
   let upstream;
   try {
-    upstream = await fetch('https://api.openai.com/v1/chat/completions', {
+    upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer ' + apiKey,
-        'Content-Type': 'application/json'
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
       },
-      body: JSON.stringify({
-        model,
-        max_tokens: MAX_TOKENS,
-        stream: true,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: userMsg }
-        ]
-      })
+      body: JSON.stringify({ model, max_tokens: MAX_TOKENS, stream: true, system, messages: [{ role: 'user', content: userMsg }] })
     });
   } catch (e) {
-    sse({ error: 'OpenAI API 호출 실패: ' + e.message });
+    sse({ error: 'Anthropic API 호출 실패: ' + e.message });
     return res.end();
   }
 
   if (!upstream.ok || !upstream.body) {
     let detail = '';
     try { detail = (await upstream.text()).slice(0, 500); } catch (e) {}
-    sse({ error: `OpenAI API 오류(${upstream.status}): ${detail}` });
+    sse({ error: `Anthropic API 오류(${upstream.status}): ${detail}` });
     return res.end();
   }
 
-  // OpenAI 스트림: "data: <json>\n\n" 반복, 끝에 "data: [DONE]"(JSON 아님, 특수 종료 신호).
-  // choices[0].delta.content만 우리 클라이언트가 아는 {t:조각} 형식으로 다시 실어 나른다.
+  // Anthropic 스트림: "event: <type>\ndata: <json>\n\n" 반복. content_block_delta의
+  // delta.text_delta만 우리 클라이언트가 아는 {t:조각} 형식으로 다시 실어 나른다.
   let full = '', buf = '';
   const reader = upstream.body.getReader();
   const decoder = new TextDecoder();
@@ -137,15 +128,13 @@ module.exports = async (req, res) => {
         buf = buf.slice(idx + 2);
         const dataLine = rawEvent.split('\n').find(function (l) { return l.indexOf('data:') === 0; });
         if (!dataLine) continue;
-        const payload = dataLine.slice(5).trim();
-        if (payload === '[DONE]') continue;   // 종료 신호 — 실제 done 이벤트는 스트림 끝에서 별도로 보낸다
         let evt;
-        try { evt = JSON.parse(payload); } catch (e) { continue; }
-        if (evt.error) { sse({ error: evt.error.message || 'OpenAI 스트림 오류' }); continue; }
-        const delta = evt.choices && evt.choices[0] && evt.choices[0].delta;
-        if (delta && typeof delta.content === 'string' && delta.content) {
-          full += delta.content;
-          sse({ t: delta.content });
+        try { evt = JSON.parse(dataLine.slice(5).trim()); } catch (e) { continue; }
+        if (evt.type === 'content_block_delta' && evt.delta && evt.delta.type === 'text_delta') {
+          full += evt.delta.text;
+          sse({ t: evt.delta.text });
+        } else if (evt.type === 'error') {
+          sse({ error: (evt.error && evt.error.message) || 'Anthropic 스트림 오류' });
         }
       }
     }
