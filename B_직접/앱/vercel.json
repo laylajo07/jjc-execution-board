@@ -3,6 +3,12 @@
     "api/analyze.js": {
       "includeFiles": "AGENT.md",
       "maxDuration": 300
+    },
+    "api/notes.js": {
+      "includeFiles": "샘플/**"
+    },
+    "api/note.js": {
+      "includeFiles": "샘플/**"
     }
   }
 }
