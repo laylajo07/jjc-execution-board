@@ -253,6 +253,19 @@
     return { current: s.current, projects: found ? projects : s.projects };
   }
 
+  // 회차 하나를 제거한다(사용자 요청: 분석 후 특정 회차 삭제). projectId·roundId가 없거나
+  // 존재하지 않으면 아무 것도 바꾸지 않는다(no-op). current 선택은 건드리지 않는다 — 회차 삭제가
+  // 프로젝트 자체를 지우는 건 아니므로.
+  function deleteRound(state, projectId, roundId) {
+    var s = sanitize(state);
+    var projects = s.projects.map(function (p) {
+      if (p.id !== projectId) return p;
+      var rounds = p.rounds.filter(function (r) { return r.id !== roundId; });
+      return { id: p.id, name: p.name, createdAt: p.createdAt, rounds: rounds };
+    });
+    return { current: s.current, projects: projects };
+  }
+
   // current를 바꾼다. ''는 선택 해제. 존재하지 않는 id는 무시하고 기존 current를 유지한다.
   function setCurrent(state, id) {
     var s = sanitize(state);
@@ -322,6 +335,7 @@
     renameProject: renameProject,
     deleteProject: deleteProject,
     addRound: addRound,
+    deleteRound: deleteRound,
     setCurrent: setCurrent,
     getProject: getProject,
     sanitize: sanitize,

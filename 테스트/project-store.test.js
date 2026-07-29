@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {
   loadProjects, saveProjects, createProject, renameProject, deleteProject,
-  addRound, setCurrent, getProject, sanitize
+  addRound, deleteRound, setCurrent, getProject, sanitize
 } = require('../B_직접/앱/project-store.js');
 
 // 간이 in-memory localStorage — Node에는 없으므로 direct 테스트용으로 흉내낸다.
@@ -288,6 +288,45 @@ test('deleteProject: current가 아닌 다른 프로젝트를 지우면 current�
   const s3 = deleteProject(r2.state, r1.id);
   assert.equal(s3.current, r2.id);
   assert.equal(s3.projects.length, 1);
+});
+
+// ── deleteRound ────────────────────────────────────────────────────────
+test('deleteRound: 해당 회차만 제거하고 다른 회차는 그대로 둔다', () => {
+  const { state: s1, id: pid } = createProject(emptyState, 'X');
+  const s2 = addRound(s1, pid, { roundNo: 1, title: '1차' });
+  const s3 = addRound(s2, pid, { roundNo: 2, title: '2차' });
+  const target = getProject(s3, pid).rounds.find(r => r.roundNo === 1);
+  const s4 = deleteRound(s3, pid, target.id);
+  const rounds = getProject(s4, pid).rounds;
+  assert.equal(rounds.length, 1);
+  assert.equal(rounds[0].roundNo, 2);
+});
+
+test('deleteRound: 존재하지 않는 프로젝트/회차 id는 아무 것도 바꾸지 않는다', () => {
+  const { state: s1, id: pid } = createProject(emptyState, 'X');
+  const s2 = addRound(s1, pid, { roundNo: 1, title: '1차' });
+  const s3 = deleteRound(s2, pid, 'no-such-round');
+  assert.deepEqual(s3, s2);
+  const s4 = deleteRound(s2, 'no-such-project', getProject(s2, pid).rounds[0].id);
+  assert.deepEqual(s4, s2);
+});
+
+test('deleteRound: current 프로젝트 선택은 그대로 유지된다', () => {
+  const { state: s1, id: pid } = createProject(emptyState, 'X');
+  const s2 = addRound(s1, pid, { roundNo: 1, title: '1차' });
+  const rid = getProject(s2, pid).rounds[0].id;
+  const s3 = deleteRound(s2, pid, rid);
+  assert.equal(s3.current, pid);
+  assert.equal(getProject(s3, pid).rounds.length, 0);
+});
+
+test('deleteRound: 입력 state를 변형하지 않는다(불변)', () => {
+  const { state: s1, id: pid } = createProject(emptyState, 'X');
+  const s2 = addRound(s1, pid, { roundNo: 1, title: '1차' });
+  const rid = getProject(s2, pid).rounds[0].id;
+  const snapshot = JSON.parse(JSON.stringify(s2));
+  deleteRound(s2, pid, rid);
+  assert.deepEqual(s2, snapshot);
 });
 
 test('setCurrent: 존재하는 id로 바꾼다', () => {

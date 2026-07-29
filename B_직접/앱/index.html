@@ -182,16 +182,20 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   /* 회차 히스토리 패널(Task 4) — dept-row/dept-empty와 같은 톤의 리스트, 기존 토큰만 사용 */
   .proj-history{margin:-2px 0 12px}
   .hist-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
-  .hist-item{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;text-align:left;
-    font-family:var(--sans);background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);
-    padding:6px 10px;cursor:pointer}
+  .hist-item{display:flex;align-items:stretch;gap:0;width:100%;
+    font-family:var(--sans);background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm)}
   .hist-item:hover{border-color:var(--primary)}
+  .hist-main{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;
+    font-family:inherit;background:none;border:none;padding:6px 4px 6px 10px;cursor:pointer;color:inherit}
   .hist-item .hist-t{font-family:var(--mono);font-size:10.5px;color:var(--faint)}
   .hist-item .hist-title{font-size:13px;color:var(--ink2);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .hist-item.on{background:var(--primary-soft);border-color:transparent}
   .hist-item.on .hist-title{color:var(--primary-ink);font-weight:700}
   .hist-item .hist-no{font-size:11px;font-weight:800;color:var(--primary)}
   .hist-item .hist-stale{font-size:10px;font-weight:700;color:var(--chk)}
+  .hist-del{flex:none;align-self:center;width:26px;height:26px;margin-right:6px;border:none;background:none;
+    color:var(--faint);cursor:pointer;border-radius:6px;font-size:13px;line-height:1;display:grid;place-items:center}
+  .hist-del:hover{color:var(--chk);background:var(--chk-bg)}
   .pill.on{color:var(--ok);background:var(--ok-bg);border-color:transparent}
   .pill.off{color:var(--est);background:var(--est-bg);border-color:transparent}
   .selwrap{position:relative;display:inline-flex;align-items:center}
@@ -1165,7 +1169,7 @@ function resetBtn(){
   // 다시 안 불린 경로에서도 여기서 반드시 풀어야 계속 잠긴 채로 남지 않는다).
   if($('#projSel')) $('#projSel').disabled=false;
   refreshRoundNoEnabled();   // 무조건 false 아님 — 지시15: 프로젝트 미선택이면 계속 비활성 유지
-  document.querySelectorAll('.hist-item').forEach(b=>b.disabled=false);
+  document.querySelectorAll('.hist-main,.hist-del').forEach(b=>b.disabled=false);
 }
 // 지시15(설계 의도대로 약하게 강제): 프로젝트를 선택해야 회차번호 입력이 의미가 있으므로,
 // 미선택 상태에서는 비활성화한다(분석 자체는 막지 않음 — analyze()의 토스트 경고로 대체).
@@ -1178,7 +1182,7 @@ function setLoading(on){
   // 읽어 엉뚱한 프로젝트·회차에 저장한다(레이스 컨디션). 분석 중엔 이 셋을 잠가 원천 차단한다.
   if($('#projSel')) $('#projSel').disabled=on;
   if($('#roundNoInput')) $('#roundNoInput').disabled=on;
-  document.querySelectorAll('.hist-item').forEach(b=>b.disabled=on);
+  document.querySelectorAll('.hist-main,.hist-del').forEach(b=>b.disabled=on);
   $('#analyzeBtn').innerHTML= on?'<span class="spin"></span> 분석 중…':'신규 분석';
   if(on)$('#result').innerHTML='<div class="streaming"><div class="stream-head"><span class="dots"><i></i><i></i><i></i></span>조정치가 회의록을 구조화하는 중… <span class="stream-sub">생성되는 내용이 아래에 실시간으로 표시됩니다</span></div><pre id="streamPre" class="stream-pre"></pre></div>';
 }
@@ -1950,14 +1954,17 @@ function renderProjHistory(){
   box.innerHTML='<div class="field-label">회차 히스토리 <span class="hint">'+rounds.length+'개</span></div>'
     +'<div class="hist-list">'+rounds.map(r=>{
       const stale=isRoundStale(proj,r);
-      return `<button type="button" class="hist-item${r.id===currentRoundId?' on':''}" data-rid="${esc(r.id)}">`
+      return `<div class="hist-item${r.id===currentRoundId?' on':''}">`
+        +`<button type="button" class="hist-main" data-rid="${esc(r.id)}">`
         +`<span class="hist-no">${esc(String(r.roundNo))}차</span>`
         +`<span class="hist-t">${esc(BoardCustom.fmtUpdatedAt(new Date(r.ts)))}</span>`
         +`<span class="hist-title">${esc(r.title||'회차')}</span>`
         +(stale?`<span class="hist-stale" title="기준 회차가 재분석됨 — 재분석 시 정합화됩니다">⚠ 기준 데이터 오래됨</span>`:'')
-        +`</button>`;
+        +`</button>`
+        +`<button type="button" class="hist-del" data-rid="${esc(r.id)}" title="이 회차 삭제" aria-label="${esc(String(r.roundNo))}차 삭제">✕</button>`
+        +`</div>`;
     }).join('')+'</div>';
-  box.querySelectorAll('.hist-item').forEach(btn=>{
+  box.querySelectorAll('.hist-main').forEach(btn=>{
     btn.onclick=()=>{
       const p=ProjectStore.getProject(projState,projState.current);
       const round=p&&p.rounds.find(x=>x.id===btn.dataset.rid);
@@ -1984,6 +1991,21 @@ function renderProjHistory(){
       }finally{
         suppressSave=false;   // renderBoard가 도중에 throw해도 반드시 해제 — 안 그러면 이후 세션 내내 자동저장이 조용히 멈춘다
       }
+    };
+  });
+  // 회차 삭제(사용자 요청): 확인 후 해당 회차만 제거. 지금 보던 회차를 지웠으면 결과 패널을 초기화한다.
+  box.querySelectorAll('.hist-del').forEach(btn=>{
+    btn.onclick=()=>{
+      const rid=btn.dataset.rid;
+      const p=ProjectStore.getProject(projState,projState.current);
+      const round=p&&p.rounds.find(x=>x.id===rid);
+      if(!round)return;
+      if(!confirm(`${round.roundNo}차 회차를 삭제할까요?\n(되돌릴 수 없습니다)`))return;
+      projState=ProjectStore.deleteRound(projState,projState.current,rid);
+      if(!ProjectStore.saveProjects(projState)) toast('⚠ 브라우저 저장 공간 문제로 삭제가 반영되지 않았을 수 있습니다');
+      if(currentRoundId===rid){ currentRoundId=null; clearResultPanel(); }
+      renderProjHistory();
+      toast(`${round.roundNo}차 회차를 삭제했습니다`);
     };
   });
 }
