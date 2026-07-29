@@ -198,6 +198,9 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .hist-del{flex:none;align-self:center;width:26px;height:26px;margin-right:6px;border:none;background:none;
     color:var(--faint);cursor:pointer;border-radius:6px;font-size:13px;line-height:1;display:grid;place-items:center}
   .hist-del:hover{color:var(--chk);background:var(--chk-bg)}
+  .hist-rename{flex:none;align-self:center;width:26px;height:26px;margin-right:2px;border:none;background:none;
+    color:var(--faint);cursor:pointer;border-radius:6px;font-size:13px;line-height:1;display:grid;place-items:center}
+  .hist-rename:hover{color:var(--primary);background:var(--primary-soft)}
   .pill.on{color:var(--ok);background:var(--ok-bg);border-color:transparent}
   .pill.off{color:var(--est);background:var(--est-bg);border-color:transparent}
   .selwrap{position:relative;display:inline-flex;align-items:center}
@@ -625,10 +628,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 
       <div class="field-label">회의 프로젝트 선택 <span class="hint">회차 누적</span></div>
       <div id="projList" class="proj-list"></div>
-      <div class="row" style="gap:6px;margin:8px 0 10px">
-        <button class="btn icon" id="renameProjBtn" title="프로젝트 이름 수정">✎</button>
-        <button class="btn block" id="newProjBtn" style="flex:1">＋ 새 프로젝트</button>
-      </div>
+      <button class="btn block" id="newProjBtn" style="margin:8px 0 10px">＋ 새 프로젝트</button>
       <div id="projHistory" class="proj-history" hidden></div>
 
       <div id="autoBox" style="display:none">
@@ -1202,7 +1202,7 @@ function resetBtn(){
   // 자체감사: 분석 중 잠갔던 프로젝트/회차 선택자를 되돌린다(에러로 끝나 renderProjHistory가
   // 다시 안 불린 경로에서도 여기서 반드시 풀어야 계속 잠긴 채로 남지 않는다).
   refreshRoundNoEnabled();   // 무조건 false 아님 — 지시15: 프로젝트 미선택이면 계속 비활성 유지
-  document.querySelectorAll('.hist-main,.hist-del').forEach(b=>b.disabled=false);   // 회차·프로젝트 목록 공용
+  document.querySelectorAll('.hist-main,.hist-del,.hist-rename').forEach(b=>b.disabled=false);   // 회차·프로젝트 목록 공용
 }
 // 지시15(설계 의도대로 약하게 강제): 프로젝트를 선택해야 회차번호 입력이 의미가 있으므로,
 // 미선택 상태에서는 비활성화한다(분석 자체는 막지 않음 — analyze()의 토스트 경고로 대체).
@@ -1214,7 +1214,7 @@ function setLoading(on){
   // 열람하면, 응답이 도착했을 때 renderBoard가 "그 순간의" projState.current/currentRoundId를
   // 읽어 엉뚱한 프로젝트·회차에 저장한다(레이스 컨디션). 분석 중엔 이들을 잠가 원천 차단한다.
   if($('#roundNoInput')) $('#roundNoInput').disabled=on;
-  document.querySelectorAll('.hist-main,.hist-del').forEach(b=>b.disabled=on);   // 회차·프로젝트 목록 공용
+  document.querySelectorAll('.hist-main,.hist-del,.hist-rename').forEach(b=>b.disabled=on);   // 회차·프로젝트 목록 공용
   $('#analyzeBtn').innerHTML= on?'<span class="spin"></span> 분석 중…':'신규 분석';
   if(on)$('#result').innerHTML='<div class="streaming"><div class="stream-head"><span class="dots"><i></i><i></i><i></i></span>조정치 에이전트가 회의록을 구조화하는 중… <span class="stream-sub">생성되는 내용이 아래에 실시간으로 표시됩니다</span></div><pre id="streamPre" class="stream-pre"></pre></div>';
 }
@@ -1974,6 +1974,7 @@ function renderProjList(){
       +`<span class="hist-title">${esc(p.name)}</span>`
       +`<span class="hist-t">회차 ${p.rounds.length}개</span>`
       +`</button>`
+      +`<button type="button" class="hist-rename" data-pid="${esc(p.id)}" title="프로젝트 이름 수정" aria-label="${esc(p.name)} 이름 수정">✎</button>`
       +`<button type="button" class="hist-del" data-pid="${esc(p.id)}" title="이 프로젝트 삭제" aria-label="${esc(p.name)} 삭제">✕</button>`
       +`</div>`;
   }).join('')+'</div>';
@@ -1988,6 +1989,22 @@ function renderProjList(){
       renderProjList();
       renderProjHistory();
       setDefaultRoundNo();
+    };
+  });
+  // 프로젝트별 이름 수정(사용자 요청): 더 이상 "현재 선택된 프로젝트"가 아니라, 클릭한 그 행의
+  // 프로젝트를 대상으로 한다 — 선택 여부와 무관하게 목록의 아무 항목이나 바로 수정 가능.
+  box.querySelectorAll('.hist-rename').forEach(btn=>{
+    btn.onclick=()=>{
+      const pid=btn.dataset.pid;
+      const p=ProjectStore.getProject(projState,pid);
+      if(!p)return;
+      const name=prompt('프로젝트 이름 수정', p.name);
+      if(name===null)return;                 // 취소
+      if(!name.trim()){ toast('이름은 비울 수 없습니다'); return; }
+      projState=ProjectStore.renameProject(projState,pid,name);
+      ProjectStore.saveProjects(projState);
+      renderProjList();
+      renderProjHistory();
     };
   });
   box.querySelectorAll('.hist-del').forEach(btn=>{
@@ -2144,18 +2161,6 @@ $('#newProjBtn').onclick=()=>{
   renderProjList();
   renderProjHistory();
   setDefaultRoundNo();
-};
-$('#renameProjBtn').onclick=()=>{
-  const cur=projState&&projState.current;
-  if(!cur){ toast('이름을 수정할 프로젝트를 먼저 선택하세요'); return; }
-  const p=ProjectStore.getProject(projState,cur);
-  const name=prompt('프로젝트 이름 수정', p?p.name:'');
-  if(name===null)return;                 // 취소
-  if(!name.trim()){ toast('이름은 비울 수 없습니다'); return; }
-  projState=ProjectStore.renameProject(projState,cur,name);
-  ProjectStore.saveProjects(projState);
-  renderProjList();
-  renderProjHistory();
 };
 projState=ProjectStore.loadProjects();
 renderProjList();
