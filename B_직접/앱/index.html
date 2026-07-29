@@ -318,7 +318,14 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .sec-h .rule{flex:1;height:1px;background:var(--line)}
 
   /* dept grid */
-  .depts{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:24px;align-items:start}
+  .depts{display:flex;flex-direction:column;gap:24px}
+  .dept-sort{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:0 2px 16px}
+  .dept-sort-label{font-size:13px;font-weight:700;color:var(--muted)}
+  .dept-sort-btns{display:flex;gap:6px;flex-wrap:wrap}
+  .dept-sort-btn{font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--muted);
+    background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}
+  .dept-sort-btn:hover{border-color:var(--primary);color:var(--primary-ink)}
+  .dept-sort-btn.on{background:var(--primary-soft);color:var(--primary-ink);border-color:transparent;font-weight:700}
   .dept{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
   .dept__h{display:flex;align-items:center;gap:8px;padding:16px 20px;border-bottom:1px solid var(--line2);
     background:var(--surface)}
@@ -654,6 +661,37 @@ let lastLoadedNote=null;   // 지금 열람 중인 회차의 원문 원본(자�
 // 매번 판정한다 — 그래야 숨김→해제처럼 원본으로 되돌아간 진짜 왕복 편집이 "편집 없음"으로 정확히 잡힌다.
 let editMode=false, boardSnapshot=null;
 let activeTab='summary';   // 'summary'|'dag'|'depts' — 재렌더(부서 편집 등)에도 유지
+let deptSortMode='name';   // 'name'|'count'|'priority' — 부서별 실행 항목 탭 정렬 기준, 재렌더에도 유지
+const DEPT_SORT_LABELS={name:'부서명순',count:'할 일 많은순',priority:'우선순위순'};
+// 부서 정렬 — priority는 크리티컬 패스 그래프 기준(병목 부서 최우선, 그다음 등장 단계가 이른 부서 순).
+function deptPriority(deptName,g){
+  let score=-1,minDepth=999;
+  (g.nodes||[]).forEach(n=>{
+    if(n.dept!==deptName)return;
+    const w=n.isBottleneck?2:(n.downstream>0?1:0);
+    if(w>score)score=w;
+    if(n.depth<minDepth)minDepth=n.depth;
+  });
+  return {score,minDepth};
+}
+function sortShownDepts(shown,mode,g){
+  const arr=shown.slice();
+  if(mode==='count'){
+    arr.sort((a,b)=>{
+      const ca=(a.dep.action_items||[]).length+(a.dep.documents||[]).length+(a.dep.decisions_needed||[]).length;
+      const cb=(b.dep.action_items||[]).length+(b.dep.documents||[]).length+(b.dep.decisions_needed||[]).length;
+      return (cb-ca)||(a.i-b.i);
+    });
+  }else if(mode==='priority'){
+    arr.sort((a,b)=>{
+      const pa=deptPriority(a.dep.dept,g), pb=deptPriority(b.dep.dept,g);
+      return (pb.score-pa.score)||(pa.minDepth-pb.minDepth)||(a.i-b.i);
+    });
+  }else{
+    arr.sort((a,b)=>String(a.dep.dept||'').localeCompare(String(b.dep.dept||''),'ko')||(a.i-b.i));
+  }
+  return arr;
+}
 
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1700);}
 function esc(s){return (s??'').toString().replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
@@ -1325,7 +1363,8 @@ function renderBoard(d, raw){
   // ── 탭3: 부서별 실행 항목 ──
   // 숨긴 부서: 편집 모드에선 흐리게라도 보여야 되돌릴 수 있고, 보기 모드에선 아예 안 보인다.
   const allDepts=d.by_department||[];
-  const shown=allDepts.map((dep,i)=>({dep:dep,i:i})).filter(x=>editMode||!x.dep._hidden);
+  const shownUnsorted=allDepts.map((dep,i)=>({dep:dep,i:i})).filter(x=>editMode||!x.dep._hidden);
+  const shown=sortShownDepts(shownUnsorted,deptSortMode,g);
   // 부서가 0개면 빈 <div class="depts"></div>만 남아 안내 문구만 보인다(다른 빈 상태와 톤 통일).
   // [부서 편집] 토글은 이 분기와 무관하게 탭 헤더에 항상 그려진다.
   const deptsBody = shown.length ? shown.map(x=>{const dep=x.dep;
@@ -1346,6 +1385,10 @@ function renderBoard(d, raw){
   hDepts+=`<div class="tab-head"><span class="tab-t">부서별 실행 항목</span>`+
     `<button type="button" class="acc-edit${editMode?' on':''}" id="deptEditBtn" aria-pressed="${editMode}">✎ 부서 편집</button>`+
     `<span class="cnt">${shown.length}</span></div>`;
+  hDepts+=`<div class="dept-sort"><span class="dept-sort-label">정렬: ${DEPT_SORT_LABELS[deptSortMode]}</span>`+
+    `<div class="dept-sort-btns">`+Object.keys(DEPT_SORT_LABELS).map(k=>
+      `<button type="button" class="dept-sort-btn${k===deptSortMode?' on':''}" data-sort="${k}">${DEPT_SORT_LABELS[k]}</button>`).join('')+
+    `</div></div>`;
   hDepts+=deptsHtml;
   hDepts+=droppedItemsHtml(diff);   // Task 4 — 직전 회차 대비 이번 회차에서 빠진 항목(diff null/미해당이면 빈 문자열)
 
@@ -1378,6 +1421,10 @@ function renderBoard(d, raw){
       rows[0].scrollIntoView({behavior:'smooth',block:'center'});
       setTimeout(()=>rows.forEach(r=>r.classList.remove('miss-flash')),2600);
     };
+  });
+  // 부서별 실행 항목 정렬 기준 전환.
+  document.querySelectorAll('.dept-sort-btn').forEach(btn=>{
+    btn.onclick=()=>{ deptSortMode=btn.dataset.sort; renderBoard(lastBoard); };
   });
   // 신규/변경/완료 필터(변경점 카드): 클릭한 태그의 항목만 표시, 같은 태그 재클릭 시 전체 표시로 해제.
   let cdActiveFilter=null;
