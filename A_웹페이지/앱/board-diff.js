@@ -143,13 +143,15 @@
   // ── 회차 간 주요 변경점 요약(메인 노출용) ──
   // diffBoards의 결과(diff)와 현재 보드(curBoard)로부터 신규/변경/완료 건수와
   // 대표 항목 목록을 만든다. 렌더러가 보드 최상단에 요약 카드로 표시한다.
-  //   { added, changed, done, total, items: [{tag, dept, kind, label, text, reason?}] }
+  //   { added, changed, done, total, items: [{tag, dept, kind, label, text, reason?}], moreItems }
   //   tag: 'new'|'changed'|'done'. items는 신규→변경→완료 순, 최대 6개.
+  //   moreItems: items에 못 들어간 나머지 전부(같은 모양, 개수 제한 없음) — "외 N건 더"를
+  //   실제 항목명과 함께 보여주고 싶은 렌더러가 쓴다(안 쓰면 무해, 기존 소비자엔 영향 없음).
   //   done 수는 diff.done(=confirmed+dropped) 길이. diff가 없으면 전부 0.
   // 순수·불변·DOM 미접근. 기형 입력에도 예외를 던지지 않는다.
   var KIND_LABEL = { action: '할 일', doc: '문서', decision: '의사결정' };
   function changeDigest(diff, curBoard) {
-    var out = { added: 0, changed: 0, done: 0, total: 0, items: [] };
+    var out = { added: 0, changed: 0, done: 0, total: 0, items: [], moreItems: [] };
     try {
       if (!diff || !diff.tags) return out;
       var cur = flatten(curBoard);
@@ -164,9 +166,11 @@
       });
       out.done = dones.length;
       out.total = out.added + out.changed + out.done;
-      out.items = adds.concat(chgs).concat(dones).slice(0, 6);
+      var full = adds.concat(chgs).concat(dones);
+      out.items = full.slice(0, 6);
+      out.moreItems = full.slice(6);
       return out;
-    } catch (e) { return { added: 0, changed: 0, done: 0, total: 0, items: [] }; }
+    } catch (e) { return { added: 0, changed: 0, done: 0, total: 0, items: [], moreItems: [] }; }
   }
 
   var api = { diffBoards: diffBoards, changeDigest: changeDigest };

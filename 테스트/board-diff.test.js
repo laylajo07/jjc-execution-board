@@ -301,18 +301,21 @@ test('changeDigest: items는 신규→변경→완료 순이고 각 항목에 ta
   assert.equal(digest.items[1].tag, 'changed');
 });
 
-test('changeDigest: items는 최대 6개로 자른다', () => {
+test('changeDigest: items는 최대 6개로 자르고, 나머지는 moreItems에 이름까지 담아 돌려준다', () => {
   const acts = [];
   for (let i = 0; i < 10; i++) acts.push(action('신규작업 ' + i, 'X', '', '진행중'));
   const cur = board([dept('CB본부', acts)]);
   const digest = changeDigest(diffBoards(board([]), cur), cur);
   // 첫 회차(prev 비어있음) 대비지만 여기선 prev=빈 보드라 전부 new
   assert.ok(digest.items.length <= 6, 'items 6개 이하');
+  assert.equal(digest.items.length + digest.moreItems.length, 10, 'items+moreItems가 전체를 커버');
+  assert.ok(digest.moreItems[0].text.length > 0, 'moreItems도 실제 항목명을 담고 있다');
+  assert.equal(digest.moreItems[0].dept, 'CB본부');
 });
 
 test('changeDigest: diff가 null이거나 기형이어도 예외 없이 0을 돌려준다', () => {
-  assert.deepEqual(changeDigest(null, board([])), { added: 0, changed: 0, done: 0, total: 0, items: [] });
-  assert.deepEqual(changeDigest({}, board([])), { added: 0, changed: 0, done: 0, total: 0, items: [] });
+  assert.deepEqual(changeDigest(null, board([])), { added: 0, changed: 0, done: 0, total: 0, items: [], moreItems: [] });
+  assert.deepEqual(changeDigest({}, board([])), { added: 0, changed: 0, done: 0, total: 0, items: [], moreItems: [] });
   assert.doesNotThrow(() => changeDigest({ tags: { 'x::action::0': 'new' } }, '문자열'));
 });
 
