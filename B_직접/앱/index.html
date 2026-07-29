@@ -303,8 +303,9 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .summary{background:var(--surface);
     border:1px solid var(--line);border-radius:var(--radius);padding:24px 28px;margin-bottom:16px}
   .summary .eyebrow{color:var(--primary-ink)}
+  .meta-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}   /* 회의 날짜+회의 성격 배지를 한 줄로(사용자 요청) */
   .mtype-badge{display:inline-flex;font-size:13.5px;font-weight:700;color:var(--primary-ink);
-    background:var(--primary-soft);border-radius:999px;padding:4px 12px;margin:8px 0 2px}
+    background:var(--primary-soft);border-radius:999px;padding:4px 12px;margin:0}
   .summary .updated{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:2px}
   .summary h2{margin:8px 0 14px;font-size:18px;line-height:1.4;letter-spacing:-.01em}
   .top3{display:grid;gap:9px}
@@ -1761,18 +1762,20 @@ function renderBoard(d, raw){
   // ── 탭2: 이번 회의 요약(SUMMARY) ──
   let hSummary='';
   hSummary+=secH('01','이번 회의 요약');
-  hSummary+=`<div class="summary"><div class="eyebrow">SUMMARY · ${esc(mt.datetime||'일시 미상')}</div>`;
-  // 회의 성격 자동 판단(사용자 요청) — 요약 탭 상단에 배지로 표시하고, 품질 점수 산정 방식도 성격별로 다르게.
+  // "SUMMARY" 킥커는 바로 위 탭 제목("이번 회의 요약")과 중복이라 제거 — 회의 날짜에 명확한 라벨을 달고,
+  // 회의 성격 배지를 같은 줄에 통합한다(군더더기 지적·명칭 명확화 요청).
+  hSummary+=`<div class="summary"><div class="meta-row"><div class="eyebrow">회의 날짜: ${esc(mt.datetime||'일시 미상')}</div>`;
   const meetingType=BoardDerive.classifyMeetingType(d,diff);
-  hSummary+=`<div class="mtype-badge">${esc(BoardDerive.MEETING_TYPE_LABEL[meetingType]||'')}</div>`;
+  hSummary+=`<div class="mtype-badge">${esc(BoardDerive.MEETING_TYPE_LABEL[meetingType]||'')}</div></div>`;
   // 지시 24: 회차가 있으면 최초 분석 vs 마지막 업데이트를 구분 표기. 없으면 기존 board updated_at 라인.
+  // "분석 시각"이라고 명시해 위 회의 날짜(회의가 열린 시점)와 다른 기준(AI가 분석을 실행한 시점)임을 구분한다.
   let stampLine='';
   if(curRound){
     const created=curRound.createdTs||curRound.ts, updated=curRound.ts;
     const cu=created?BoardCustom.fmtUpdatedAt(new Date(created)):'', uu=updated?BoardCustom.fmtUpdatedAt(new Date(updated)):'';
-    if(created&&updated&&created!==updated&&cu&&uu) stampLine=`최초 분석 ${esc(cu)} · 마지막 업데이트 ${esc(uu)}`;
-    else if(uu) stampLine=`분석 ${esc(uu)}`;
-  } else if(lastUpdatedIso){ const u=BoardCustom.fmtUpdatedAt(new Date(lastUpdatedIso)); if(u) stampLine=`업데이트 ${esc(u)}`; }
+    if(created&&updated&&created!==updated&&cu&&uu) stampLine=`최초 분석 시각: ${esc(cu)} · 마지막 업데이트 시각: ${esc(uu)}`;
+    else if(uu) stampLine=`분석 시각: ${esc(uu)}`;
+  } else if(lastUpdatedIso){ const u=BoardCustom.fmtUpdatedAt(new Date(lastUpdatedIso)); if(u) stampLine=`업데이트 시각: ${esc(u)}`; }
   if(stampLine) hSummary+=`<div class="updated mono">${stampLine}</div>`;
   const qs=BoardDerive.qualityScore(d);
   if(qs.total>0){
