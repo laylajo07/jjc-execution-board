@@ -581,7 +581,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 <header class="top">
   <div class="brand">
     <span class="glyph">조</span>
-    <span><b>조정치</b><span>회의록 → 부서별 실행보드</span></span>
+    <span><b>조정치</b><span>회의가 결과로 바뀌는 곳</span></span>
   </div>
   <div class="spacer"></div>
   <div class="ctl">
@@ -605,7 +605,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   <aside class="console">
     <section class="card pad">
       <div class="eyebrow">INPUT · 회의록</div>
-      <h1>회의록을 넣고 분석</h1>
+      <h1>회의록을 넣고 실행보드로</h1>
       <p class="lead" id="lead">형식은 자유입니다. 녹취본·메모·카톡 붙여넣기 모두 됩니다.</p>
 
       <div id="autoBox" style="display:none">
@@ -671,7 +671,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
         <div>
           <div class="art">▤</div>
           <h3>실행보드가 여기에 나타납니다</h3>
-          <p>왼쪽에서 회의록을 넣고 <b>분석</b>하면 부서별 할 일·문서·의사결정과 진행 순서가 정리됩니다.</p>
+          <p>회의록을 분석하면 부서별 할 일이 정리되고, 회차를 누적하면 1차부터 지금까지 무엇이 결정되고 무엇이 남았는지 한눈에 볼 수 있습니다.</p>
         </div>
       </div>
     </div>
@@ -1104,7 +1104,7 @@ function applyMode(){
   AUTO=true;
   $('#mode').className='pill on';$('#mode').textContent='⚡ 자동 모드';
   $('#autoBox').style.display='block';$('#copyFlow').style.display='none';$('#analyzeBtn').style.display='';
-  $('#lead').textContent='1. 회의록을 선택하거나 직접 붙여넣기\n2. 해당 회의록의 프로젝트를 선택 또는 신규 생성\n3. 회의 회차를 입력하고 분석 시작\n\n💡 회차를 누적하면 이전 회의 대비 변경사항을 자동으로 추적할 수 있습니다.';
+  $('#lead').textContent='1. 회의록을 선택하거나 직접 붙여넣기\n2. 해당 회의록의 프로젝트를 선택 또는 신규 생성\n3. 회의 회차를 입력하고 분석 시작\n\n💡 회차를 거듭할수록 무엇이 결정됐고, 무엇이 남았는지 자동으로 추적됩니다.';
   $('#modelSel').disabled=false;loadNotes();
 }
 function initMode(){
@@ -1844,7 +1844,7 @@ function renderError(msg){$('#result').innerHTML=`<div class="empty"><div><div c
 // 자체감사: 프로젝트를 바꿔도 이전 프로젝트의 보드·원문이 화면에 그대로 남아 있었다(회차 저장 여부와
 // 무관하게 착각을 유발) — 프로젝트 전환 시 결과 패널을 초기 안내 상태로 되돌린다.
 function clearResultPanel(keepNote){
-  $('#result').innerHTML='<div class="empty"><div><div class="art">▤</div><h3>실행보드가 여기에 나타납니다</h3><p>왼쪽에서 회의록을 넣고 <b>분석</b>하면 부서별 할 일·문서·의사결정과 진행 순서가 정리됩니다.</p></div></div>';
+  $('#result').innerHTML='<div class="empty"><div><div class="art">▤</div><h3>실행보드가 여기에 나타납니다</h3><p>회의록을 분석하면 부서별 할 일이 정리되고, 회차를 누적하면 1차부터 지금까지 무엇이 결정되고 무엇이 남았는지 한눈에 볼 수 있습니다.</p></div></div>';
   ['#copyMdBtn','#dlJsonBtn','#printBtn'].forEach(s=>{ if($(s)) $(s).disabled=true; });
   lastData=null; lastBoard=null; lastUpdatedIso=null; lastMarkdown=''; boardSnapshot=null; editMode=false;
   // 새 프로젝트 생성(keepNote=true)은 "아직 어느 프로젝트에도 저장 안 된 입력 중인 회의록"을
