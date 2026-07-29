@@ -155,7 +155,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .brand span{font-size:11.5px;color:var(--muted);letter-spacing:.01em;font-weight:600}
   .top .spacer{margin-left:auto}
   .ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .pill{font-size:11.5px;font-weight:700;border-radius:999px;padding:5px 11px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .pill{font-size:12px;font-weight:700;border-radius:999px;padding:5px 11px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
   /* 앱 간 비교 링크 */
   .cmp-btn{cursor:pointer;background:var(--primary-soft);color:var(--primary-ink);border-color:transparent}
   .cmp-btn:hover{filter:brightness(.97);border-color:var(--primary)}
@@ -206,19 +206,28 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 
   /* ── Shell ── */
   .app{max-width:1460px;margin:0 auto;padding:clamp(20px,3vw,44px) clamp(20px,4vw,56px);
-    display:grid;grid-template-columns:minmax(330px,390px) minmax(0,1fr);gap:clamp(24px,2.6vw,36px);align-items:start}
+    display:grid;grid-template-columns:minmax(330px,390px) minmax(0,1fr);gap:clamp(24px,2.6vw,36px);align-items:start;
+    transition:grid-template-columns .16s}
   @media(max-width:1000px){.app{grid-template-columns:1fr}}
+  /* Collapsible Sidebar — 데이터·상태는 그대로 두고 워크스페이스 폭만 넓힌다(사이드바 토글 버튼으로 전환). */
+  .app.no-sidebar{grid-template-columns:1fr}
+  .app.no-sidebar .console{display:none}
 
   /* ── Console (left) ── */
   .console{position:sticky;top:82px;display:flex;flex-direction:column;gap:18px}
   @media(max-width:1000px){.console{position:static}}
+
+  /* Workspace Context Header — 지금 보고 있는 게 어느 프로젝트·회차인지 보드 상단에 표시 */
+  .workspace-ctx{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-bottom:10px}
+  .workspace-ctx .wc-proj{font-weight:800;color:var(--ink2)}
+  .workspace-ctx .wc-sep{color:var(--faint)}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
   .card.pad{padding:24px}
   .eyebrow{font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--primary)}
   .console h1{margin:6px 0 3px;font-size:18px;font-weight:800;letter-spacing:-.01em;color:var(--ink)}
   .console .lead{margin:0 0 14px;font-size:13px;color:var(--muted);white-space:pre-line;line-height:1.55}
   .field-label{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;font-size:15px;font-weight:700;color:var(--ink2);margin:14px 0 6px}
-  .field-label .hint{font-size:11.5px;font-weight:500;color:var(--faint);white-space:nowrap;margin-left:auto}
+  .field-label .hint{font-size:12px;font-weight:500;color:var(--faint);white-space:nowrap;margin-left:auto}
   .field-label .hint.warn{color:var(--est);font-weight:700}
   select.note, textarea, .paste{width:100%;font-family:var(--sans);font-size:13px;color:var(--ink);
     background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:11px}
@@ -300,6 +309,9 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     border-radius:var(--radius);padding:18px 20px;margin-bottom:20px}
   .change-digest .cd-h{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:12px}
   .change-digest .cd-title{font-size:18px;font-weight:800;letter-spacing:-.01em;color:var(--ink)}
+  /* 카드 간 정보 위계: 참고용 시각화 대시보드는 실행이 필요한 카드(변경점·체크리스트)보다 한 단 낮은 톤으로 */
+  .change-digest.insights{background:var(--surface2);border-style:dashed}
+  .change-digest.insights .cd-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
   .checklist-pre{margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--sans);font-size:13px;line-height:1.6;color:var(--ink2)}
   /* 시각화 5종(#15-19) 공통(#20): 최소 13px 텍스트, 반응형(viewBox·%폭), 긴 이름은 줄바꿈 */
   .viz-block{margin-top:18px}
@@ -400,12 +412,18 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   table.t tr:last-child td{border-bottom:0}
   table.t col.c-who{width:6.5em} table.t col.c-when{width:9em} table.t col.c-tag{width:5.4em}   /* 담당/기한/상태 최소 너비 고정 — "예시 2026-07-21"(예시 목표일 접두 포함)까지 한 줄에 잘리지 않게(본문 13px 기준) */
   td.who,td.when{font-family:var(--mono);font-size:13px;color:var(--ink2);overflow-wrap:normal;word-break:normal}
+  /* 좁은 화면: 업무명·담당·기한·상태만 기본 노출, 근거(basis)는 숨겨 핵심 열에 폭을 더 준다 */
+  @media(max-width:480px){
+    table.t col.c-who{width:4.6em} table.t col.c-when{width:7.2em}
+    .basis{display:none}
+  }
   /* 담당/기한의 긴 주석("미정 (원문 …)")은 2줄로 자르고 전체 값은 title 툴팁·원본 마크다운에서. 산출물은 원본 값 그대로. */
   .clip2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
   .basis{color:var(--muted);font-size:13px;margin-top:2px}
   [hidden]{display:none!important}   /* 클래스의 display가 hidden 속성을 덮지 않도록 (재구성본 배지) */
-  .tag{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:700;border-radius:5px;padding:2px 6px;white-space:nowrap}
+  .tag{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:700;border-radius:5px;padding:2px 6px;white-space:nowrap}
   .tag.ok{color:var(--ok);background:var(--ok-bg)} .tag.est{color:var(--est);background:var(--est-bg)} .tag.chk{color:var(--chk);background:var(--chk-bg)}
+  .tag.gray{color:var(--muted);background:var(--inset)}   /* 지시#31: 빨강은 지연·오류·필수조치 전용 — '추정'은 보조정보로 회색 */
 
   /* signature: critical-path rail */
   .rail{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:8px 18px 18px}
@@ -490,9 +508,10 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 
   /* 탭(요약/크리티컬 패스/부서별 실행 항목) — 화면 스크롤을 줄이려 섹션별 전체 페이지 스크롤 대신
      탭으로 전환한다(사용자 요청). 재렌더(부서 편집 등)에도 activeTab을 유지해 탭이 안 튄다. */
-  .tabs{display:flex;gap:2px;margin:24px 2px 0;border-bottom:1px solid var(--line2)}
+  .tabs{display:flex;gap:2px;margin:24px 2px 0;border-bottom:1px solid var(--line2);
+    overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
   .tab-btn{appearance:none;background:none;border:none;padding:10px 16px;font-size:13px;font-weight:700;
-    color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--sans)}
+    color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--sans);flex:none}
   .tab-btn:hover{color:var(--ink)}
   .tab-btn.on{color:var(--primary-ink);border-bottom-color:var(--primary)}
   .tabpanel{padding-top:2px}
@@ -566,6 +585,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   </div>
   <div class="spacer"></div>
   <div class="ctl">
+    <button class="iconbtn" id="sidebarToggleBtn" title="사이드바 접기/펼치기" aria-expanded="true">☰</button>
     <span id="mode" class="pill">모드 확인 중…</span>
     <span class="selwrap"><select class="model" id="modelSel" title="자동 모드에서 사용할 모델">
       <option value="">모델: 러너 기본</option>
@@ -635,6 +655,11 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 
   <!-- 보드 -->
   <main class="board">
+    <div class="workspace-ctx" id="workspaceCtx" hidden>
+      <span class="wc-proj" id="wcProj"></span>
+      <span class="wc-sep">·</span>
+      <span class="wc-round" id="wcRound"></span>
+    </div>
     <div class="board-tools">
       <button class="btn" id="copyMdBtn" disabled>마크다운 복사</button>
       <span class="tag est" id="mdEditBadge" style="align-self:center" hidden>재구성본</span>
@@ -963,9 +988,13 @@ function nowIso(){
 }
 async function copy(text){try{await navigator.clipboard.writeText(text);toast('복사됐습니다');}catch(e){
   const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('복사됐습니다');}}
-const sc = st => ({'확정':'ok','추정':'est','확인필요':'chk'}[st]||'chk');
+// 상태 색상 role(지시#31): Green=완료, Amber=검토 필요, Gray=보조정보(추정). Red(chk)는 상태 태그에서
+// 더는 안 쓰고 지연·오류·필수조치(병목 강조·삭제 버튼 등) 전용으로 남겨 둔다 — 내부 비교값은 그대로.
+const sc = st => ({'확정':'ok','추정':'gray','확인필요':'est'}[st]||'est');
 // 화면 표시용 상태 문구 — 내부 데이터값·비교 로직(sc 등)은 그대로 두고 라벨만 사용자 친화적으로 바꾼다.
 const statusLabel = st => ({'확인필요':'검토 필요','확정':'완료'}[st]||st);
+// 지시#30: 상태를 색상 하나로만 구분하지 않고 아이콘을 함께 표기한다.
+const statusIcon = st => ({'확정':'✓','확인필요':'⚠','추정':'~'}[st]||'');
 
 /* ⚙️ 부서 설정 패널 — 로컬 임시 상태에서 편집, [저장] 눌러야 localStorage에 반영 */
 let deptTempDepts=[], deptTempMaps=[];
@@ -1041,6 +1070,33 @@ document.addEventListener('keydown',e=>{
 $('#themeBtn').onclick=()=>{const cur=document.documentElement.getAttribute('data-theme');
   const next=cur==='dark'?'light':(cur==='light'?'dark':(matchMedia('(prefers-color-scheme:dark)').matches?'light':'dark'));
   document.documentElement.setAttribute('data-theme',next);localStorage.setItem('jjc-theme',next);};
+
+/* Collapsible Sidebar — 입력 사이드바를 접어 워크스페이스 폭을 넓힌다. 데이터·상태는 그대로, 표시만 전환. */
+(function(){
+  const appEl=document.querySelector('.app'), btn=$('#sidebarToggleBtn');
+  function apply(collapsed){
+    appEl.classList.toggle('no-sidebar',collapsed);
+    btn.setAttribute('aria-expanded',String(!collapsed));
+    btn.title=collapsed?'사이드바 펼치기':'사이드바 접기/펼치기';
+  }
+  apply(localStorage.getItem('jjc-sidebar-collapsed')==='1');
+  btn.onclick=()=>{
+    const next=!appEl.classList.contains('no-sidebar');
+    apply(next);
+    localStorage.setItem('jjc-sidebar-collapsed',next?'1':'0');
+  };
+})();
+
+/* Workspace Context Header — 지금 보고 있는 보드가 어느 프로젝트·회차인지 상단에 표시(renderBoard에서 호출). */
+function updateWorkspaceCtx(){
+  const el=$('#workspaceCtx'); if(!el)return;
+  const proj=(projState&&projState.current)?ProjectStore.getProject(projState,projState.current):null;
+  if(!proj){ el.hidden=true; return; }
+  const round=currentRoundId?(proj.rounds||[]).find(r=>r.id===currentRoundId):null;
+  $('#wcProj').textContent=proj.name||'(이름 없음)';
+  $('#wcRound').textContent=round?`${round.roundNo}차 · ${round.title||'제목 없음'}`:'회차 미지정';
+  el.hidden=false;
+}
 
 /* mode: 자동 모드 고정 노출 — 복붙 모드 UI(#copyFlow)는 화면에서 숨김 */
 async function probeRunner(){try{const r=await fetch('/api/health',{cache:'no-store'});return r.ok;}catch(e){return false;}}
@@ -1198,15 +1254,15 @@ function normalize(d){
 }
 
 /* render helpers */
-function tag(st){return st?`<span class="tag ${sc(st)}">${esc(statusLabel(st))}</span>`:'';}
+function tag(st){return st?`<span class="tag ${sc(st)}">${statusIcon(st)?esc(statusIcon(st))+' ':''}${esc(statusLabel(st))}</span>`:'';}
 // Task 4: 회차 히스토리 diff 배지. diffTags는 board-diff.js의 {"deptIdx::dept::kind::idx":'new'|'changed'|'done'|'same'}
 // 맵(무프로젝트·첫 회차면 null) — null/미매치면 빈 문자열이라 기존 렌더와 바이트 동일(회귀 없음).
 // deptIdx는 by_department 배열 내 순번 — 같은 dept명이 두 번 나와도 key가 충돌하지 않게 한다.
 function diffBadge(diffTags,deptIdx,dept,kind,idx){
   if(!diffTags)return '';
   const t=diffTags[deptIdx+'::'+dept+'::'+kind+'::'+idx];
-  if(t==='new')return ' <span class="tag ok">새로 추가됨</span>';
-  if(t==='changed')return ' <span class="tag est">내용 수정됨</span>';
+  if(t==='new')return ' <span class="tag ok">＋ 새로 추가됨</span>';
+  if(t==='changed')return ' <span class="tag est">✎ 내용 수정됨</span>';
   if(t==='done')return ' <span class="tag" style="color:var(--muted)">완료</span>';
   return '';
 }
@@ -1608,7 +1664,7 @@ function renderBoard(d, raw){
   hSummary+='</div>';
 
   // ── 시각화 5종(#15-19) — 요약 탭 상단 가까이에 모아 하나의 인사이트 대시보드로 ──
-  hSummary+='<div class="change-digest"><div class="cd-h"><span class="cd-title">회의록 인사이트</span></div>'
+  hSummary+='<div class="change-digest insights"><div class="cd-h"><span class="cd-title">참고 · 회의록 인사이트</span></div>'
     +'<div class="viz-block"><div class="viz-title">회의록 품질 점수 트렌드</div>'+qualityTrendHtml(histProj)+qualityChangeListHtml(histProj)+'</div>'
     +'<div class="viz-block"><div class="viz-title">미결 → 진행중 → 완료 흐름</div>'+progressFlowHtml(histProj)+'</div>'
     +'<div class="viz-grid2">'
@@ -1621,20 +1677,20 @@ function renderBoard(d, raw){
   if(digest && digest.total>0){
     hSummary+='<div class="change-digest"><div class="cd-h"><span class="cd-title">이전 회차 대비 주요 변경점</span>'+
        `<span class="cd-counts">`+
-         `<button type="button" class="tag ok cd-filter-btn" data-filter="new" aria-pressed="false">신규 ${digest.added}</button>`+
-         `<button type="button" class="tag est cd-filter-btn" data-filter="changed" aria-pressed="false">변경 ${digest.changed}</button>`+
-         `<button type="button" class="tag cd-done cd-filter-btn" data-filter="done" aria-pressed="false">완료 ${digest.done}</button>`+
+         `<button type="button" class="tag ok cd-filter-btn" data-filter="new" aria-pressed="false">＋ 신규 ${digest.added}</button>`+
+         `<button type="button" class="tag est cd-filter-btn" data-filter="changed" aria-pressed="false">✎ 변경 ${digest.changed}</button>`+
+         `<button type="button" class="tag cd-done cd-filter-btn" data-filter="done" aria-pressed="false">✓ 완료 ${digest.done}</button>`+
        `</span></div>`;
     hSummary+='<div class="cd-items">'+digest.items.map(it=>{
       const cls=it.tag==='new'?'ok':(it.tag==='changed'?'est':'cd-done');
-      const lab=it.tag==='new'?'새로 추가됨':(it.tag==='changed'?'내용 수정됨':'완료');
+      const lab=it.tag==='new'?'＋ 새로 추가됨':(it.tag==='changed'?'✎ 내용 수정됨':'✓ 완료');
       const strike=(it.tag==='done'&&it.reason==='dropped')?' style="text-decoration:line-through"':'';
       return `<div class="cd-it" data-tag="${it.tag}"><span class="tag ${cls}">${lab}</span><span class="cd-txt"${strike}>${esc(it.text)}</span><span class="cd-dept mono">${esc(it.dept)}${it.label?' · '+esc(it.label):''}</span></div>`;
     }).join('')+'</div>';
     if(digest.moreItems&&digest.moreItems.length){
       hSummary+=`<details class="more cd-more-detail"><summary>외 ${digest.moreItems.length}건 더</summary><div class="cd-items">`+
         digest.moreItems.map(it=>{
-          const lab=it.tag==='new'?'새로 추가됨':(it.tag==='changed'?'내용 수정됨':'완료');
+          const lab=it.tag==='new'?'＋ 새로 추가됨':(it.tag==='changed'?'✎ 내용 수정됨':'✓ 완료');
           return `<div class="cd-it" data-tag="${it.tag}"><span class="tag ${it.tag==='new'?'ok':(it.tag==='changed'?'est':'cd-done')}">${lab}</span><span class="cd-txt">${esc(it.text)}</span><span class="cd-dept mono">${esc(it.dept)}${it.label?' · '+esc(it.label):''}</span></div>`;
         }).join('')+
         `</div></details>`;
@@ -1726,6 +1782,7 @@ function renderBoard(d, raw){
 
   h+=`<details class="raw"><summary>원본 마크다운 / JSON</summary><pre>${esc(lastMarkdown||'')}\n\n${esc(JSON.stringify(lastData,null,2))}</pre></details>`;
   $('#result').innerHTML=h;
+  updateWorkspaceCtx();
   restoreAccOpen(accOpen);   // 편집할 때마다 부서 목록이 접히면 못 쓴다
   bindDeptEdit(allDepts);
   document.querySelectorAll('.tab-btn').forEach(btn=>{ btn.onclick=()=>switchTab(btn.dataset.tab); });

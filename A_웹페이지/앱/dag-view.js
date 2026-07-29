@@ -165,9 +165,13 @@
     return h + '</div>';
   }
 
-  function statusClass(st) { return { '확정': 'ok', '추정': 'est', '확인필요': 'chk' }[st] || 'chk'; }
+  // 상태 색상 role(지시#31): Green=완료, Amber=검토 필요, Gray=보조정보(추정) — index.html의 sc()와 동일 규칙.
+  // Red(chk)는 상태 태그에서 더는 안 쓰고 지연·오류·필수조치(병목 강조 등) 전용으로 남겨 둔다.
+  function statusClass(st) { return { '확정': 'ok', '추정': 'gray', '확인필요': 'est' }[st] || 'est'; }
   // 화면 표시용 상태 문구(내부 데이터값·비교 로직은 그대로 두고 라벨만 사용자 친화적으로 바꾼다).
   function statusLabel(st) { return { '확인필요': '검토 필요', '확정': '완료' }[st] || st; }
+  // 지시#30: 상태를 색상 하나로만 구분하지 않고 아이콘을 함께 표기한다. index.html의 statusIcon()과 동일 규칙.
+  function statusIcon(st) { return { '확정': '✓', '확인필요': '⚠', '추정': '~' }[st] || ''; }
 
   // 노드 상세 패널 본문(순수 문자열). detail은 board-derive.buildDetailMap의 항목.
   function nodePanelHtml(node, detail, graph) {
@@ -188,7 +192,7 @@
       h += '<dl class="np-facts">'
         + '<dt>담당</dt><dd>' + esc(detail.owner || '담당자 미정') + '</dd>'
         + '<dt>기한</dt><dd>' + esc(detail.due || '미정') + '</dd>'
-        + '<dt>상태</dt><dd>' + (detail.status ? '<span class="tag ' + statusClass(detail.status) + '">' + esc(statusLabel(detail.status)) + '</span>' : '미정') + '</dd>'
+        + '<dt>상태</dt><dd>' + (detail.status ? '<span class="tag ' + statusClass(detail.status) + '">' + (statusIcon(detail.status) ? esc(statusIcon(detail.status)) + ' ' : '') + esc(statusLabel(detail.status)) + '</span>' : '미정') + '</dd>'
         + '</dl>';
       if (detail.basis) h += '<div class="np-basis">↳ ' + esc(detail.basis) + '</div>';
     } else {

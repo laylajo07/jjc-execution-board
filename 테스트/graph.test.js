@@ -631,7 +631,7 @@ test('nodePanelHtml: 매칭 상세는 담당/기한/상태를 담고, 병목은 
   const html = nodePanelHtml(n, { matched: true, owner: '박리드', due: '7/15', status: '확인필요', basis: '' }, g);
   assert.match(html, /박리드/);
   assert.match(html, /7\/15/);
-  assert.match(html, /<span class="tag chk">검토 필요<\/span>/);
+  assert.match(html, /<span class="tag est">⚠ 검토 필요<\/span>/);
   assert.match(html, /1개 항목이 이 작업 완료를 기다리는 중/);
 });
 
