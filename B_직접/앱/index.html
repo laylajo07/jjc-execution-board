@@ -65,12 +65,16 @@ STEP 4. 전체 선후행을 위상정렬해 "권장 진행 순서(sequence)"를 
         - 부서로 묶지 말고, 같은 부서 안에서도 선후행이 있으면 각각 별도 노드로 나눠 blocked_by로 끝까지 잇는다
           (예: 법률검토 → 가이드라인 수립 → 문구 초안 → 발송 로직 = 4단계). 뭉치면 크리티컬 패스 깊이가 붕괴된다.
         - 크리티컬 패스가 실제 최장 체인 길이(단계 수)만큼 나오도록 선후행을 빠짐없이 연결한다.
+        - **첫 단계를 제외한 모든 노드는 blocked_by가 최소 1개 이상이어야 한다.** 정말로 다른 무엇과도
+          의존관계가 없는 완전히 독립적인 병렬 작업일 때만 예외로 비워 둔다. blocked_by를 비우면 그
+          노드는 다이어그램에서 1단계로 밀려나 크리티컬 패스가 가로로 퍼지고 진행 순서가 사라진다.
 STEP 5. 날짜 정규화: 상대표현(이달 말/다음주 화요일 등)은 회의일 기준 해석을 시도하되,
         회의일이 불명확하면 원문 그대로 두고 status "확인필요".
 STEP 6. 부서별 공유 메시지 초안 작성:
         - chat: 메신저용 3~5줄, 이모지 최소, 담당·기한·요청사항 명확. 확인필요 항목은 질문형으로.
         - email: 정식 인사말+본문+마무리. 제목 포함.
-STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단정한 항목이 없는지 자기점검.
+STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단정한 항목이 없는지, blocked_by가 빈
+        sequence 노드가 첫 단계 외에도 2개 이상인지(있다면 정말 독립적인지 재검토) 자기점검.
 
 ================================================================
 [출력 형식] — 아래 순서로 정확히 두 블록을 출력
@@ -231,10 +235,6 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .btn.primary:hover{filter:brightness(1.08)}
   .btn.block{width:100%;justify-content:center;display:inline-flex;align-items:center;gap:7px}
   .btn.icon{width:44px;padding:11px 0;justify-content:center;flex:none}
-  .mic-btn{width:auto;height:auto;padding:2px 9px;font-size:13px;border-radius:999px}
-  .mic-btn.rec{background:var(--chk-bg);border-color:transparent;color:var(--chk);animation:micpulse 1.4s ease-in-out infinite alternate}
-  .mic-btn:disabled{opacity:.4;cursor:not-allowed}
-  @keyframes micpulse{to{opacity:.45}}
   .flow{margin-top:16px;border-top:1px dashed var(--line);padding-top:14px}
   .flow ol{margin:0 0 12px;padding:0;list-style:none;counter-reset:s}
   .flow li{position:relative;padding:0 0 9px 26px;font-size:13px;color:var(--muted)}
@@ -313,6 +313,8 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .trend-axis{stroke:var(--line);stroke-width:1}
   .trend-val{font-size:12px;font-weight:700;fill:var(--ink)}
   .trend-lab{font-size:12px;fill:var(--muted)}
+  .trend-reasons{margin-top:10px;display:flex;flex-direction:column;gap:5px}
+  .trend-reason-row{font-size:12.5px;color:var(--muted);line-height:1.5;word-break:keep-all;overflow-wrap:break-word}
   .flow-legend{display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap}
   .flow-lg{display:flex;align-items:center;gap:5px;font-size:12.5px;color:var(--muted)}
   .flow-dot{width:8px;height:8px;border-radius:50%;flex:none}
@@ -605,7 +607,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
       <div class="field-label">회의 회차 입력하기(숫자만 가능) <span class="hint" id="roundHint">숫자 · 파일명에서 자동 제안</span></div>
       <input class="note" id="roundNoInput" type="number" min="1" step="1" inputmode="numeric" placeholder="예: 2" style="width:100%">
 
-      <div class="field-label">직접 붙여넣기 <button type="button" class="btn icon mic-btn" id="micBtn" title="음성 입력">🎤</button></div>
+      <div class="field-label">직접 붙여넣기</div>
       <textarea id="noteText" placeholder="여기에 회의록을 붙여넣으세요…"></textarea>
 
       <div class="row" style="margin-top:14px;gap:8px">
@@ -837,6 +839,51 @@ function qualityTrendHtml(histProj){
     marks+`</svg>`;
 }
 
+// 트렌드 그래프 아래 "왜 바뀌었는지" 1줄 설명(신규) — qualityScore가 이미 추적하는 지표
+// (담당자 미정·기한 미확정·의사결정 미확정 수)와 '확인필요' 상태 항목 수를 전/현재 회차 사이에서
+// 비교해 문구를 만든다. 지어내지 않는다 — 실제로 움직인 지표만 문장에 넣고, 아무것도 안 움직였으면
+// 점수만 그대로 알린다.
+function reviewPendingCount(board){
+  let n=0;
+  (board.by_department||[]).forEach(dep=>{
+    (dep.action_items||[]).forEach(a=>{ if(a.status==='확인필요')n++; });
+    (dep.documents||[]).forEach(x=>{ if(x.status==='확인필요')n++; });
+  });
+  return n;
+}
+function qualityChangeReason(roundNo, prevBoard, curBoard){
+  const prevQ=BoardDerive.qualityScore(prevBoard), curQ=BoardDerive.qualityScore(curBoard);
+  const delta=curQ.score-prevQ.score;
+  if(delta===0) return `${roundNo}차 — 이전 회차와 점수 동일(${curQ.score}점)`;
+  const up=delta>0;
+  const ownerFixed=prevQ.ownerMissing-curQ.ownerMissing;
+  const decisionFixed=prevQ.decisionOpen-curQ.decisionOpen;
+  const dueFixed=prevQ.dueMissing-curQ.dueMissing;
+  const reviewFixed=reviewPendingCount(prevBoard)-reviewPendingCount(curBoard);
+  const reasons=[];
+  if(up){
+    if(reviewFixed>0)reasons.push({n:reviewFixed,t:`미결 사항 ${reviewFixed}건 해소`});
+    if(ownerFixed>0)reasons.push({n:ownerFixed,t:`담당자 지정 ${ownerFixed}건 완료`});
+    if(decisionFixed>0)reasons.push({n:decisionFixed,t:`의사결정 ${decisionFixed}건 확정`});
+    if(dueFixed>0)reasons.push({n:dueFixed,t:`기한 확정 항목 ${dueFixed}건 증가`});
+  }else{
+    if(reviewFixed<0)reasons.push({n:-reviewFixed,t:`검토 필요 항목 ${-reviewFixed}건 증가`});
+    if(ownerFixed<0)reasons.push({n:-ownerFixed,t:`담당자 미정 항목 ${-ownerFixed}건 증가`});
+    if(decisionFixed<0)reasons.push({n:-decisionFixed,t:`미확정 의사결정 ${-decisionFixed}건 증가`});
+    if(dueFixed<0)reasons.push({n:-dueFixed,t:`기한 미확정 항목 ${-dueFixed}건 증가`});
+  }
+  reasons.sort((a,b)=>b.n-a.n);
+  const tail=reasons.length?reasons.slice(0,2).map(r=>r.t).join(', '):'항목 세부 내용 변경';
+  return `${roundNo}차에서 ${Math.abs(delta)}점 ${up?'상승':'하락'} — ${tail}`;
+}
+function qualityChangeListHtml(histProj){
+  const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
+  if(rounds.length<2) return '';
+  const boards=rounds.map(r=>normalize(r.raw));
+  const lines=rounds.map((r,i)=>i===0?`${r.roundNo}차 — 첫 번째 회의입니다`:qualityChangeReason(r.roundNo,boards[i-1],boards[i]));
+  return `<div class="trend-reasons">`+lines.map(t=>`<div class="trend-reason-row">${esc(t)}</div>`).join('')+`</div>`;
+}
+
 // #16 미결 → 진행중 → 완료 흐름(회차별 스택 바) — status:'확정'=완료, '확인필요'=미결, 그 외=진행중.
 function progressFlowHtml(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
@@ -1014,28 +1061,6 @@ async function loadNotes(){
   }catch(e){}
 }
 $('#reloadNotes').onclick=loadNotes;
-/* 음성 입력(#14) — Web Speech API. 지원 브라우저(Chrome·Edge 등)에서만 동작, 없으면 버튼을 비활성화. */
-(function(){
-  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-  const btn=$('#micBtn');
-  if(!SR){ btn.disabled=true; btn.title='이 브라우저는 음성 입력을 지원하지 않습니다(Chrome·Edge 등에서 사용하세요)'; return; }
-  let rec=null, listening=false;
-  btn.onclick=()=>{
-    if(listening){ rec&&rec.stop(); return; }
-    rec=new SR(); rec.lang='ko-KR'; rec.continuous=true; rec.interimResults=false;
-    rec.onstart=()=>{ listening=true; btn.classList.add('rec'); btn.title='듣는 중… 다시 누르면 멈춤'; };
-    rec.onerror=(e)=>{ toast('음성 인식 오류: '+(e.error||'알 수 없음')); };
-    rec.onend=()=>{ listening=false; btn.classList.remove('rec'); btn.title='음성 입력'; };
-    rec.onresult=(e)=>{
-      let text='';
-      for(let i=e.resultIndex;i<e.results.length;i++){ if(e.results[i].isFinal) text+=e.results[i][0].transcript; }
-      if(!text)return;
-      const ta=$('#noteText'); const sep=ta.value&&!ta.value.endsWith('\n')?'\n':'';
-      ta.value+=sep+text.trim();
-    };
-    try{ rec.start(); }catch(e){ toast('마이크를 시작할 수 없습니다'); }
-  };
-})();
 $('#noteSelect').onchange=async e=>{const name=e.target.value;if(!name)return;
   try{const j=await (await fetch('/api/note?name='+encodeURIComponent(name))).json();$('#noteText').value=j.content||'';}catch(e){}
   setDefaultRoundNo();};
@@ -1133,13 +1158,25 @@ function parseResult(text){
 }
 
 /* normalize A/B schemas */
+// 상태값 정규화 — 모델은 프롬프트상 '확정|추정|확인필요' 3종만 쓰기로 돼 있지만, 실제로는(특히
+// 구조화 출력을 강제하지 않는 OpenAI 자동 모드에서) 회의록 원문 표현을 그대로 따라 "완료"·"진행" 같은
+// 동의어를 낼 때가 있다. 담당자별 완료율(#18)·크리티컬 패스 진행률(#19)이 status==='확정' 정확 비교라
+// 이런 동의어가 섞이면 항상 0%로 보이는 버그가 생긴다 — normalize 단계에서 한 번에 흡수한다.
+// 빈 값은 그대로 빈 값으로 둔다(과거부터 "표시할 태그 없음"을 뜻했으므로 동작 변경 없음).
+function canonStatus(v){
+  const s=(v==null?'':String(v)).trim();
+  if(!s||s==='확정'||s==='추정'||s==='확인필요')return s;
+  if(/완료|done|finish|승인/i.test(s))return '확정';
+  if(/확인|검토|보류|review|pending/i.test(s))return '확인필요';
+  return '추정';
+}
 function normalize(d){
   if(!d)return d;const mt=d.meeting||{};
   const deps=(d.by_department||d.departments||[]).map(x=>({
     dept:x.dept||x.name||'[미상]',
-    action_items:(x.action_items||x.tasks||[]).map(a=>({what:a.what||a.content||'',owner:a.owner||'',due:a.due||a.deadline||'',status:a.status||'',basis:a.basis||''})),
-    documents:(x.documents||[]).map(dd=>typeof dd==='string'?{doc:dd}:({doc:dd.doc||dd.name||dd.title||'',owner:dd.owner||'',due:dd.due||dd.deadline||'',purpose:dd.purpose||'',status:dd.status||''})),
-    decisions_needed:(x.decisions_needed||x.decisions||[]).map(dc=>({topic:dc.topic||dc.item||'',decider:dc.decider||'',due:dc.due||dc.deadline||'',precondition:dc.precondition||'',status:dc.status||''})),
+    action_items:(x.action_items||x.tasks||[]).map(a=>({what:a.what||a.content||'',owner:a.owner||'',due:a.due||a.deadline||'',status:canonStatus(a.status),basis:a.basis||''})),
+    documents:(x.documents||[]).map(dd=>typeof dd==='string'?{doc:dd}:({doc:dd.doc||dd.name||dd.title||'',owner:dd.owner||'',due:dd.due||dd.deadline||'',purpose:dd.purpose||'',status:canonStatus(dd.status)})),
+    decisions_needed:(x.decisions_needed||x.decisions||[]).map(dc=>({topic:dc.topic||dc.item||'',decider:dc.decider||'',due:dc.due||dc.deadline||'',precondition:dc.precondition||'',status:canonStatus(dc.status)})),
     _rd:x.dependencies||[]}));
   let seq=d.sequence||[];
   if(!seq.length){
@@ -1572,7 +1609,7 @@ function renderBoard(d, raw){
 
   // ── 시각화 5종(#15-19) — 요약 탭 상단 가까이에 모아 하나의 인사이트 대시보드로 ──
   hSummary+='<div class="change-digest"><div class="cd-h"><span class="cd-title">회의록 인사이트</span></div>'
-    +'<div class="viz-block"><div class="viz-title">회의록 품질 점수 트렌드</div>'+qualityTrendHtml(histProj)+'</div>'
+    +'<div class="viz-block"><div class="viz-title">회의록 품질 점수 트렌드</div>'+qualityTrendHtml(histProj)+qualityChangeListHtml(histProj)+'</div>'
     +'<div class="viz-block"><div class="viz-title">미결 → 진행중 → 완료 흐름</div>'+progressFlowHtml(histProj)+'</div>'
     +'<div class="viz-grid2">'
       +'<div class="viz-block"><div class="viz-title">부서별 할 일 부담도</div>'+deptWorkloadHtml(vb.by_department)+'</div>'
