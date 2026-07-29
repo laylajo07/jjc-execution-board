@@ -877,11 +877,21 @@ function ownerTotalsHtml(depts){
 function chartEmpty(msg){ return `<div class="chart-empty">${esc(msg||'아직 데이터가 없습니다')}</div>`; }
 
 // #15 회의록 품질 점수 트렌드 — 회차가 2개 미만이면 그래프 대신 안내만 표시.
+// 요약 탭 상단 카드는 회의 성격별 점수(meetingTypeScore)를 쓰는데 트렌드·변경사유는 원래
+// qualityScore()를 따로 썼다 — 같은 회차인데 두 곳 숫자가 달라지는 버그(자체검증에서 발견).
+// 회차 자신의 기준(findBaseline)으로 diff·성격을 다시 구해 상단 카드와 동일한 계산으로 통일한다.
+function typedScoreForRound(histProj,round){
+  const board=normalize(round.raw);
+  const baseline=histProj?ProjectStore.findBaseline(histProj,round.roundNo):null;
+  const diff=baseline?BoardDiff.diffBoards(normalize(baseline.raw),board):null;
+  const type=BoardDerive.classifyMeetingType(board,diff);
+  return BoardDerive.meetingTypeScore(board,type,diff);
+}
 function qualityTrendHtml(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
   if(!rounds.length) return chartEmpty();
   if(rounds.length<2) return chartEmpty('2회차부터 트렌드를 확인할 수 있습니다.');
-  const pts=rounds.map(r=>({roundNo:r.roundNo,score:BoardDerive.qualityScore(normalize(r.raw)).score}));
+  const pts=rounds.map(r=>({roundNo:r.roundNo,score:typedScoreForRound(histProj,r)}));
   const W=640,H=160,PADX=32,PADY=30;
   const n=pts.length;
   const xAt=i=>PADX+(n>1?i*((W-2*PADX)/(n-1)):0);
@@ -910,10 +920,10 @@ function reviewPendingCount(board){
   });
   return n;
 }
-function qualityChangeReason(roundNo, prevBoard, curBoard){
+function qualityChangeReason(roundNo, prevBoard, curBoard, prevScore, curScore){
   const prevQ=BoardDerive.qualityScore(prevBoard), curQ=BoardDerive.qualityScore(curBoard);
-  const delta=curQ.score-prevQ.score;
-  if(delta===0) return `${roundNo}차 — 이전 회차와 점수 동일(${curQ.score}점)`;
+  const delta=curScore-prevScore;
+  if(delta===0) return `${roundNo}차 — 이전 회차와 점수 동일(${curScore}점)`;
   const up=delta>0;
   const ownerFixed=prevQ.ownerMissing-curQ.ownerMissing;
   const decisionFixed=prevQ.decisionOpen-curQ.decisionOpen;
@@ -939,7 +949,8 @@ function qualityChangeListHtml(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
   if(rounds.length<2) return '';
   const boards=rounds.map(r=>normalize(r.raw));
-  const lines=rounds.map((r,i)=>i===0?`${r.roundNo}차 — 첫 번째 회의입니다`:qualityChangeReason(r.roundNo,boards[i-1],boards[i]));
+  const scores=rounds.map(r=>typedScoreForRound(histProj,r));
+  const lines=rounds.map((r,i)=>i===0?`${r.roundNo}차 — 첫 번째 회의입니다`:qualityChangeReason(r.roundNo,boards[i-1],boards[i],scores[i-1],scores[i]));
   return `<div class="trend-reasons">`+lines.map(t=>`<div class="trend-reason-row">${esc(t)}</div>`).join('')+`</div>`;
 }
 
