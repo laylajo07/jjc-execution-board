@@ -1199,7 +1199,7 @@ function rowMetaAttrs(owner,due){
 // ownerFilter가 걸려 있으면 그 담당자/결정자 항목만 남기되, diffBadge가 쓰는 원본 배열 인덱스(i)는 보존한다.
 function filterByOwner(items,getOwner){
   const idxed=(items||[]).map((it,i)=>({it,i}));
-  if(!ownerFilter)return idxed;
+  if(!ownerFilter||editMode)return idxed;   // 편집 모드에선 필터 무시 — 부서 안 내용을 그대로 봐야 병합·숨김 판단이 가능하다
   return idxed.filter(r=>{const v=(getOwner(r.it)==null?'':String(getOwner(r.it))).trim();return v&&v===ownerFilter;});
 }
 function tblAI(items,deptIdx,dept,diffTags){
@@ -1299,7 +1299,7 @@ function deptToolsHtml(dep,i,all){
 function bindDeptEdit(all){
   const eb=$('#deptEditBtn');
   // summary 안의 버튼이라 기본 동작(아코디언 접기)을 막아야 한다.
-  if(eb) eb.onclick=e=>{ e.preventDefault(); e.stopPropagation(); editMode=!editMode; renderBoard(lastBoard); };
+  if(eb) eb.onclick=e=>{ e.preventDefault(); e.stopPropagation(); editMode=!editMode; if(editMode) ownerFilter=null; renderBoard(lastBoard); };
   if(!editMode) return;
   document.querySelectorAll('#result [data-de]').forEach(el=>{
     const i=+el.dataset.i, act=el.dataset.de, cur=all[i];
@@ -1614,7 +1614,7 @@ function renderBoard(d, raw){
   }
 
   // ── 다음 회의 전 체크리스트(#12) — 미결 사항을 카톡/슬랙에 바로 붙여넣을 수 있는 평문으로 정리 ──
-  const checklistText=buildNextMeetingChecklist(d);
+  const checklistText=buildNextMeetingChecklist(vb);   // vb(visibleBoard) — 숨긴 부서는 체크리스트에도 안 나오게(#17-19와 일관)
   hSummary+=`<div class="change-digest"><div class="cd-h"><span class="cd-title">다음 회의 전 체크리스트</span>`+
     `<button type="button" class="btn mini" id="checklistCopyBtn">📋 복사</button></div>`+
     `<pre class="checklist-pre">${esc(checklistText)}</pre></div>`;
@@ -1641,7 +1641,9 @@ function renderBoard(d, raw){
     const m=v=>{const s=(v==null?'':String(v)).trim();return s&&s===ownerFilter;};
     return (dep.action_items||[]).some(a=>m(a.owner))||(dep.documents||[]).some(x=>m(x.owner))||(dep.decisions_needed||[]).some(x=>m(x.decider));
   };
-  const shown=shownAll.filter(x=>deptMatchesOwner(x.dep));
+  // 편집 모드에서는 담당자 필터를 무시하고 항상 전체 부서를 보여준다(숨긴 부서를 되돌리려면
+  // 부서가 안 보이면 안 되므로) — ownerFilter가 켜진 채로 편집 모드에 들어온 경우까지 방어.
+  const shown=editMode?shownAll:shownAll.filter(x=>deptMatchesOwner(x.dep));
   // 부서가 0개면 빈 <div class="depts"></div>만 남아 안내 문구만 보인다(다른 빈 상태와 톤 통일).
   // [부서 편집] 토글은 이 분기와 무관하게 탭 헤더에 항상 그려진다.
   const deptsBody = shown.length ? shown.map(x=>{const dep=x.dep;
@@ -1653,7 +1655,7 @@ function renderBoard(d, raw){
     `</div>`+(editMode?deptToolsHtml(dep,x.i,allDepts):'')+`<div class="dept__b">`+
     (tblAI(dep.action_items,x.i,dep.dept,diffTags)+tblDoc(dep.documents,x.i,dep.dept,diffTags)+tblDec(dep.decisions_needed,x.i,dep.dept,diffTags) || '<div class="block"><div class="basis">추출된 항목 없음</div></div>')+
     `</div></section>`;}).join('')
-    : (ownerFilter?'<div class="block"><div class="basis">이 담당자의 항목이 없습니다.</div></div>':'<div class="block"><div class="basis">추출된 부서가 없습니다. [부서 편집]에서 [+ 부서 추가]로 추가하세요.</div></div>');
+    : ((ownerFilter&&!editMode)?'<div class="block"><div class="basis">이 담당자의 항목이 없습니다.</div></div>':'<div class="block"><div class="basis">추출된 부서가 없습니다. [부서 편집]에서 [+ 부서 추가]로 추가하세요.</div></div>');
   const deptsHtml='<div class="depts">'+deptsBody+'</div>'
     +(editMode?`<div class="de-add"><input class="dept-input" type="text" id="deAddInput" maxlength="40" placeholder="추가할 부서명" aria-label="추가할 부서명"><button type="button" class="btn" id="deAddBtn">+ 부서 추가</button></div>`:'');
   let hDepts='';
@@ -1667,7 +1669,7 @@ function renderBoard(d, raw){
       `<button type="button" class="dept-sort-btn${k===deptSortMode?' on':''}" data-sort="${k}">${DEPT_SORT_LABELS[k]}</button>`).join('')+
     `</div></div>`;
   hDepts+=ownerTotalsHtml(allDepts);
-  if(ownerFilter){
+  if(ownerFilter&&!editMode){   // 편집 모드에선 필터를 무시하므로(위 shown 계산 참고) 안내도 함께 숨긴다
     hDepts+=`<div class="owner-filter-bar">🔍 <b>${esc(ownerFilter)}</b>님 담당 항목만 보는 중 <button type="button" class="btn mini" id="ownerFilterClear">✕ 필터 해제</button></div>`;
   }
   hDepts+=deptsHtml;
@@ -1694,6 +1696,9 @@ function renderBoard(d, raw){
   document.querySelectorAll('.qs-stat[data-qfilter]').forEach(btn=>{
     btn.onclick=()=>{
       const kind=btn.dataset.qfilter;   // 'owner' | 'due'
+      // 담당자 필터(#11)가 걸려 있으면 그 사람 아닌 행은 DOM에서 아예 빠져 있어 찾을 수 없다 —
+      // 품질점수 클릭은 "전체에서 찾기" 의도이므로 필터부터 해제하고 다시 그린다.
+      if(ownerFilter){ ownerFilter=null; renderBoard(lastBoard); }
       switchTab('depts');
       document.querySelectorAll('table.t tr.miss-flash').forEach(r=>r.classList.remove('miss-flash'));
       const rows=[...document.querySelectorAll(`[data-tabpanel="depts"] tr[data-miss~="${kind}"]`)];
