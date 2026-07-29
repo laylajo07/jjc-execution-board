@@ -6,8 +6,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&family=Nanum+Gothic+Coding:wght@400;700&display=swap" rel="stylesheet">
-<title>조정치 · 회의록 실행보드 (B · 직접설계)</title>
-<script type="text/plain" id="sys-prompt">당신은 테크핀레이팅스의 회의 후속 조정 에이전트 "조정치"다.
+<title>조정치 에이전트 · 회의록 실행보드 (B · 직접설계)</title>
+<script type="text/plain" id="sys-prompt">당신은 테크핀레이팅스의 회의 후속 조정 에이전트 "조정치 에이전트"다.
 형식이 일정하지 않은 회의록(녹취본·급히 쓴 메모·카톡 붙여넣기 등)을 입력받아,
 참석 부서·구성원별로 후속 실행에 필요한 모든 것을 구조화하고, 부서별 공유 메시지까지 만든다.
 
@@ -181,6 +181,8 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .dept-empty{font-size:13px;color:var(--faint);padding:2px}
   /* 회차 히스토리 패널(Task 4) — dept-row/dept-empty와 같은 톤의 리스트, 기존 토큰만 사용 */
   .proj-history{margin:-2px 0 12px}
+  .proj-list .hist-list{max-height:none}   /* 프로젝트는 회차보다 적은 게 보통이라 히스토리처럼 220px로 자르지 않는다 */
+  .proj-list .hist-main .hist-title{white-space:normal}   /* 프로젝트명은 회차 항목보다 길 수 있어 줄바꿈 허용 */
   .hist-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
   .hist-item{display:flex;align-items:stretch;gap:0;width:100%;
     font-family:var(--sans);background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm)}
@@ -248,7 +250,6 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .btn.primary:hover{filter:brightness(1.08)}
   .btn.block{width:100%;justify-content:center;display:inline-flex;align-items:center;gap:7px}
   .btn.icon{width:44px;padding:11px 0;justify-content:center;flex:none}
-  #deleteProjBtn:hover{border-color:var(--chk);color:var(--chk)}   /* 지연·오류·필수조치=Red 규칙 재사용 — 파괴적 동작 강조 */
   .flow{margin-top:16px;border-top:1px dashed var(--line);padding-top:14px}
   .flow ol{margin:0 0 12px;padding:0;list-style:none;counter-reset:s}
   .flow li{position:relative;padding:0 0 9px 26px;font-size:13px;color:var(--muted)}
@@ -595,7 +596,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 <header class="top">
   <div class="brand">
     <span class="glyph">조</span>
-    <span><b>조정치</b><span>회의가 결과로 바뀌는 곳</span></span>
+    <span><b>조정치 에이전트</b><span>회의가 결과로 바뀌는 곳</span></span>
   </div>
   <div class="spacer"></div>
   <div class="ctl">
@@ -623,11 +624,10 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
       <p class="lead" id="lead">형식은 자유입니다. 녹취본·메모·카톡 붙여넣기 모두 됩니다.</p>
 
       <div class="field-label">회의 프로젝트 선택 <span class="hint">회차 누적</span></div>
-      <div class="row" style="gap:6px;margin-bottom:10px">
-        <select class="note" id="projSel" style="flex:1"><option value="">— 프로젝트 없음 —</option></select>
+      <div id="projList" class="proj-list"></div>
+      <div class="row" style="gap:6px;margin:8px 0 10px">
         <button class="btn icon" id="renameProjBtn" title="프로젝트 이름 수정">✎</button>
-        <button class="btn icon" id="deleteProjBtn" title="프로젝트 삭제">🗑</button>
-        <button class="btn icon" id="newProjBtn" title="새 프로젝트">＋</button>
+        <button class="btn block" id="newProjBtn" style="flex:1">＋ 새 프로젝트</button>
       </div>
       <div id="projHistory" class="proj-history" hidden></div>
 
@@ -1159,7 +1159,7 @@ function ensureProjectSelected(){
   const r=ProjectStore.createProject(projState,name);
   projState=r.state;
   ProjectStore.saveProjects(projState);
-  renderProjSelect(); renderProjHistory(); setDefaultRoundNo();
+  renderProjList(); renderProjHistory(); setDefaultRoundNo();
   return true;
 }
 async function analyze(){
@@ -1201,9 +1201,8 @@ function resetBtn(){
   $('#analyzeBtn').disabled=false;$('#analyzeBtn').innerHTML='신규 분석';refreshUpdateBtn();
   // 자체감사: 분석 중 잠갔던 프로젝트/회차 선택자를 되돌린다(에러로 끝나 renderProjHistory가
   // 다시 안 불린 경로에서도 여기서 반드시 풀어야 계속 잠긴 채로 남지 않는다).
-  if($('#projSel')) $('#projSel').disabled=false;
   refreshRoundNoEnabled();   // 무조건 false 아님 — 지시15: 프로젝트 미선택이면 계속 비활성 유지
-  document.querySelectorAll('.hist-main,.hist-del').forEach(b=>b.disabled=false);
+  document.querySelectorAll('.hist-main,.hist-del').forEach(b=>b.disabled=false);   // 회차·프로젝트 목록 공용
 }
 // 지시15(설계 의도대로 약하게 강제): 프로젝트를 선택해야 회차번호 입력이 의미가 있으므로,
 // 미선택 상태에서는 비활성화한다(분석 자체는 막지 않음 — analyze()의 토스트 경고로 대체).
@@ -1213,12 +1212,11 @@ function setLoading(on){
   if(on) document.querySelectorAll('.update-btn').forEach(b=>b.disabled=true);   // 분석 중 중복 트리거 방지
   // 자체감사 발견: 분석(특히 자동모드 스트리밍) 대기 중 사용자가 프로젝트를 바꾸거나 다른 회차를
   // 열람하면, 응답이 도착했을 때 renderBoard가 "그 순간의" projState.current/currentRoundId를
-  // 읽어 엉뚱한 프로젝트·회차에 저장한다(레이스 컨디션). 분석 중엔 이 셋을 잠가 원천 차단한다.
-  if($('#projSel')) $('#projSel').disabled=on;
+  // 읽어 엉뚱한 프로젝트·회차에 저장한다(레이스 컨디션). 분석 중엔 이들을 잠가 원천 차단한다.
   if($('#roundNoInput')) $('#roundNoInput').disabled=on;
-  document.querySelectorAll('.hist-main,.hist-del').forEach(b=>b.disabled=on);
+  document.querySelectorAll('.hist-main,.hist-del').forEach(b=>b.disabled=on);   // 회차·프로젝트 목록 공용
   $('#analyzeBtn').innerHTML= on?'<span class="spin"></span> 분석 중…':'신규 분석';
-  if(on)$('#result').innerHTML='<div class="streaming"><div class="stream-head"><span class="dots"><i></i><i></i><i></i></span>조정치가 회의록을 구조화하는 중… <span class="stream-sub">생성되는 내용이 아래에 실시간으로 표시됩니다</span></div><pre id="streamPre" class="stream-pre"></pre></div>';
+  if(on)$('#result').innerHTML='<div class="streaming"><div class="stream-head"><span class="dots"><i></i><i></i><i></i></span>조정치 에이전트가 회의록을 구조화하는 중… <span class="stream-sub">생성되는 내용이 아래에 실시간으로 표시됩니다</span></div><pre id="streamPre" class="stream-pre"></pre></div>';
 }
 
 /* copy-paste */
@@ -1943,7 +1941,7 @@ $('#copyMdBtn').onclick=()=>{
   copy(stamp + boardToMarkdown(DeptEdit.visibleBoard(lastBoard)));
 };
 $('#dlJsonBtn').onclick=()=>{const b=new Blob([JSON.stringify(exportJson(),null,2)],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='조정치_결과.json';a.click();};
+  const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='조정치_에이전트_결과.json';a.click();};
 $('#printBtn').onclick=()=>window.print();
 
 /* 앱 간 비교 링크 (B→A) — 새 창 vs 현재 창, 세션 단위 기억 */
@@ -1958,10 +1956,53 @@ $('#cmpOverlay').onclick=e=>{ if(e.target.id==='cmpOverlay') $('#cmpOverlay').cl
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') $('#cmpOverlay').classList.remove('on'); });
 
 /* 프로젝트 히스토리 — 선택 UI 배선(설계 §3-1). 회차 자동 저장은 renderBoard()의 raw!=null 분기(아래)가 맡는다. */
-function renderProjSelect(){
-  const sel=$('#projSel'); if(!sel)return;
-  sel.innerHTML='<option value="">— 프로젝트 없음 —</option>'+projState.projects.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
-  sel.value=projState.current||'';
+// 프로젝트 선택(사용자 요청) — 드롭다운 대신 회차 히스토리와 같은 스타일의 목록으로 표시.
+// 새 프로젝트는 배열 끝에 추가되므로(ProjectStore.createProject) 항상 목록 맨 아래에 나타난다.
+// 프로젝트가 여러 개여도 각자 독립적으로 선택·삭제 가능(1개로 제한할 이유 없음).
+function renderProjList(){
+  const box=$('#projList'); if(!box)return;
+  if(!projState.projects.length){
+    box.innerHTML='<div class="dept-empty">아직 프로젝트가 없습니다. 아래 ＋ 버튼으로 만들어보세요.</div>';
+    return;
+  }
+  box.innerHTML='<div class="hist-list">'+projState.projects.map(p=>{
+    return `<div class="hist-item${p.id===projState.current?' on':''}">`
+      +`<button type="button" class="hist-main" data-pid="${esc(p.id)}">`
+      +`<span class="hist-title">${esc(p.name)}</span>`
+      +`<span class="hist-t">회차 ${p.rounds.length}개</span>`
+      +`</button>`
+      +`<button type="button" class="hist-del" data-pid="${esc(p.id)}" title="이 프로젝트 삭제" aria-label="${esc(p.name)} 삭제">✕</button>`
+      +`</div>`;
+  }).join('')+'</div>';
+  box.querySelectorAll('.hist-main').forEach(btn=>{
+    btn.onclick=()=>{
+      const pid=btn.dataset.pid;
+      if(pid===projState.current) return;   // 이미 선택된 프로젝트 재클릭은 no-op
+      projState=ProjectStore.setCurrent(projState,pid);
+      currentRoundId=null;
+      clearResultPanel();
+      ProjectStore.saveProjects(projState);
+      renderProjList();
+      renderProjHistory();
+      setDefaultRoundNo();
+    };
+  });
+  box.querySelectorAll('.hist-del').forEach(btn=>{
+    btn.onclick=()=>{
+      const pid=btn.dataset.pid;
+      const p=ProjectStore.getProject(projState,pid);
+      const name=p?p.name:'이 프로젝트', roundCount=p?p.rounds.length:0;
+      if(!confirm(`"${name}" 프로젝트를 삭제할까요?\n회차 ${roundCount}개가 모두 함께 삭제되며 되돌릴 수 없습니다.`))return;
+      const wasCurrent=(pid===projState.current);
+      projState=ProjectStore.deleteProject(projState,pid);
+      if(wasCurrent){ currentRoundId=null; clearResultPanel(); }
+      ProjectStore.saveProjects(projState);
+      renderProjList();
+      renderProjHistory();
+      setDefaultRoundNo();
+      toast(`"${name}" 프로젝트를 삭제했습니다`);
+    };
+  });
 }
 // 회차 번호 기본값: 선택된 회의록 파일명에서 추론 → 없으면 현재 프로젝트 max roundNo+1 → 1(지시 15).
 function defaultRoundNo(){
@@ -2089,7 +2130,6 @@ function renderProjHistory(){
     };
   });
 }
-$('#projSel').onchange=e=>{ projState=ProjectStore.setCurrent(projState,e.target.value); currentRoundId=null; clearResultPanel(); ProjectStore.saveProjects(projState); renderProjHistory(); setDefaultRoundNo(); };
 $('#newProjBtn').onclick=()=>{
   const name=prompt('새 프로젝트 이름을 입력하세요');
   if(!name||!name.trim())return;
@@ -2098,7 +2138,7 @@ $('#newProjBtn').onclick=()=>{
   currentRoundId=null;
   clearResultPanel(true);   // 이전 프로젝트의 보드는 지우되(전환의 일종), 지금 입력 중인 회의록 원문은 유지
   ProjectStore.saveProjects(projState);
-  renderProjSelect();
+  renderProjList();
   renderProjHistory();
   setDefaultRoundNo();
 };
@@ -2111,26 +2151,11 @@ $('#renameProjBtn').onclick=()=>{
   if(!name.trim()){ toast('이름은 비울 수 없습니다'); return; }
   projState=ProjectStore.renameProject(projState,cur,name);
   ProjectStore.saveProjects(projState);
-  renderProjSelect();
+  renderProjList();
   renderProjHistory();
-};
-$('#deleteProjBtn').onclick=()=>{
-  const cur=projState&&projState.current;
-  if(!cur){ toast('삭제할 프로젝트를 먼저 선택하세요'); return; }
-  const p=ProjectStore.getProject(projState,cur);
-  const name=p?p.name:'이 프로젝트', roundCount=p?p.rounds.length:0;
-  if(!confirm(`"${name}" 프로젝트를 삭제할까요?\n회차 ${roundCount}개가 모두 함께 삭제되며 되돌릴 수 없습니다.`)) return;
-  projState=ProjectStore.deleteProject(projState,cur);
-  currentRoundId=null;
-  clearResultPanel();
-  ProjectStore.saveProjects(projState);
-  renderProjSelect();
-  renderProjHistory();
-  setDefaultRoundNo();
-  toast(`"${name}" 프로젝트를 삭제했습니다`);
 };
 projState=ProjectStore.loadProjects();
-renderProjSelect();
+renderProjList();
 renderProjHistory();
 setDefaultRoundNo();
 
