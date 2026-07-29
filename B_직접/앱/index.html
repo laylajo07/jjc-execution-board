@@ -1704,6 +1704,8 @@ function renderBoard(d, raw){
 
   // ── 탭1: 요약(SUMMARY + 변경점 + 확인 필요·가정) ──
   let hSummary='';
+  // 요약 탭 4개 서브 섹션 구분(#13) — secH()는 DAG 탭(#01)에서 쓰던 굵은 제목+구분선 컴포넌트 재사용.
+  hSummary+=secH('01','핵심 요약');
   hSummary+=`<div class="summary"><div class="eyebrow">SUMMARY · ${esc(mt.datetime||'일시 미상')}</div>`;
   // 회의 성격 자동 판단(사용자 요청) — 요약 탭 상단에 배지로 표시하고, 품질 점수 산정 방식도 성격별로 다르게.
   const meetingType=BoardDerive.classifyMeetingType(d,diff);
@@ -1740,6 +1742,7 @@ function renderBoard(d, raw){
   hSummary+='</div>';
 
   // ── 시각화 5종(#15-19) — 요약 탭 상단 가까이에 모아 하나의 인사이트 대시보드로 ──
+  hSummary+=secH('02','회의 인사이트');
   hSummary+='<div class="change-digest insights"><div class="cd-h"><span class="cd-title">참고 · 회의록 인사이트</span></div>'
     +'<div class="viz-block"><div class="viz-title">회의록 품질 점수 트렌드</div>'+qualityTrendHtml(histProj)+qualityChangeListHtml(histProj)+'</div>'
     +'<div class="viz-block"><div class="viz-title">미결 → 진행중 → 완료 흐름</div>'+progressFlowHtml(histProj)+'</div>'
@@ -1751,6 +1754,7 @@ function renderBoard(d, raw){
     +'</div>';
   // ── 이전 회차 대비 주요 변경점 (회차 2+에서만) ──
   if(digest && digest.total>0){
+    hSummary+=secH('03','이전 회차 대비 변경점');
     hSummary+='<div class="change-digest insights"><div class="cd-h"><span class="cd-title">이전 회차 대비 주요 변경점</span>'+
        `<span class="cd-counts">`+
          `<button type="button" class="tag ok cd-filter-btn" data-filter="new" aria-pressed="false">＋ 신규 ${digest.added}</button>`+
@@ -1779,6 +1783,7 @@ function renderBoard(d, raw){
       +`<div class="panelbox"><div class="block__l">❓ 확인 필요</div><div class="chips">${rankedChips(d.gaps,'gap',g)}</div></div>`
       +`<div class="panelbox"><div class="block__l">🧩 전제 조건</div><div class="chips">${rankedChips(d.assumptions,'asm',g)}</div></div>`
       +'</div>';
+    hSummary+=secH('04','아직 결정 안 된 사항');
     hSummary+=acc('아직 결정 안 된 사항 & 전제 조건', gc+asmc, body, null, accOpen['아직 결정 안 된 사항 & 전제 조건']!==false, true);   // 기본 펼침 — 사용자가 접었던 경우(재렌더)만 유지. 2순위(참고) 톤
   }
 
