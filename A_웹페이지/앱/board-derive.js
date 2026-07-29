@@ -219,7 +219,12 @@
   function meetingTypeScore(board, type, diff) {
     var q = qualityScore(board);
     try {
+      var hasItems = (q.itemCount + q.decisionCount) > 0;
       if (type === 'completion') {
+        // 완료 보고 회의는 개별 항목을 다시 나열하지 않고 "모두 완료됐다"고 서술로만 보고하는
+        // 경우가 실제로 있다(자체검증에서 발견) — 그러면 by_department가 통째로 비어 completionRate가
+        // 0/0=0이 되어 오히려 낮은 점수로 보인다. 항목이 하나도 없는 완료 보고는 전부 완료로 간주한다.
+        if (!hasItems) return 100;
         var cr = completionRate(board);
         return Math.max(0, Math.min(100, Math.round(cr * 100 * 0.6 + q.score * 0.4)));
       }
