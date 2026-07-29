@@ -546,10 +546,11 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
      탭으로 전환한다(사용자 요청). 재렌더(부서 편집 등)에도 activeTab을 유지해 탭이 안 튄다. */
   .tabs{display:flex;gap:2px;margin:18px 2px 0;border-bottom:1px solid var(--line2);
     overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
-  .tab-btn{appearance:none;background:none;border:none;padding:10px 16px;font-size:13px;font-weight:700;
-    color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--sans);flex:none}
-  .tab-btn:hover{color:var(--ink)}
-  .tab-btn.on{color:var(--primary-ink);border-bottom-color:var(--primary)}
+  .tab-btn{appearance:none;background:none;border:none;padding:14px 22px;font-size:15px;font-weight:700;
+    color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px;font-family:var(--sans);flex:none;
+    border-radius:8px 8px 0 0;transition:.13s}   /* 탭 UI 확대(사용자 요청) — 폰트·패딩·밑줄 두께 한 단계씩 키움 */
+  .tab-btn:hover{color:var(--ink);background:var(--surface2)}
+  .tab-btn.on{color:var(--primary-ink);border-bottom-color:var(--primary);background:var(--primary-soft)}
   .tabpanel{padding-top:2px}
   .tabpanel[hidden]{display:none}
   .tab-head{display:flex;align-items:center;gap:10px;margin:18px 2px 14px}
@@ -784,7 +785,7 @@ let lastLoadedNote=null;   // 지금 열람 중인 회차의 원문 원본(자�
 // 부서 편집 상태. "편집됐는가"는 더 이상 래치 플래그가 아니라 boardSnapshot과의 스냅샷 비교(isEdited)로
 // 매번 판정한다 — 그래야 숨김→해제처럼 원본으로 되돌아간 진짜 왕복 편집이 "편집 없음"으로 정확히 잡힌다.
 let editMode=false, boardSnapshot=null;
-let activeTab='summary';   // 'summary'|'dag'|'depts' — 재렌더(부서 편집 등)에도 유지
+let activeTab='compare';   // 'compare'|'summary'|'dag'|'depts'|'pending' — 재렌더(부서 편집 등)에도 유지. 기본 탭=회차 비교(핵심 가치, 사용자 요청)
 let deptSortMode='name';   // 'name'|'count'|'priority' — 부서별 실행 항목 탭 정렬 기준, 재렌더에도 유지
 let ownerFilter=null;      // 담당자 이름 클릭 필터(참석자별 액션 아이템 필터) — 선택된 이름 문자열 또는 null
 const DEPT_SORT_LABELS={name:'부서명순',count:'할 일 많은순',priority:'우선순위순'};
@@ -902,7 +903,7 @@ function qualityTrendHtml(histProj){
   if(!rounds.length) return chartEmpty();
   if(rounds.length<2) return chartEmpty('2회차부터 트렌드를 확인할 수 있습니다.');
   const pts=rounds.map(r=>({roundNo:r.roundNo,score:typedScoreForRound(histProj,r)}));
-  const W=640,H=160,PADX=32,PADY=30;
+  const W=640,H=120,PADX=32,PADY=24;   // 다른 카드 대비 과도하게 크지 않도록 축소(사용자 요청, 기존 H=160)
   const n=pts.length;
   const xAt=i=>PADX+(n>1?i*((W-2*PADX)/(n-1)):0);
   const yAt=s=>H-PADY-(Math.max(0,Math.min(100,s))/100)*(H-2*PADY);
@@ -1723,10 +1724,40 @@ function renderBoard(d, raw){
   const g = Graph.buildGraph(vb.sequence||[]);
   const detail=BoardDerive.buildDetailMap(g,vb.by_department);   // 노드 상세 패널(#2)·크리티컬 패스 진행률(#19)이 공유
 
-  // ── 탭1: 요약(SUMMARY + 변경점 + 확인 필요·가정) ──
+  // ── 탭1: 회차 비교(신규) — "회차 비교"를 핵심 가치로 앞세워 트렌드·변동요약·diff·미결/진행/완료 흐름을 한 탭에 모은다(사용자 요청, UI 개편). ──
+  let hCompare='';
+  hCompare+=secH('01','회의록 품질 점수 트렌드');
+  hCompare+='<div class="change-digest insights"><div class="viz-block">'+qualityTrendHtml(histProj)+qualityChangeListHtml(histProj)+'</div></div>';
+  hCompare+=secH('02','미결 → 진행중 → 완료 흐름');
+  hCompare+='<div class="change-digest insights"><div class="viz-block">'+progressFlowHtml(histProj)+'</div></div>';
+  if(digest && digest.total>0){
+    hCompare+=secH('03','이전 회차 대비 변경점');
+    hCompare+='<div class="change-digest insights"><div class="cd-h"><span class="cd-title">신규 · 수정 · 완료 항목</span>'+
+       `<span class="cd-counts">`+
+         `<button type="button" class="tag ok cd-filter-btn" data-filter="new" aria-pressed="false">＋ 신규 ${digest.added}</button>`+
+         `<button type="button" class="tag est cd-filter-btn" data-filter="changed" aria-pressed="false">✎ 변경 ${digest.changed}</button>`+
+         `<button type="button" class="tag cd-done cd-filter-btn" data-filter="done" aria-pressed="false">✓ 완료 ${digest.done}</button>`+
+       `</span></div>`;
+    hCompare+='<div class="cd-items">'+digest.items.map(it=>{
+      const cls=it.tag==='new'?'ok':(it.tag==='changed'?'est':'cd-done');
+      const lab=it.tag==='new'?'＋ 새로 추가됨':(it.tag==='changed'?'✎ 내용 수정됨':'✓ 완료');
+      const strike=(it.tag==='done'&&it.reason==='dropped')?' style="text-decoration:line-through"':'';
+      return `<div class="cd-it" data-tag="${it.tag}"><span class="tag ${cls}">${lab}</span><span class="cd-txt"${strike}>${esc(it.text)}</span><span class="cd-dept mono">${esc(it.dept)}${it.label?' · '+esc(it.label):''}</span></div>`;
+    }).join('')+'</div>';
+    if(digest.moreItems&&digest.moreItems.length){
+      hCompare+=`<details class="more cd-more-detail"><summary>외 ${digest.moreItems.length}건 더</summary><div class="cd-items">`+
+        digest.moreItems.map(it=>{
+          const lab=it.tag==='new'?'＋ 새로 추가됨':(it.tag==='changed'?'✎ 내용 수정됨':'✓ 완료');
+          return `<div class="cd-it" data-tag="${it.tag}"><span class="tag ${it.tag==='new'?'ok':(it.tag==='changed'?'est':'cd-done')}">${lab}</span><span class="cd-txt">${esc(it.text)}</span><span class="cd-dept mono">${esc(it.dept)}${it.label?' · '+esc(it.label):''}</span></div>`;
+        }).join('')+
+        `</div></details>`;
+    }
+    hCompare+='</div>';
+  }
+
+  // ── 탭2: 이번 회의 요약(SUMMARY) ──
   let hSummary='';
-  // 요약 탭 4개 서브 섹션 구분(#13) — secH()는 DAG 탭(#01)에서 쓰던 굵은 제목+구분선 컴포넌트 재사용.
-  hSummary+=secH('01','핵심 요약');
+  hSummary+=secH('01','이번 회의 요약');
   hSummary+=`<div class="summary"><div class="eyebrow">SUMMARY · ${esc(mt.datetime||'일시 미상')}</div>`;
   // 회의 성격 자동 판단(사용자 요청) — 요약 탭 상단에 배지로 표시하고, 품질 점수 산정 방식도 성격별로 다르게.
   const meetingType=BoardDerive.classifyMeetingType(d,diff);
@@ -1762,55 +1793,31 @@ function renderBoard(d, raw){
     `<button type="button" class="it" data-node-id="${esc(matchNodeIdForTop3(t,g))}"><span class="rk">${i+1}</span><div><div class="wt">${esc(t.what)}</div><div class="mt mono">${esc(t.dept||'')} · ${esc(ownerLabel(t.owner))} · ${esc(t.due||'미정')}</div></div></button>`).join('')+'</div>';}
   hSummary+='</div>';
 
-  // ── 시각화 5종(#15-19) — 요약 탭 상단 가까이에 모아 하나의 인사이트 대시보드로 ──
-  hSummary+=secH('02','회의 인사이트');
-  hSummary+='<div class="change-digest insights"><div class="cd-h"><span class="cd-title">참고 · 회의록 인사이트</span></div>'
-    +'<div class="viz-block"><div class="viz-title">회의록 품질 점수 트렌드</div>'+qualityTrendHtml(histProj)+qualityChangeListHtml(histProj)+'</div>'
-    +'<div class="viz-block"><div class="viz-title">미결 → 진행중 → 완료 흐름</div>'+progressFlowHtml(histProj)+'</div>'
-    +'<div class="viz-grid2">'
+  // ── 부서·담당자 현황(#15-19 중 "이번 회차 스냅샷" 3종 — 회차 비교와 달리 histProj가 아니라 이번 회차 board만 본다) ──
+  hSummary+=secH('02','부서·담당자 현황');
+  hSummary+='<div class="change-digest insights"><div class="viz-grid2">'
       +'<div class="viz-block"><div class="viz-title">부서별 할 일 부담도</div>'+deptWorkloadHtml(vb.by_department)+'</div>'
       +'<div class="viz-block"><div class="viz-title">담당자별 완료율</div>'+ownerCompletionHtml(vb.by_department)+'</div>'
     +'</div>'
     +'<div class="viz-block"><div class="viz-title">크리티컬 패스 진행률</div>'+criticalPathProgressHtml(g,detail)+'</div>'
     +'</div>';
-  // ── 이전 회차 대비 주요 변경점 (회차 2+에서만) ──
-  if(digest && digest.total>0){
-    hSummary+=secH('03','이전 회차 대비 변경점');
-    hSummary+='<div class="change-digest insights"><div class="cd-h"><span class="cd-title">이전 회차 대비 주요 변경점</span>'+
-       `<span class="cd-counts">`+
-         `<button type="button" class="tag ok cd-filter-btn" data-filter="new" aria-pressed="false">＋ 신규 ${digest.added}</button>`+
-         `<button type="button" class="tag est cd-filter-btn" data-filter="changed" aria-pressed="false">✎ 변경 ${digest.changed}</button>`+
-         `<button type="button" class="tag cd-done cd-filter-btn" data-filter="done" aria-pressed="false">✓ 완료 ${digest.done}</button>`+
-       `</span></div>`;
-    hSummary+='<div class="cd-items">'+digest.items.map(it=>{
-      const cls=it.tag==='new'?'ok':(it.tag==='changed'?'est':'cd-done');
-      const lab=it.tag==='new'?'＋ 새로 추가됨':(it.tag==='changed'?'✎ 내용 수정됨':'✓ 완료');
-      const strike=(it.tag==='done'&&it.reason==='dropped')?' style="text-decoration:line-through"':'';
-      return `<div class="cd-it" data-tag="${it.tag}"><span class="tag ${cls}">${lab}</span><span class="cd-txt"${strike}>${esc(it.text)}</span><span class="cd-dept mono">${esc(it.dept)}${it.label?' · '+esc(it.label):''}</span></div>`;
-    }).join('')+'</div>';
-    if(digest.moreItems&&digest.moreItems.length){
-      hSummary+=`<details class="more cd-more-detail"><summary>외 ${digest.moreItems.length}건 더</summary><div class="cd-items">`+
-        digest.moreItems.map(it=>{
-          const lab=it.tag==='new'?'＋ 새로 추가됨':(it.tag==='changed'?'✎ 내용 수정됨':'✓ 완료');
-          return `<div class="cd-it" data-tag="${it.tag}"><span class="tag ${it.tag==='new'?'ok':(it.tag==='changed'?'est':'cd-done')}">${lab}</span><span class="cd-txt">${esc(it.text)}</span><span class="cd-dept mono">${esc(it.dept)}${it.label?' · '+esc(it.label):''}</span></div>`;
-        }).join('')+
-        `</div></details>`;
-    }
-    hSummary+='</div>';
-  }
+
+  // ── 탭5: 미결·체크리스트(신규) — 확인 필요·전제 조건·다음 회의 준비물을 한 탭에(사용자 요청, UI 개편) ──
+  let hPending='';
   if((d.gaps&&d.gaps.length)||(d.assumptions&&d.assumptions.length)){
     const gc=(d.gaps||[]).filter(Boolean).length, asmc=(d.assumptions||[]).filter(Boolean).length;
     const body='<div class="cols2">'
       +`<div class="panelbox"><div class="block__l">❓ 확인 필요</div><div class="chips">${rankedChips(d.gaps,'gap',g)}</div></div>`
       +`<div class="panelbox"><div class="block__l">🧩 전제 조건</div><div class="chips">${rankedChips(d.assumptions,'asm',g)}</div></div>`
       +'</div>';
-    hSummary+=secH('04','아직 결정 안 된 사항');
-    hSummary+=acc('아직 결정 안 된 사항 & 전제 조건', gc+asmc, body, null, accOpen['아직 결정 안 된 사항 & 전제 조건']!==false, true);   // 기본 펼침 — 사용자가 접었던 경우(재렌더)만 유지. 2순위(참고) 톤
+    hPending+=secH('01','아직 결정 안 된 사항');
+    hPending+=acc('아직 결정 안 된 사항 & 전제 조건', gc+asmc, body, null, accOpen['아직 결정 안 된 사항 & 전제 조건']!==false, true);   // 기본 펼침 — 사용자가 접었던 경우(재렌더)만 유지. 2순위(참고) 톤
   }
 
   // ── 다음 회의 전 체크리스트(#12) — 미결 사항을 카톡/슬랙에 바로 붙여넣을 수 있는 평문으로 정리 ──
   const checklistText=buildNextMeetingChecklist(vb);   // vb(visibleBoard) — 숨긴 부서는 체크리스트에도 안 나오게(#17-19와 일관)
-  hSummary+=`<div class="change-digest"><div class="cd-h"><span class="cd-title">다음 회의 전 체크리스트</span>`+
+  hPending+=secH('02','다음 회의 전 체크리스트');
+  hPending+=`<div class="change-digest"><div class="cd-h"><span class="cd-title">다음 회의 전 체크리스트</span>`+
     `<button type="button" class="btn mini" id="checklistCopyBtn">📋 복사</button></div>`+
     `<pre class="checklist-pre">${esc(checklistText)}</pre></div>`;
 
@@ -1874,13 +1881,17 @@ function renderBoard(d, raw){
   // MD/JSON 산출물에는 여전히 포함된다. activeTab은 재렌더(부서 편집 등)에도 유지되는 모듈 상태다). ──
   let h='';
   h+='<div class="tabs" role="tablist">'
-    +`<button type="button" class="tab-btn${activeTab==='summary'?' on':''}" data-tab="summary" role="tab" aria-selected="${activeTab==='summary'}">요약</button>`
+    +`<button type="button" class="tab-btn${activeTab==='compare'?' on':''}" data-tab="compare" role="tab" aria-selected="${activeTab==='compare'}">회차 비교</button>`
+    +`<button type="button" class="tab-btn${activeTab==='summary'?' on':''}" data-tab="summary" role="tab" aria-selected="${activeTab==='summary'}">이번 회의 요약</button>`
     +`<button type="button" class="tab-btn${activeTab==='dag'?' on':''}" data-tab="dag" role="tab" aria-selected="${activeTab==='dag'}">진행 순서 및 우선순위</button>`
     +`<button type="button" class="tab-btn${activeTab==='depts'?' on':''}" data-tab="depts" role="tab" aria-selected="${activeTab==='depts'}">부서별 실행 항목</button>`
+    +`<button type="button" class="tab-btn${activeTab==='pending'?' on':''}" data-tab="pending" role="tab" aria-selected="${activeTab==='pending'}">미결·체크리스트</button>`
     +'</div>';
+  h+=`<div class="tabpanel" data-tabpanel="compare" role="tabpanel"${activeTab!=='compare'?' hidden':''}>${hCompare}</div>`;
   h+=`<div class="tabpanel" data-tabpanel="summary" role="tabpanel"${activeTab!=='summary'?' hidden':''}>${hSummary}</div>`;
   h+=`<div class="tabpanel" data-tabpanel="dag" role="tabpanel"${activeTab!=='dag'?' hidden':''}>${hDag}</div>`;
   h+=`<div class="tabpanel" data-tabpanel="depts" role="tabpanel"${activeTab!=='depts'?' hidden':''}>${hDepts}</div>`;
+  h+=`<div class="tabpanel" data-tabpanel="pending" role="tabpanel"${activeTab!=='pending'?' hidden':''}>${hPending}</div>`;
 
   h+=`<details class="raw"><summary>원본 마크다운 / JSON</summary><pre>${esc(lastMarkdown||'')}\n\n${esc(JSON.stringify(lastData,null,2))}</pre></details>`;
   $('#result').innerHTML=h;
