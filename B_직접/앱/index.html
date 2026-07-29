@@ -286,7 +286,9 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .summary h2{margin:8px 0 14px;font-size:18px;line-height:1.4;letter-spacing:-.01em}
   .top3{display:grid;gap:9px}
   @media(min-width:620px){.top3{grid-template-columns:1fr 1fr 1fr}}
-  .top3 .it{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px}
+  .top3 .it{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;
+    width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}
+  .top3 .it:hover{border-color:var(--primary)}
   .top3 .rk{font-family:var(--mono);font-weight:800;color:#fff;background:var(--primary);border-radius:6px;min-width:20px;height:20px;
     display:grid;place-items:center;font-size:11px;flex:none;margin-top:1px}
   .top3 .wt{font-size:13px;font-weight:600;line-height:1.35}
@@ -342,7 +344,9 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .flow-seg{display:block;height:100%}
   .flow-nums{flex:none;font-family:var(--mono);font-size:12px;color:var(--muted)}
   .workload-list{display:flex;flex-direction:column;gap:10px}
-  .workload-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .workload-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    width:100%;text-align:left;font:inherit;color:inherit;background:none;border:none;border-radius:6px;cursor:pointer;padding:2px}
+  .workload-row:hover{background:var(--surface2)}
   .wl-name{flex:0 1 140px;font-size:13px;color:var(--ink2);display:flex;align-items:center;gap:6px;white-space:normal;word-break:break-word}
   .wl-dot{width:8px;height:8px;border-radius:3px;flex:none}
   .wl-bar{flex:1 1 100px;height:10px;border-radius:99px;background:var(--line);overflow:hidden}
@@ -396,8 +400,10 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   tr[data-owner] .who{cursor:pointer}
   tr[data-owner] .who:hover .clip2{text-decoration:underline;text-decoration-color:var(--primary)}
   .owner-filter-bar{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink2);
-    background:var(--primary-soft);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px}
-  .dept{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+    background:var(--primary-soft);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;transition:box-shadow .3s}
+  .owner-filter-bar.flash{box-shadow:0 0 0 3px var(--primary)}
+  .dept{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;transition:background-color .8s}
+  .dept.flash{background:var(--primary-soft)}
   .dept__h{display:flex;align-items:center;gap:8px;padding:16px 20px;border-bottom:1px solid var(--line2);
     background:var(--surface)}
   .dept__h .dot{width:9px;height:9px;border-radius:3px;background:var(--primary);flex:none}
@@ -468,6 +474,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   /* 노드 상세 팝업 — 중앙 모달(#2, #3: 사이드 패널 → 가운데 팝업 + 이전/다음) */
   .dag-n[data-id]{cursor:pointer}
   .dag-n.sel rect:first-child{stroke:var(--primary);stroke-width:3}
+  .dag-n.flash rect:first-child{stroke:var(--primary);stroke-width:3}   /* 요약 화면 TOP3 카드 클릭 시 도착 노드 강조(모달 선택 상태와 별개) */
   .np-overlay{position:fixed;inset:0;background:rgba(4,10,20,.4);opacity:0;pointer-events:none;transition:.18s;z-index:55}
   .np-overlay.on{opacity:1;pointer-events:auto}
   .node-panel{position:fixed;top:50%;left:50%;width:min(480px,92vw);max-height:86vh;z-index:60;
@@ -945,6 +952,18 @@ function progressFlowHtml(histProj){
   return legend+`<div class="flow-rounds">`+body+`</div>`;
 }
 
+// Drill-down(요약→상세): 공통 업무 ID가 없으므로 업무명/부서명 텍스트로 매칭한다
+// (board-derive.js buildDetailMap과 같은 임계값 0.5, 부서 일치 우선 → 실패 시 전체 폴백).
+function matchNodeIdForTop3(item,graph){
+  const nodes=(graph&&graph.nodes)||[];
+  if(!nodes.length) return '';
+  const dept=(item.dept||'').trim();
+  const sameDept=dept?nodes.filter(n=>(n.dept||'')===dept):[];
+  const pool=sameDept.length?sameDept:nodes;
+  let best=null,bestScore=0;
+  pool.forEach(n=>{ const s=Graph.containment(item.what||'',n.task||''); if(s>bestScore){bestScore=s;best=n;} });
+  return (bestScore>=0.5&&best)?best.id:'';
+}
 // #17 부서별 할 일 부담도(바 차트) — 부서 이름 색은 DagView.deptColor로 전체 UI(DAG 색 인디케이터)와 통일.
 function deptWorkloadHtml(depts){
   const rows=(depts||[]).map(dep=>({name:dep.dept||'[미상]',
@@ -954,9 +973,9 @@ function deptWorkloadHtml(depts){
   const max=Math.max.apply(null,rows.map(r=>r.count));
   return `<div class="workload-list">`+rows.map(r=>{
     const pct=Math.round(r.count/max*100);
-    return `<div class="workload-row"><span class="wl-name"><span class="wl-dot" style="background:${DagView.deptColor(r.name)}"></span>${esc(r.name)}</span>`+
+    return `<button type="button" class="workload-row" data-dept="${esc(r.name)}"><span class="wl-name"><span class="wl-dot" style="background:${DagView.deptColor(r.name)}"></span>${esc(r.name)}</span>`+
       `<span class="wl-bar"><span class="wl-bar-fill" style="width:${pct}%;background:var(--primary)"></span></span>`+
-      `<span class="wl-num">${r.count}건</span></div>`;
+      `<span class="wl-num">${r.count}건</span></button>`;
   }).join('')+`</div>`;
 }
 
@@ -966,9 +985,9 @@ function ownerCompletionHtml(depts){
   if(!totals.length) return chartEmpty();
   return `<div class="workload-list">`+totals.map(o=>{
     const total=o.done+o.open, pct=total?Math.round(o.done/total*100):0;
-    return `<div class="workload-row"><span class="wl-name">${esc(o.owner)}</span>`+
+    return `<button type="button" class="workload-row" data-owner="${esc(o.owner)}"><span class="wl-name">${esc(o.owner)}</span>`+
       `<span class="wl-bar"><span class="wl-bar-fill" style="width:${pct}%;background:var(--ok)"></span></span>`+
-      `<span class="wl-num">${pct}%</span></div>`;
+      `<span class="wl-num">${pct}%</span></button>`;
   }).join('')+`</div>`;
 }
 
@@ -1127,11 +1146,22 @@ $('#noteSelect').onchange=async e=>{const name=e.target.value;if(!name)return;
 $('#roundNoInput').oninput=refreshRoundHint;
 
 /* analyze (auto) */
+// 지시15 강화(사용자 요청): 프로젝트 선택을 "약하게 강제"에서 필수로 바꾼다. 미선택이면
+// #newProjBtn과 동일한 새 프로젝트 생성 플로우를 그 자리에서 띄우고, 취소하면 분석을 진행하지 않는다.
+function ensureProjectSelected(){
+  if(projState&&projState.current) return true;
+  const name=prompt('분석 결과를 저장할 프로젝트 이름을 입력하세요\n(취소하면 분석을 진행하지 않습니다)');
+  if(!name||!name.trim()){ toast('프로젝트를 먼저 만들어야 분석할 수 있습니다'); return false; }
+  const r=ProjectStore.createProject(projState,name);
+  projState=r.state;
+  ProjectStore.saveProjects(projState);
+  renderProjSelect(); renderProjHistory(); setDefaultRoundNo();
+  return true;
+}
 async function analyze(){
   const note=$('#noteText').value.trim();
   if(!note){toast('회의록을 입력하세요');pendingUpdateRoundNo=null;return;}
-  // 지시15(약하게 강제): 분석 자체는 막지 않되, 프로젝트 미선택이면 히스토리에 저장되지 않음을 알린다.
-  if(!(projState&&projState.current)) toast('프로젝트가 선택되지 않아 이번 결과는 히스토리에 저장되지 않습니다');
+  if(!ensureProjectSelected()){ pendingUpdateRoundNo=null; return; }
   const model=$('#modelSel').value;
   setLoading(true);
   const pre=()=>document.getElementById('streamPre');
@@ -1192,10 +1222,9 @@ function deptBlock(){ var t=BoardCustom.deptConfigToPrompt(BoardCustom.load()); 
 function fullPrompt(note){return SYS+deptBlock()+'\n\n================================================================\n# 처리할 회의록 (형식 그대로)\n================================================================\n'+note+'\n\n위 지침에 따라 "A. 실행보드(마크다운)"와 "B. JSON" 두 블록을 순서대로 출력해줘.';}
 $('#copyPromptBtn').onclick=()=>{const n=$('#noteText').value.trim();if(!n){toast('회의록을 입력하세요');return;}copy(fullPrompt(n));};
 function renderPasteFlow(){const t=$('#pasteResult').value.trim();if(!t){toast('결과를 붙여넣으세요');pendingUpdateRoundNo=null;return;}
+  if(!ensureProjectSelected()){ pendingUpdateRoundNo=null; return; }
   const d=parseResult(t);
   if(d){lastMarkdown=t.replace(/```json[\s\S]*?```/i,'').trim();
-    // 지시15(약하게 강제): 분석 자체는 막지 않되, 프로젝트 미선택이면 히스토리에 저장되지 않음을 알린다.
-    if(!(projState&&projState.current)) toast('프로젝트가 선택되지 않아 이번 결과는 히스토리에 저장되지 않습니다');
     render(d);return;}
   pendingUpdateRoundNo=null;   // 렌더 실패 → 대기 중인 업데이트 대상 해제
   const s=t.indexOf('{'),e=t.lastIndexOf('}');
@@ -1664,7 +1693,7 @@ function renderBoard(d, raw){
   if(d.top_actions&&d.top_actions.length){
     hSummary+='<div class="block__l">🔥 지금 당장 할 일 TOP 3</div>';
     hSummary+='<div class="top3">'+d.top_actions.slice(0,3).map((t,i)=>
-    `<div class="it"><span class="rk">${i+1}</span><div><div class="wt">${esc(t.what)}</div><div class="mt mono">${esc(t.dept||'')} · ${esc(t.owner||'담당자 미정')} · ${esc(t.due||'미정')}</div></div></div>`).join('')+'</div>';}
+    `<button type="button" class="it" data-node-id="${esc(matchNodeIdForTop3(t,g))}"><span class="rk">${i+1}</span><div><div class="wt">${esc(t.what)}</div><div class="mt mono">${esc(t.dept||'')} · ${esc(t.owner||'담당자 미정')} · ${esc(t.due||'미정')}</div></div></button>`).join('')+'</div>';}
   hSummary+='</div>';
 
   // ── 시각화 5종(#15-19) — 요약 탭 상단 가까이에 모아 하나의 인사이트 대시보드로 ──
@@ -1744,7 +1773,7 @@ function renderBoard(d, raw){
   // 부서가 0개면 빈 <div class="depts"></div>만 남아 안내 문구만 보인다(다른 빈 상태와 톤 통일).
   // [부서 편집] 토글은 이 분기와 무관하게 탭 헤더에 항상 그려진다.
   const deptsBody = shown.length ? shown.map(x=>{const dep=x.dep;
-    return `<section class="dept${dep._hidden?' is-hidden':''}"><div class="dept__h"><span class="dot"></span>`+
+    return `<section class="dept${dep._hidden?' is-hidden':''}" data-dept="${esc(dep.dept||'[미상]')}"><div class="dept__h"><span class="dot"></span>`+
     (editMode
       ? `<input class="de-name" type="text" maxlength="40" data-de="rename" data-i="${x.i}" value="${esc(dep.dept)}" aria-label="부서명">`
       : `<span class="nm">${esc(dep.dept)}</span>`)+
@@ -1804,6 +1833,47 @@ function renderBoard(d, raw){
       rows.forEach(r=>r.classList.add('miss-flash'));
       rows[0].scrollIntoView({behavior:'smooth',block:'center'});
       setTimeout(()=>rows.forEach(r=>r.classList.remove('miss-flash')),2600);
+    };
+  });
+  // Drill-down P0-1: 지금 당장 할 일 TOP3 카드 → 진행 순서 탭의 매칭 노드로 이동+강조.
+  // 매칭 노드가 없어도(data-node-id="") 탭 이동까지는 항상 하고 조용히 끝난다.
+  document.querySelectorAll('.top3 .it').forEach(btn=>{
+    btn.onclick=()=>{
+      switchTab('dag');
+      const nid=btn.dataset.nodeId; if(!nid) return;
+      const el=document.querySelector('#result .dag-n[data-id="'+CSS.escape(nid)+'"]');
+      if(!el) return;
+      document.querySelectorAll('.dag-n.flash').forEach(n=>n.classList.remove('flash'));
+      el.scrollIntoView({behavior:'smooth',block:'center'});
+      el.classList.add('flash');
+      setTimeout(()=>el.classList.remove('flash'),2600);
+    };
+  });
+  // Drill-down P0-2: 부서별 할 일 부담도 행 → 부서별 실행 항목 탭의 해당 부서 섹션으로 이동+강조.
+  document.querySelectorAll('.workload-row[data-dept]').forEach(btn=>{
+    btn.onclick=()=>{
+      switchTab('depts');
+      const name=btn.dataset.dept;
+      const el=document.querySelector('[data-tabpanel="depts"] .dept[data-dept="'+CSS.escape(name)+'"]');
+      if(!el) return;
+      document.querySelectorAll('.dept.flash').forEach(n=>n.classList.remove('flash'));
+      el.scrollIntoView({behavior:'smooth',block:'center'});
+      el.classList.add('flash');
+      setTimeout(()=>el.classList.remove('flash'),2600);
+    };
+  });
+  // Drill-down P0-3: 담당자별 완료율 행 → 부서별 실행 항목 탭 + 기존 담당자 필터(#11) 재사용.
+  // 새 필터 UI를 만들지 않고 이미 있는 ownerFilter 토글 메커니즘을 그대로 쓴다.
+  document.querySelectorAll('.workload-row[data-owner]').forEach(btn=>{
+    btn.onclick=()=>{
+      ownerFilter=btn.dataset.owner;
+      activeTab='depts';
+      renderBoard(lastBoard);
+      const bar=document.querySelector('[data-tabpanel="depts"] .owner-filter-bar');
+      if(!bar) return;
+      bar.scrollIntoView({behavior:'smooth',block:'center'});
+      bar.classList.add('flash');
+      setTimeout(()=>bar.classList.remove('flash'),2600);
     };
   });
   // 부서별 실행 항목 정렬 기준 전환.
