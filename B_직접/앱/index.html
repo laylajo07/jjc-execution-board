@@ -887,22 +887,25 @@ function ownerTotalsHtml(depts){
    본문 텍스트 최소 13px(요구사항 12pt=12px 이상을 여유 있게 충족). ── */
 function chartEmpty(msg){ return `<div class="chart-empty">${esc(msg||'아직 데이터가 없습니다')}</div>`; }
 
-// #15 회의록 품질 점수 트렌드 — 회차가 2개 미만이면 그래프 대신 안내만 표시.
-// 요약 탭 상단 카드는 회의 성격별 점수(meetingTypeScore)를 쓰는데 트렌드·변경사유는 원래
-// qualityScore()를 따로 썼다 — 같은 회차인데 두 곳 숫자가 달라지는 버그(자체검증에서 발견).
-// 회차 자신의 기준(findBaseline)으로 diff·성격을 다시 구해 상단 카드와 동일한 계산으로 통일한다.
-function typedScoreForRound(histProj,round){
-  const board=normalize(round.raw);
-  const baseline=histProj?ProjectStore.findBaseline(histProj,round.roundNo):null;
-  const diff=baseline?BoardDiff.diffBoards(normalize(baseline.raw),board):null;
-  const type=BoardDerive.classifyMeetingType(board,diff);
-  return BoardDerive.meetingTypeScore(board,type,diff);
+// #15 프로젝트 진행률 추이(사용자 요청) — 회의록 자체 완성도(회차마다 들쑥날쭉) 대신
+// "1차~현재 회차까지 누적 전체 항목 중 완료 비율"로 그린다. 각 회차 board는 그 시점까지의
+// 프로젝트 전체 상태를 담고 있으므로(회차간 diff가 성립하는 이유이기도 하다) completionRate(board)가
+// 곧 그 회차까지의 누적 완료율이다. 항목이 빠지는 등으로 원시값이 튀어도 반드시 우상향이어야
+// 하므로(사용자 요청 — 이전 회차보다 낮아질 수 없음) 직전 회차 값과 max를 취해 단조 증가를 보장한다.
+function cumulativeProgressScores(histProj){
+  const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
+  let running=0;
+  return rounds.map(r=>{
+    const raw=Math.round(BoardDerive.completionRate(normalize(r.raw))*100);
+    running=Math.max(running,raw);
+    return {roundNo:r.roundNo,score:running};
+  });
 }
 function qualityTrendHtml(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
   if(!rounds.length) return chartEmpty();
   if(rounds.length<2) return chartEmpty('2회차부터 트렌드를 확인할 수 있습니다.');
-  const pts=rounds.map(r=>({roundNo:r.roundNo,score:typedScoreForRound(histProj,r)}));
+  const pts=cumulativeProgressScores(histProj);
   const W=640,H=120,PADX=32,PADY=24;   // 다른 카드 대비 과도하게 크지 않도록 축소(사용자 요청, 기존 H=160)
   const n=pts.length;
   const xAt=i=>PADX+(n>1?i*((W-2*PADX)/(n-1)):0);
@@ -913,7 +916,7 @@ function qualityTrendHtml(histProj){
     `<text x="${xAt(i)}" y="${yAt(p.score)-12}" class="trend-val" text-anchor="middle">${p.score}</text>`+
     `<text x="${xAt(i)}" y="${H-8}" class="trend-lab" text-anchor="middle">${p.roundNo}차</text>`
   ).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="회차별 회의록 품질 점수 트렌드 그래프">`+
+  return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="회차별 프로젝트 진행률 추이 그래프">`+
     `<line x1="${PADX}" y1="${yAt(0)}" x2="${W-PADX}" y2="${yAt(0)}" class="trend-axis"/>`+
     `<polyline points="${line}" fill="none" stroke="var(--primary)" stroke-width="2.5"/>`+
     marks+`</svg>`;
@@ -960,7 +963,7 @@ function qualityChangeListHtml(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
   if(rounds.length<2) return '';
   const boards=rounds.map(r=>normalize(r.raw));
-  const scores=rounds.map(r=>typedScoreForRound(histProj,r));
+  const scores=cumulativeProgressScores(histProj).map(p=>p.score);
   const lines=rounds.map((r,i)=>i===0?`${r.roundNo}차 — 첫 번째 회의입니다`:qualityChangeReason(r.roundNo,boards[i-1],boards[i],scores[i-1],scores[i]));
   return `<div class="trend-reasons">`+lines.map(t=>`<div class="trend-reason-row">${esc(t)}</div>`).join('')+`</div>`;
 }
@@ -1726,7 +1729,7 @@ function renderBoard(d, raw){
 
   // ── 탭1: 회차 비교(신규) — "회차 비교"를 핵심 가치로 앞세워 트렌드·변동요약·diff·미결/진행/완료 흐름을 한 탭에 모은다(사용자 요청, UI 개편). ──
   let hCompare='';
-  hCompare+=secH('01','회의록 품질 점수 트렌드');
+  hCompare+=secH('01','프로젝트 진행률 추이');
   hCompare+='<div class="change-digest insights"><div class="viz-block">'+qualityTrendHtml(histProj)+qualityChangeListHtml(histProj)+'</div></div>';
   hCompare+=secH('02','미결 → 진행중 → 완료 흐름');
   hCompare+='<div class="change-digest insights"><div class="viz-block">'+progressFlowHtml(histProj)+'</div></div>';
