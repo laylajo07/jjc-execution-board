@@ -172,6 +172,13 @@
   function statusLabel(st) { return { '확인필요': '검토 필요', '확정': '완료' }[st] || st; }
   // 지시#30: 상태를 색상 하나로만 구분하지 않고 아이콘을 함께 표기한다. index.html의 statusIcon()과 동일 규칙.
   function statusIcon(st) { return { '확정': '✓', '확인필요': '⚠', '추정': '~' }[st] || ''; }
+  // 담당자 표시 통일(사용자 요청): 비었거나 미정·미상·[미상]·- 류면 "미지정 상태". index.html의
+  // isBlankV/ownerLabel과 동일 판정(로컬 복제 — 모듈 독립성 유지, house style).
+  function ownerLabel(v) {
+    var s = String(v == null ? '' : v).trim();
+    var blank = !s || s === '미정' || s === '미상' || s === '[미상]' || s === '-';
+    return blank ? '미지정 상태' : s;
+  }
 
   // 노드 상세 패널 본문(순수 문자열). detail은 board-derive.buildDetailMap의 항목.
   function nodePanelHtml(node, detail, graph) {
@@ -190,7 +197,7 @@
 
     if (detail.matched) {
       h += '<dl class="np-facts">'
-        + '<dt>담당</dt><dd>' + esc(detail.owner || '담당자 미정') + '</dd>'
+        + '<dt>담당</dt><dd>' + esc(ownerLabel(detail.owner)) + '</dd>'
         + '<dt>기한</dt><dd>' + esc(detail.due || '미정') + '</dd>'
         + '<dt>상태</dt><dd>' + (detail.status ? '<span class="tag ' + statusClass(detail.status) + '">' + (statusIcon(detail.status) ? esc(statusIcon(detail.status)) + ' ' : '') + esc(statusLabel(detail.status)) + '</span>' : '미정') + '</dd>'
         + '</dl>';

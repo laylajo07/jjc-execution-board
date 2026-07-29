@@ -424,11 +424,11 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   table.t tr.miss-flash{background:var(--primary-soft)}
   table.t th,table.t td{overflow-wrap:anywhere}   /* 셀 너비에 맞춰 자동 줄바꿈, 긴 토큰도 넘치지 않음 */
   table.t tr:last-child td{border-bottom:0}
-  table.t col.c-who{width:6.5em} table.t col.c-when{width:9em} table.t col.c-tag{width:5.4em}   /* 담당/기한/상태 최소 너비 고정 — "예시 2026-07-21"(예시 목표일 접두 포함)까지 한 줄에 잘리지 않게(본문 13px 기준) */
+  table.t col.c-who{width:9em} table.t col.c-when{width:9em} table.t col.c-tag{width:10em} table.t col.c-note{width:10em}   /* 담당/기한/상태 최소 너비 고정 — "예시 2026-07-21"(예시 목표일 접두 포함)까지, "김민지 차장" 류 이름도 한 줄에 잘리지 않게(본문 13px 기준). c-tag(상태)·c-note(목적/선행조건) 폭을 맞춰, 할 일/작성 문서/의사결정 세 표의 담당·기한 칼럼이 표마다 다른 위치로 밀리지 않고 세로로 정렬되게 한다 */
   td.who,td.when{font-family:var(--mono);font-size:13px;color:var(--ink2);overflow-wrap:normal;word-break:normal}
   /* 좁은 화면: 업무명·담당·기한·상태만 기본 노출, 근거(basis)는 숨겨 핵심 열에 폭을 더 준다 */
   @media(max-width:480px){
-    table.t col.c-who{width:4.6em} table.t col.c-when{width:7.2em}
+    table.t col.c-who{width:6em} table.t col.c-when{width:7.2em} table.t col.c-tag{width:7em} table.t col.c-note{width:7em}
     .basis{display:none}
   }
   /* 담당/기한의 긴 주석("미정 (원문 …)")은 2줄로 자르고 전체 값은 title 툴팁·원본 마크다운에서. 산출물은 원본 값 그대로. */
@@ -1316,6 +1316,9 @@ function droppedItemsHtml(diff){
 // 동일 판정을 로컬 복제(모듈 독립성 유지, house style; board-diff.js도 같은 방식).
 function isBlankV(v){v=(v==null?'':String(v)).trim();return !v||v==='미정'||v==='미상'||v==='[미상]'||v==='-';}
 function isUnsetDueV(v){return isBlankV(v)||/예시/.test(String(v==null?'':v));}
+// 담당자·결정자 표시 통일(사용자 요청): 값이 비었거나 미정·미상·[미상]·- 류(=isBlankV)면
+// 화면엔 "미지정 상태"로만 보여준다 — data-owner 필터·isBlankV 판정 등 원본 값 비교 로직은 그대로.
+function ownerLabel(v){ return isBlankV(v)?'미지정 상태':String(v==null?'':v); }
 // data-miss: 품질점수 클릭 하이라이트용. data-owner: 담당자 이름 클릭 필터용(비어있지 않을 때만).
 function rowMetaAttrs(owner,due){
   const f=[];if(isBlankV(owner))f.push('owner');if(isUnsetDueV(due))f.push('due');
@@ -1333,15 +1336,15 @@ function filterByOwner(items,getOwner){
 function tblAI(items,deptIdx,dept,diffTags){
   const rows=filterByOwner(items,a=>a.owner); if(!rows.length)return '';
   return `<div class="block"><div class="block__l">할 일</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-tag"></colgroup><tr><th>내용</th><th>담당</th><th>기한</th><th>상태</th></tr>`+
-    rows.map(({it:a,i})=>`<tr${rowMetaAttrs(a.owner,a.due)}><td title="${esc(a.what)}"><span class="clip2">${esc(a.what)}</span>${diffBadge(diffTags,deptIdx,dept,'action',i)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who" title="${esc(a.owner||'담당자 미정')}"><span class="clip2">${esc(a.owner||'담당자 미정')}</span></td><td class="when" title="${esc(a.due||'미정')}"><span class="clip2">${esc(a.due||'미정')}</span></td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
+    rows.map(({it:a,i})=>`<tr${rowMetaAttrs(a.owner,a.due)}><td title="${esc(a.what)}"><span class="clip2">${esc(a.what)}</span>${diffBadge(diffTags,deptIdx,dept,'action',i)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who" title="${esc(ownerLabel(a.owner))}"><span class="clip2">${esc(ownerLabel(a.owner))}</span></td><td class="when" title="${esc(a.due||'미정')}"><span class="clip2">${esc(a.due||'미정')}</span></td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
 function tblDoc(items,deptIdx,dept,diffTags){
   const rows=filterByOwner(items,d=>d.owner); if(!rows.length)return '';
-  return `<div class="block"><div class="block__l">작성 문서</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col></colgroup><tr><th>문서</th><th>담당</th><th>기한</th><th>목적</th></tr>`+
-    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.owner,d.due)}><td title="${esc(d.doc)}"><span class="clip2">${esc(d.doc)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'doc',i)}</td><td class="who" title="${esc(d.owner||'담당자 미정')}"><span class="clip2">${esc(d.owner||'담당자 미정')}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.purpose||'')}</td></tr>`).join('')+`</table></div>`;}
+  return `<div class="block"><div class="block__l">작성 문서</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-note"></colgroup><tr><th>문서</th><th>담당</th><th>기한</th><th>목적</th></tr>`+
+    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.owner,d.due)}><td title="${esc(d.doc)}"><span class="clip2">${esc(d.doc)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'doc',i)}</td><td class="who" title="${esc(ownerLabel(d.owner))}"><span class="clip2">${esc(ownerLabel(d.owner))}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.purpose||'')}</td></tr>`).join('')+`</table></div>`;}
 function tblDec(items,deptIdx,dept,diffTags){
   const rows=filterByOwner(items,d=>d.decider); if(!rows.length)return '';
-  return `<div class="block"><div class="block__l">의사결정 필요</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col></colgroup><tr><th>안건</th><th>결정자</th><th>기한</th><th>선행조건</th></tr>`+
-    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.decider,d.due)}><td title="${esc(d.topic)}"><span class="clip2">${esc(d.topic)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'decision',i)}</td><td class="who" title="${esc(d.decider||'담당자 미정')}"><span class="clip2">${esc(d.decider||'담당자 미정')}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
+  return `<div class="block"><div class="block__l">의사결정 필요</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-note"></colgroup><tr><th>안건</th><th>결정자</th><th>기한</th><th>선행조건</th></tr>`+
+    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.decider,d.due)}><td title="${esc(d.topic)}"><span class="clip2">${esc(d.topic)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'decision',i)}</td><td class="who" title="${esc(ownerLabel(d.decider))}"><span class="clip2">${esc(ownerLabel(d.decider))}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
 function secH(n,t){return `<div class="sec-h"><span class="n mono">${n}</span><h3>${t}</h3><span class="rule"></span></div>`;}
 
 /* 노드 상세 팝업 (#2) — 가운데 모달 + 이전/다음 탐색(#3) */
@@ -1701,7 +1704,7 @@ function renderBoard(d, raw){
   if(d.top_actions&&d.top_actions.length){
     hSummary+='<div class="block__l">🔥 지금 당장 할 일 TOP 3</div>';
     hSummary+='<div class="top3">'+d.top_actions.slice(0,3).map((t,i)=>
-    `<button type="button" class="it" data-node-id="${esc(matchNodeIdForTop3(t,g))}"><span class="rk">${i+1}</span><div><div class="wt">${esc(t.what)}</div><div class="mt mono">${esc(t.dept||'')} · ${esc(t.owner||'담당자 미정')} · ${esc(t.due||'미정')}</div></div></button>`).join('')+'</div>';}
+    `<button type="button" class="it" data-node-id="${esc(matchNodeIdForTop3(t,g))}"><span class="rk">${i+1}</span><div><div class="wt">${esc(t.what)}</div><div class="mt mono">${esc(t.dept||'')} · ${esc(ownerLabel(t.owner))} · ${esc(t.due||'미정')}</div></div></button>`).join('')+'</div>';}
   hSummary+='</div>';
 
   // ── 시각화 5종(#15-19) — 요약 탭 상단 가까이에 모아 하나의 인사이트 대시보드로 ──
