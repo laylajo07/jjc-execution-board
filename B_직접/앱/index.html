@@ -231,6 +231,10 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .btn.primary:hover{filter:brightness(1.08)}
   .btn.block{width:100%;justify-content:center;display:inline-flex;align-items:center;gap:7px}
   .btn.icon{width:44px;padding:11px 0;justify-content:center;flex:none}
+  .mic-btn{width:auto;height:auto;padding:2px 9px;font-size:13px;border-radius:999px}
+  .mic-btn.rec{background:var(--chk-bg);border-color:transparent;color:var(--chk);animation:micpulse 1.4s ease-in-out infinite alternate}
+  .mic-btn:disabled{opacity:.4;cursor:not-allowed}
+  @keyframes micpulse{to{opacity:.45}}
   .flow{margin-top:16px;border-top:1px dashed var(--line);padding-top:14px}
   .flow ol{margin:0 0 12px;padding:0;list-style:none;counter-reset:s}
   .flow li{position:relative;padding:0 0 9px 26px;font-size:13px;color:var(--muted)}
@@ -296,6 +300,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     border-radius:var(--radius);padding:18px 20px;margin-bottom:20px}
   .change-digest .cd-h{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:12px}
   .change-digest .cd-title{font-size:18px;font-weight:800;letter-spacing:-.01em;color:var(--ink)}
+  .checklist-pre{margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--sans);font-size:13px;line-height:1.6;color:var(--ink2)}
   .change-digest .cd-counts{display:flex;gap:7px}
   .change-digest .cd-done{color:var(--muted);background:color-mix(in srgb,var(--muted) 14%,transparent)}
   .change-digest .cd-items{display:grid;gap:6px}
@@ -326,6 +331,22 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}
   .dept-sort-btn:hover{border-color:var(--primary);color:var(--primary-ink)}
   .dept-sort-btn.on{background:var(--primary-soft);color:var(--primary-ink);border-color:transparent;font-weight:700}
+  /* 담당자별 TODO 누적 현황(#13) */
+  .owner-totals{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:20px}
+  .owner-totals-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+  .owner-total-card{display:flex;flex-direction:column;gap:6px;align-items:flex-start;text-align:left;
+    background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;cursor:pointer;font-family:var(--sans)}
+  .owner-total-card:hover{border-color:var(--primary)}
+  .owner-total-card.on{background:var(--primary-soft);border-color:transparent}
+  .ot-name{font-size:13px;font-weight:700;color:var(--ink)}
+  .ot-bar{display:block;width:100%;height:5px;border-radius:99px;background:var(--line)}
+  .ot-bar-fill{display:block;height:100%;border-radius:99px;background:var(--ok)}
+  .ot-nums{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+  /* 담당자 이름 클릭 필터(#11) */
+  tr[data-owner] .who{cursor:pointer}
+  tr[data-owner] .who:hover .clip2{text-decoration:underline;text-decoration-color:var(--primary)}
+  .owner-filter-bar{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink2);
+    background:var(--primary-soft);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px}
   .dept{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
   .dept__h{display:flex;align-items:center;gap:8px;padding:16px 20px;border-bottom:1px solid var(--line2);
     background:var(--surface)}
@@ -552,7 +573,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
       <div class="field-label">회의 회차 입력하기(숫자만 가능) <span class="hint" id="roundHint">숫자 · 파일명에서 자동 제안</span></div>
       <input class="note" id="roundNoInput" type="number" min="1" step="1" inputmode="numeric" placeholder="예: 2" style="width:100%">
 
-      <div class="field-label">직접 붙여넣기</div>
+      <div class="field-label">직접 붙여넣기 <button type="button" class="btn icon mic-btn" id="micBtn" title="음성 입력">🎤</button></div>
       <textarea id="noteText" placeholder="여기에 회의록을 붙여넣으세요…"></textarea>
 
       <div class="row" style="margin-top:14px;gap:8px">
@@ -662,6 +683,7 @@ let lastLoadedNote=null;   // 지금 열람 중인 회차의 원문 원본(자�
 let editMode=false, boardSnapshot=null;
 let activeTab='summary';   // 'summary'|'dag'|'depts' — 재렌더(부서 편집 등)에도 유지
 let deptSortMode='name';   // 'name'|'count'|'priority' — 부서별 실행 항목 탭 정렬 기준, 재렌더에도 유지
+let ownerFilter=null;      // 담당자 이름 클릭 필터(참석자별 액션 아이템 필터) — 선택된 이름 문자열 또는 null
 const DEPT_SORT_LABELS={name:'부서명순',count:'할 일 많은순',priority:'우선순위순'};
 // 부서 정렬 — priority는 크리티컬 패스 그래프 기준(병목 부서 최우선, 그다음 등장 단계가 이른 부서 순).
 function deptPriority(deptName,g){
@@ -691,6 +713,68 @@ function sortShownDepts(shown,mode,g){
     arr.sort((a,b)=>String(a.dep.dept||'').localeCompare(String(b.dep.dept||''),'ko')||(a.i-b.i));
   }
   return arr;
+}
+// 담당자별 TODO 누적 현황(#13) — 부서 전체에서 담당자별 완료/미완료 건수를 모은다.
+// '완료'로 표시되는 상태값은 원본 데이터의 '확정'(qualityScore·diffBoards가 보는 실제 값과 동일 기준).
+function ownerTotals(depts){
+  const map={};
+  const add=(owner,status)=>{
+    const o=(owner==null?'':String(owner)).trim();
+    if(!o||isBlankV(o))return;
+    if(!map[o])map[o]={done:0,open:0};
+    if(status==='확정')map[o].done++; else map[o].open++;
+  };
+  (depts||[]).forEach(dep=>{
+    (dep.action_items||[]).forEach(a=>add(a.owner,a.status));
+    (dep.documents||[]).forEach(x=>add(x.owner,x.status));
+    (dep.decisions_needed||[]).forEach(x=>add(x.decider,x.status));
+  });
+  return Object.keys(map).sort((a,b)=>a.localeCompare(b,'ko')).map(o=>({owner:o,done:map[o].done,open:map[o].open}));
+}
+// 다음 회의 전 체크리스트(#12) — 카톡/슬랙에 그대로 붙여넣을 수 있는 평문(마크다운·HTML 없음).
+function buildNextMeetingChecklist(board){
+  const depts=board.by_department||[];
+  const needsReview=[], missingOwner=[], missingDue=[], openDecisions=[];
+  depts.forEach(dep=>{
+    const nm=dep.dept||'[미상]';
+    (dep.action_items||[]).forEach(a=>{
+      if(a.status==='확인필요') needsReview.push(nm+' · '+(a.what||''));
+      if(isBlankV(a.owner)) missingOwner.push(nm+' · '+(a.what||''));
+      if(isUnsetDueV(a.due)) missingDue.push(nm+' · '+(a.what||''));
+    });
+    (dep.documents||[]).forEach(x=>{
+      if(x.status==='확인필요') needsReview.push(nm+' · '+(x.doc||''));
+      if(isBlankV(x.owner)) missingOwner.push(nm+' · '+(x.doc||''));
+      if(isUnsetDueV(x.due)) missingDue.push(nm+' · '+(x.doc||''));
+    });
+    (dep.decisions_needed||[]).forEach(x=>{
+      if(x.status!=='확정') openDecisions.push(nm+' · '+(x.topic||''));
+      if(isBlankV(x.decider)) missingOwner.push(nm+' · '+(x.topic||'')+'(결정자)');
+    });
+  });
+  const gaps=(board.gaps||[]).filter(Boolean);
+  const section=(title,arr)=>arr.length?('\n☐ '+title+'\n'+arr.map(t=>'  - '+t).join('\n')+'\n'):'';
+  let out='📋 다음 회의 전 체크리스트\n';
+  out+=section('검토가 필요한 항목',needsReview);
+  out+=section('아직 결정되지 않은 사항',openDecisions);
+  out+=section('담당자를 정해야 할 항목',missingOwner);
+  out+=section('기한을 정해야 할 항목',missingDue);
+  out+=section('확인이 필요한 사항',gaps);
+  if(out.trim()==='📋 다음 회의 전 체크리스트') out+='\n모두 확정됐습니다 — 다음 회의 전 특별히 확인할 사항이 없습니다.';
+  return out.trim();
+}
+function ownerTotalsHtml(depts){
+  const totals=ownerTotals(depts);
+  if(!totals.length)return '';
+  return `<div class="owner-totals"><div class="dept-sort-label" style="margin-bottom:8px">담당자별 현황</div>`+
+    `<div class="owner-totals-grid">`+totals.map(o=>{
+      const total=o.done+o.open, pct=total?Math.round(o.done/total*100):0;
+      return `<button type="button" class="owner-total-card" data-owner="${esc(o.owner)}">`+
+        `<span class="ot-name">${esc(o.owner)}</span>`+
+        `<span class="ot-bar"><span class="ot-bar-fill" style="width:${pct}%"></span></span>`+
+        `<span class="ot-nums">완료 ${o.done} · 미완료 ${o.open}</span>`+
+        `</button>`;
+    }).join('')+`</div></div>`;
 }
 
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('on');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('on'),1700);}
@@ -801,6 +885,28 @@ async function loadNotes(){
   }catch(e){}
 }
 $('#reloadNotes').onclick=loadNotes;
+/* 음성 입력(#14) — Web Speech API. 지원 브라우저(Chrome·Edge 등)에서만 동작, 없으면 버튼을 비활성화. */
+(function(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const btn=$('#micBtn');
+  if(!SR){ btn.disabled=true; btn.title='이 브라우저는 음성 입력을 지원하지 않습니다(Chrome·Edge 등에서 사용하세요)'; return; }
+  let rec=null, listening=false;
+  btn.onclick=()=>{
+    if(listening){ rec&&rec.stop(); return; }
+    rec=new SR(); rec.lang='ko-KR'; rec.continuous=true; rec.interimResults=false;
+    rec.onstart=()=>{ listening=true; btn.classList.add('rec'); btn.title='듣는 중… 다시 누르면 멈춤'; };
+    rec.onerror=(e)=>{ toast('음성 인식 오류: '+(e.error||'알 수 없음')); };
+    rec.onend=()=>{ listening=false; btn.classList.remove('rec'); btn.title='음성 입력'; };
+    rec.onresult=(e)=>{
+      let text='';
+      for(let i=e.resultIndex;i<e.results.length;i++){ if(e.results[i].isFinal) text+=e.results[i][0].transcript; }
+      if(!text)return;
+      const ta=$('#noteText'); const sep=ta.value&&!ta.value.endsWith('\n')?'\n':'';
+      ta.value+=sep+text.trim();
+    };
+    try{ rec.start(); }catch(e){ toast('마이크를 시작할 수 없습니다'); }
+  };
+})();
 $('#noteSelect').onchange=async e=>{const name=e.target.value;if(!name)return;
   try{const j=await (await fetch('/api/note?name='+encodeURIComponent(name))).json();$('#noteText').value=j.content||'';}catch(e){}
   setDefaultRoundNo();};
@@ -953,16 +1059,32 @@ function droppedItemsHtml(diff){
 // 동일 판정을 로컬 복제(모듈 독립성 유지, house style; board-diff.js도 같은 방식).
 function isBlankV(v){v=(v==null?'':String(v)).trim();return !v||v==='미정'||v==='미상'||v==='[미상]'||v==='-';}
 function isUnsetDueV(v){return isBlankV(v)||/예시/.test(String(v==null?'':v));}
-function missAttr(owner,due){const f=[];if(isBlankV(owner))f.push('owner');if(isUnsetDueV(due))f.push('due');return f.length?` data-miss="${f.join(' ')}"`:'';}
-function tblAI(items,deptIdx,dept,diffTags){if(!items||!items.length)return '';
+// data-miss: 품질점수 클릭 하이라이트용. data-owner: 담당자 이름 클릭 필터용(비어있지 않을 때만).
+function rowMetaAttrs(owner,due){
+  const f=[];if(isBlankV(owner))f.push('owner');if(isUnsetDueV(due))f.push('due');
+  const miss=f.length?` data-miss="${f.join(' ')}"`:'';
+  const ov=(owner==null?'':String(owner)).trim();
+  const own=(ov&&!isBlankV(ov))?` data-owner="${esc(ov)}"`:'';
+  return miss+own;
+}
+// ownerFilter가 걸려 있으면 그 담당자/결정자 항목만 남기되, diffBadge가 쓰는 원본 배열 인덱스(i)는 보존한다.
+function filterByOwner(items,getOwner){
+  const idxed=(items||[]).map((it,i)=>({it,i}));
+  if(!ownerFilter)return idxed;
+  return idxed.filter(r=>{const v=(getOwner(r.it)==null?'':String(getOwner(r.it))).trim();return v&&v===ownerFilter;});
+}
+function tblAI(items,deptIdx,dept,diffTags){
+  const rows=filterByOwner(items,a=>a.owner); if(!rows.length)return '';
   return `<div class="block"><div class="block__l">할 일</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-tag"></colgroup><tr><th>내용</th><th>담당</th><th>기한</th><th>상태</th></tr>`+
-    items.map((a,i)=>`<tr${missAttr(a.owner,a.due)}><td title="${esc(a.what)}"><span class="clip2">${esc(a.what)}</span>${diffBadge(diffTags,deptIdx,dept,'action',i)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who" title="${esc(a.owner||'담당자 미정')}"><span class="clip2">${esc(a.owner||'담당자 미정')}</span></td><td class="when" title="${esc(a.due||'미정')}"><span class="clip2">${esc(a.due||'미정')}</span></td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
-function tblDoc(items,deptIdx,dept,diffTags){if(!items||!items.length)return '';
+    rows.map(({it:a,i})=>`<tr${rowMetaAttrs(a.owner,a.due)}><td title="${esc(a.what)}"><span class="clip2">${esc(a.what)}</span>${diffBadge(diffTags,deptIdx,dept,'action',i)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who" title="${esc(a.owner||'담당자 미정')}"><span class="clip2">${esc(a.owner||'담당자 미정')}</span></td><td class="when" title="${esc(a.due||'미정')}"><span class="clip2">${esc(a.due||'미정')}</span></td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
+function tblDoc(items,deptIdx,dept,diffTags){
+  const rows=filterByOwner(items,d=>d.owner); if(!rows.length)return '';
   return `<div class="block"><div class="block__l">작성 문서</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col></colgroup><tr><th>문서</th><th>담당</th><th>기한</th><th>목적</th></tr>`+
-    items.map((d,i)=>`<tr${missAttr(d.owner,d.due)}><td title="${esc(d.doc)}"><span class="clip2">${esc(d.doc)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'doc',i)}</td><td class="who" title="${esc(d.owner||'담당자 미정')}"><span class="clip2">${esc(d.owner||'담당자 미정')}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.purpose||'')}</td></tr>`).join('')+`</table></div>`;}
-function tblDec(items,deptIdx,dept,diffTags){if(!items||!items.length)return '';
+    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.owner,d.due)}><td title="${esc(d.doc)}"><span class="clip2">${esc(d.doc)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'doc',i)}</td><td class="who" title="${esc(d.owner||'담당자 미정')}"><span class="clip2">${esc(d.owner||'담당자 미정')}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.purpose||'')}</td></tr>`).join('')+`</table></div>`;}
+function tblDec(items,deptIdx,dept,diffTags){
+  const rows=filterByOwner(items,d=>d.decider); if(!rows.length)return '';
   return `<div class="block"><div class="block__l">의사결정 필요</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col></colgroup><tr><th>안건</th><th>결정자</th><th>기한</th><th>선행조건</th></tr>`+
-    items.map((d,i)=>`<tr${missAttr(d.decider,d.due)}><td title="${esc(d.topic)}"><span class="clip2">${esc(d.topic)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'decision',i)}</td><td class="who" title="${esc(d.decider||'담당자 미정')}"><span class="clip2">${esc(d.decider||'담당자 미정')}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
+    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.decider,d.due)}><td title="${esc(d.topic)}"><span class="clip2">${esc(d.topic)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'decision',i)}</td><td class="who" title="${esc(d.decider||'담당자 미정')}"><span class="clip2">${esc(d.decider||'담당자 미정')}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
 function secH(n,t){return `<div class="sec-h"><span class="n mono">${n}</span><h3>${t}</h3><span class="rule"></span></div>`;}
 
 /* 노드 상세 팝업 (#2) — 가운데 모달 + 이전/다음 탐색(#3) */
@@ -1350,6 +1472,12 @@ function renderBoard(d, raw){
     hSummary+=acc('아직 결정 안 된 사항 & 전제 조건', gc+asmc, body, null, accOpen['아직 결정 안 된 사항 & 전제 조건']!==false);   // 기본 펼침 — 사용자가 접었던 경우(재렌더)만 유지
   }
 
+  // ── 다음 회의 전 체크리스트(#12) — 미결 사항을 카톡/슬랙에 바로 붙여넣을 수 있는 평문으로 정리 ──
+  const checklistText=buildNextMeetingChecklist(d);
+  hSummary+=`<div class="change-digest"><div class="cd-h"><span class="cd-title">다음 회의 전 체크리스트</span>`+
+    `<button type="button" class="btn mini" id="checklistCopyBtn">📋 복사</button></div>`+
+    `<pre class="checklist-pre">${esc(checklistText)}</pre></div>`;
+
   // ── 탭2: 크리티컬 패스 DAG ──
   let hDag='';
   hDag+=secH('01','진행 순서 및 우선순위');
@@ -1364,7 +1492,15 @@ function renderBoard(d, raw){
   // 숨긴 부서: 편집 모드에선 흐리게라도 보여야 되돌릴 수 있고, 보기 모드에선 아예 안 보인다.
   const allDepts=d.by_department||[];
   const shownUnsorted=allDepts.map((dep,i)=>({dep:dep,i:i})).filter(x=>editMode||!x.dep._hidden);
-  const shown=sortShownDepts(shownUnsorted,deptSortMode,g);
+  const shownAll=sortShownDepts(shownUnsorted,deptSortMode,g);
+  // 담당자 필터(#11)가 걸려 있으면 그 사람 항목이 하나도 없는 부서는 카드 자체를 안 보여준다
+  // (테이블만 비어 "추출된 항목 없음"으로 보이면 이 부서에 원래 항목이 없는 것과 헷갈린다).
+  const deptMatchesOwner=dep=>{
+    if(!ownerFilter)return true;
+    const m=v=>{const s=(v==null?'':String(v)).trim();return s&&s===ownerFilter;};
+    return (dep.action_items||[]).some(a=>m(a.owner))||(dep.documents||[]).some(x=>m(x.owner))||(dep.decisions_needed||[]).some(x=>m(x.decider));
+  };
+  const shown=shownAll.filter(x=>deptMatchesOwner(x.dep));
   // 부서가 0개면 빈 <div class="depts"></div>만 남아 안내 문구만 보인다(다른 빈 상태와 톤 통일).
   // [부서 편집] 토글은 이 분기와 무관하게 탭 헤더에 항상 그려진다.
   const deptsBody = shown.length ? shown.map(x=>{const dep=x.dep;
@@ -1376,7 +1512,7 @@ function renderBoard(d, raw){
     `</div>`+(editMode?deptToolsHtml(dep,x.i,allDepts):'')+`<div class="dept__b">`+
     (tblAI(dep.action_items,x.i,dep.dept,diffTags)+tblDoc(dep.documents,x.i,dep.dept,diffTags)+tblDec(dep.decisions_needed,x.i,dep.dept,diffTags) || '<div class="block"><div class="basis">추출된 항목 없음</div></div>')+
     `</div></section>`;}).join('')
-    : '<div class="block"><div class="basis">추출된 부서가 없습니다. [부서 편집]에서 [+ 부서 추가]로 추가하세요.</div></div>';
+    : (ownerFilter?'<div class="block"><div class="basis">이 담당자의 항목이 없습니다.</div></div>':'<div class="block"><div class="basis">추출된 부서가 없습니다. [부서 편집]에서 [+ 부서 추가]로 추가하세요.</div></div>');
   const deptsHtml='<div class="depts">'+deptsBody+'</div>'
     +(editMode?`<div class="de-add"><input class="dept-input" type="text" id="deAddInput" maxlength="40" placeholder="추가할 부서명" aria-label="추가할 부서명"><button type="button" class="btn" id="deAddBtn">+ 부서 추가</button></div>`:'');
   let hDepts='';
@@ -1384,11 +1520,15 @@ function renderBoard(d, raw){
   // ([+ 부서 추가]로 복구가 가장 필요한 바로 그 상황).
   hDepts+=`<div class="tab-head"><span class="tab-t">부서별 실행 항목</span>`+
     `<button type="button" class="acc-edit${editMode?' on':''}" id="deptEditBtn" aria-pressed="${editMode}">✎ 부서 편집</button>`+
-    `<span class="cnt">${shown.length}</span></div>`;
+    `<span class="cnt">${shownAll.length}</span></div>`;
   hDepts+=`<div class="dept-sort"><span class="dept-sort-label">정렬: ${DEPT_SORT_LABELS[deptSortMode]}</span>`+
     `<div class="dept-sort-btns">`+Object.keys(DEPT_SORT_LABELS).map(k=>
       `<button type="button" class="dept-sort-btn${k===deptSortMode?' on':''}" data-sort="${k}">${DEPT_SORT_LABELS[k]}</button>`).join('')+
     `</div></div>`;
+  hDepts+=ownerTotalsHtml(allDepts);
+  if(ownerFilter){
+    hDepts+=`<div class="owner-filter-bar">🔍 <b>${esc(ownerFilter)}</b>님 담당 항목만 보는 중 <button type="button" class="btn mini" id="ownerFilterClear">✕ 필터 해제</button></div>`;
+  }
   hDepts+=deptsHtml;
   hDepts+=droppedItemsHtml(diff);   // Task 4 — 직전 회차 대비 이번 회차에서 빠진 항목(diff null/미해당이면 빈 문자열)
 
@@ -1426,6 +1566,18 @@ function renderBoard(d, raw){
   document.querySelectorAll('.dept-sort-btn').forEach(btn=>{
     btn.onclick=()=>{ deptSortMode=btn.dataset.sort; renderBoard(lastBoard); };
   });
+  // 참석자별 액션 아이템 필터(#11) — 담당자 이름(표의 담당 셀 또는 담당자별 현황 카드) 클릭 시
+  // 그 사람 항목만 남기고, 같은 이름 재클릭이나 [필터 해제]로 되돌린다.
+  document.querySelectorAll('[data-tabpanel="depts"] td.who[title]').forEach(td=>{
+    const tr=td.closest('tr[data-owner]'); if(!tr)return;
+    td.onclick=()=>{ ownerFilter=(ownerFilter===tr.dataset.owner)?null:tr.dataset.owner; renderBoard(lastBoard); };
+  });
+  document.querySelectorAll('.owner-total-card').forEach(card=>{
+    if(card.dataset.owner===ownerFilter) card.classList.add('on');
+    card.onclick=()=>{ ownerFilter=(ownerFilter===card.dataset.owner)?null:card.dataset.owner; renderBoard(lastBoard); };
+  });
+  if($('#ownerFilterClear')) $('#ownerFilterClear').onclick=()=>{ ownerFilter=null; renderBoard(lastBoard); };
+  if($('#checklistCopyBtn')) $('#checklistCopyBtn').onclick=()=>copy(checklistText);
   // 신규/변경/완료 필터(변경점 카드): 클릭한 태그의 항목만 표시, 같은 태그 재클릭 시 전체 표시로 해제.
   let cdActiveFilter=null;
   document.querySelectorAll('.cd-filter-btn').forEach(btn=>{
