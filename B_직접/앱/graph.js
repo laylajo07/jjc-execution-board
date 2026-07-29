@@ -4,7 +4,7 @@
 (function (root) {
   'use strict';
 
-  var NODE_W = 170, NODE_H = 68, GAP_X = 100, GAP_Y = 32;
+  var NODE_W = 230, NODE_H = 122, GAP_X = 64, GAP_Y = 40;
 
   var SUFFIX = /(작성|확정|준비|검토|완료|진행)$/;
 
@@ -199,34 +199,34 @@
     return byDepth;
   }
 
+  // 세로(위→아래) 레이아웃: 깊이(depth)가 행(y)을, 같은 깊이 내 순서(i)가 열(x)을 결정한다.
   function layout(nodes, preds, succ) {
     var byDepth = orderRanks(nodes, preds, succ);
     Object.keys(byDepth).map(Number).forEach(function (d) {
       byDepth[d].forEach(function (n, i) {
-        n.x = d * (NODE_W + GAP_X);
-        n.y = i * (NODE_H + GAP_Y);
+        n.x = i * (NODE_W + GAP_Y);
+        n.y = d * (NODE_H + GAP_X);
       });
     });
     return byDepth;
   }
 
-  // 열 colNodes의 박스(세로 밴드)를 피해 targetY에 가장 가까운 y를 고른다.
-  function clearY(colNodes, targetY) {
-    if (!colNodes.length) return targetY;
+  // 행 rowNodes의 박스(가로 밴드)를 피해 targetX에 가장 가까운 x를 고른다.
+  function clearX(rowNodes, targetX) {
+    if (!rowNodes.length) return targetX;
     var pad = 10;
-    var bands = colNodes.map(function (n) { return [n.y - pad, n.y + NODE_H + pad]; })
+    var bands = rowNodes.map(function (n) { return [n.x - pad, n.x + NODE_W + pad]; })
       .sort(function (a, b) { return a[0] - b[0]; });
     for (var i = 0; i < bands.length; i++) {
-      if (targetY >= bands[i][0] && targetY <= bands[i][1]) {
-        return (targetY - bands[i][0] <= bands[i][1] - targetY) ? bands[i][0] : bands[i][1];
+      if (targetX >= bands[i][0] && targetX <= bands[i][1]) {
+        return (targetX - bands[i][0] <= bands[i][1] - targetX) ? bands[i][0] : bands[i][1];
       }
     }
-    return targetY;
+    return targetX;
   }
 
-  // 각 엣지에 route(절대좌표 폴리라인)를 붙인다:
-  //   소스 우변 포트 → (긴 엣지면 중간 열을 안전한 y로 수평 통과) → 타깃 좌변 포트.
-  // 포트는 노드 좌우변에서 세로로 분산해 겹침을 줄인다.
+  // 각 엣지에 route(절대좌표 폴리라인)를 붙인다: 소스 하변 포트 → (긴 엣지면 중간 행을
+  // 안전한 x로 수직 통과) → 타깃 상변 포트. 포트는 노드 상하변에서 가로로 분산해 겹침을 줄인다.
   function computeRoutes(nodes, edges, byDepth) {
     var byId = {}; nodes.forEach(function (n) { byId[n.id] = n; });
     var out = {}, inc = {};
@@ -236,22 +236,22 @@
     function port(node, list, e, otherKey) {
       var sorted = list.slice().sort(function (a, b) {
         var oa = byId[a[otherKey]], ob = byId[b[otherKey]];
-        return ((oa ? oa.y : 0) - (ob ? ob.y : 0)) || (a.from + '>' + a.to).localeCompare(b.from + '>' + b.to);
+        return ((oa ? oa.x : 0) - (ob ? ob.x : 0)) || (a.from + '>' + a.to).localeCompare(b.from + '>' + b.to);
       });
-      return node.y + Math.round(NODE_H * (sorted.indexOf(e) + 1) / (sorted.length + 1));
+      return node.x + Math.round(NODE_W * (sorted.indexOf(e) + 1) / (sorted.length + 1));
     }
 
     edges.forEach(function (e) {
       var a = byId[e.from], b = byId[e.to];
-      var sx = a.x + NODE_W, sy = port(a, out[a.id], e, 'to');
-      var tx = b.x, ty = port(b, inc[b.id], e, 'from');
+      var sy = a.y + NODE_H, sx = port(a, out[a.id], e, 'to');
+      var ty = b.y, tx = port(b, inc[b.id], e, 'from');
       var pts = [{ x: sx, y: sy }];
       for (var d = a.depth + 1; d < b.depth; d++) {
-        var colX = d * (NODE_W + GAP_X);
-        var lineY = sy + (ty - sy) * ((colX - sx) / (tx - sx || 1));
-        var safe = clearY(byDepth[d] || [], lineY);
-        pts.push({ x: colX, y: safe });
-        pts.push({ x: colX + NODE_W, y: safe });
+        var rowY = d * (NODE_H + GAP_X);
+        var lineX = sx + (tx - sx) * ((rowY - sy) / (ty - sy || 1));
+        var safe = clearX(byDepth[d] || [], lineX);
+        pts.push({ x: safe, y: rowY });
+        pts.push({ x: safe, y: rowY + NODE_H });
       }
       pts.push({ x: tx, y: ty });
       e.route = pts;

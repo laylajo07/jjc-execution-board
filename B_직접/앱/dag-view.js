@@ -59,13 +59,13 @@
     return DEPT_COLORS[s % DEPT_COLORS.length];
   }
 
-  var TOP = 28;
+  var TOP = 32, LEFT = 20;
 
-  // 노드 박스 안 텍스트 레이아웃(요구사항: 박스 밖으로 안 새고, task는 최대 2줄+말줄임,
-  // 텍스트 크기는 기존 대비 +2). index.html의 .dag-t/.dag-d/.dag-b font-size와 반드시 맞춰야 한다.
-  var TASK_FS = 13.5, DEPT_FS = 12, BOTT_FS = 11.5;
-  var TEXT_X_PAD = 14, TEXT_R_PAD = 12;                 // 좌측 인디케이터바 + 여백 / 우측 여백
-  var TASK_Y1 = 17, TASK_LINE_H = 15, DEPT_Y = 45, BOTT_Y = 59;
+  // 노드 박스 안 텍스트 레이아웃(요구사항: 박스 밖으로 안 새고, task는 최대 2줄+말줄임).
+  // index.html의 .dag-t/.dag-d/.dag-b font-size와 반드시 맞춰야 한다.
+  var TASK_FS = 15, DEPT_FS = 13, BOTT_FS = 12.5;
+  var TEXT_X_PAD = 16, TEXT_R_PAD = 14;                 // 좌측 인디케이터바 + 여백 / 우측 여백
+  var TASK_Y1 = 22, TASK_LINE_H = 19, DEPT_Y = 66, BOTT_Y1 = 90, BOTT_LINE_H = 15;
 
   // 폴리라인 P를 스무스 곡선(Catmull-Rom→cubic bezier)으로. 2점이면 수평 접선 곡선.
   function smoothPath(P) {
@@ -84,33 +84,38 @@
     return d;
   }
 
+  // 세로(위→아래) 레이아웃 — graph.js가 이미 depth를 y(행)로, 같은 깊이 내 순서를 x(열)로
+  // 계산해 주므로 여기서는 별도 좌표 변환 없이 n.x/n.y를 그대로 쓴다.
   function renderDag(g) {
   if (!g.nodes.length) return '';
-  var W = G.NODE_W, H = G.NODE_H, GX = G.GAP_X, GY = G.GAP_Y;
-  var maxD = 0, maxY = 0;
-  g.nodes.forEach(function(n){ if(n.depth>maxD)maxD=n.depth; if(n.y>maxY)maxY=n.y; });
-  var w = (maxD+1)*(W+GX)+40, h = maxY+H+56;
+  var W = G.NODE_W, H = G.NODE_H, GX = G.GAP_X;
+  var maxD = 0, maxY = 0, maxX = 0;
+  g.nodes.forEach(function(n){ if(n.depth>maxD)maxD=n.depth; if(n.y>maxY)maxY=n.y; if(n.x>maxX)maxX=n.x; });
+  var w = maxX+W+40, h = TOP+maxY+H+24;
   var byId = {}; g.nodes.forEach(function(n){ byId[n.id]=n; });
 
   // width·height를 명시해 SVG를 고유 크기(=viewBox)로 렌더한다. CSS(.dag max-width:100%)가
   // 컨테이너보다 넓을 때만 줄이고, 좁을 땐 확대하지 않는다 — 항목이 적을 때 박스가 커지던 문제 방지.
-  var out = '<svg viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" class="dag" role="img" aria-label="크리티컬 패스 의존 그래프">';
+  var out = '<svg viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" class="dag" role="img" aria-label="진행 순서 및 우선순위 의존 그래프">';
   out += '<defs>'
       +  '<marker id="ah" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="var(--line2)"/></marker>'
       +  '<marker id="ahc" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 z" fill="var(--chk)"/></marker>'
       +  '</defs>';
 
-  // 열 라벨
-  for (var d=0; d<=maxD; d++){
-    var lx = 20 + d*(W+GX);
-    out += '<text x="'+lx+'" y="16" class="dag-col">'+(d===0?'1단계 · 지금 시작 가능':(d+1)+'단계')+'</text>';
-  }
+  // 행(단계) 라벨 — 각 깊이의 첫 노드 y 바로 위에 한 번씩만 그린다.
+  var seenDepth = {};
+  g.nodes.forEach(function(n){
+    if (seenDepth[n.depth]) return;
+    seenDepth[n.depth] = true;
+    var ly = TOP + n.y - 12;
+    out += '<text x="'+LEFT+'" y="'+ly+'" class="dag-col">'+(n.depth===0?'1단계 · 지금 시작 가능':(n.depth+1)+'단계')+'</text>';
+  });
 
   // 엣지를 노드보다 먼저 그려 뒤에 깔리게 한다. graph.js가 준 route(포트·박스회피 웨이포인트)를 스플라인으로.
   g.edges.forEach(function(e){
     var route = e.route;
     if (!route || route.length < 2) return;
-    var P = route.map(function(p){ return { x: 20 + p.x, y: TOP + p.y }; });
+    var P = route.map(function(p){ return { x: LEFT + p.x, y: TOP + p.y }; });
     out += '<path d="'+ smoothPath(P) +'"'
         +  ' class="'+(e.critical?'dag-e crit':'dag-e')+'" marker-end="url(#'+(e.critical?'ahc':'ah')+')"/>';
   });
@@ -118,7 +123,7 @@
   // 노드
   var textMaxW = W - TEXT_X_PAD - TEXT_R_PAD;
   g.nodes.forEach(function(n){
-    var x = 20+n.x, y = TOP+n.y;
+    var x = LEFT+n.x, y = TOP+n.y;
     var taskLines = fitLines(n.task, TASK_FS, textMaxW, 2);
     var deptLines = fitLines(n.dept, DEPT_FS, textMaxW, 1);
     out += '<g class="dag-n'+(n.isBottleneck?' bott':'')+'" data-id="'+esc(n.id)+'" role="button" tabindex="0" aria-label="'+esc(n.task+' · '+n.dept)+'">'
@@ -127,13 +132,13 @@
         +  '<text class="dag-t">'+taskLines.map(function(ln,i){ return '<tspan x="'+(x+TEXT_X_PAD)+'" y="'+(y+TASK_Y1+i*TASK_LINE_H)+'">'+esc(ln)+'</tspan>'; }).join('')+'</text>'
         +  '<text class="dag-d">'+deptLines.map(function(ln){ return '<tspan x="'+(x+TEXT_X_PAD)+'" y="'+(y+DEPT_Y)+'">'+esc(ln)+'</tspan>'; }).join('')+'</text>';
     if (n.isBottleneck) {
-      var bottLines = fitLines('⚠ 후행 '+n.downstream+'개가 이걸 기다림', BOTT_FS, textMaxW, 1);
-      out += '<text class="dag-b">'+bottLines.map(function(ln){ return '<tspan x="'+(x+TEXT_X_PAD)+'" y="'+(y+BOTT_Y)+'">'+esc(ln)+'</tspan>'; }).join('')+'</text>';
+      var bottLines = fitLines('⚠ '+n.downstream+'개 항목이 이 작업 완료를 기다리는 중', BOTT_FS, textMaxW, 2);
+      out += '<text class="dag-b">'+bottLines.map(function(ln,i){ return '<tspan x="'+(x+TEXT_X_PAD)+'" y="'+(y+BOTT_Y1+i*BOTT_LINE_H)+'">'+esc(ln)+'</tspan>'; }).join('')+'</text>';
     }
     out += '</g>';
-    // external 스텁
+    // external 스텁 — 세로 흐름에서는 "먼저 완료돼야 할 항목"이므로 박스 위쪽에 나열한다.
     n.externals.forEach(function(lb, k){
-      var sx = x - 96, sy = y + k*16;
+      var sx = x + k*94, sy = y - 20;
       out += '<g class="dag-x"><rect x="'+sx+'" y="'+sy+'" width="88" height="14" rx="4"/>'
           +  '<text x="'+(sx+5)+'" y="'+(sy+10)+'">? '+esc(clip(lb,9))+'</text></g>';
     });
@@ -161,6 +166,8 @@
   }
 
   function statusClass(st) { return { '확정': 'ok', '추정': 'est', '확인필요': 'chk' }[st] || 'chk'; }
+  // 화면 표시용 상태 문구(내부 데이터값·비교 로직은 그대로 두고 라벨만 사용자 친화적으로 바꾼다).
+  function statusLabel(st) { return { '확인필요': '검토 필요', '확정': '완료' }[st] || st; }
 
   // 노드 상세 패널 본문(순수 문자열). detail은 board-derive.buildDetailMap의 항목.
   function nodePanelHtml(node, detail, graph) {
@@ -174,14 +181,14 @@
           + '<div class="np-sub">' + esc(node.dept || '[미상]') + '</div></div></div>';
 
     if (node.isBottleneck) {
-      h += '<div class="np-bott">⚠ 병목 · 후행 ' + node.downstream + '개가 이걸 기다림</div>';
+      h += '<div class="np-bott">⚠ 지금 막혀있는 항목 · ' + node.downstream + '개 항목이 이 작업 완료를 기다리는 중</div>';
     }
 
     if (detail.matched) {
       h += '<dl class="np-facts">'
-        + '<dt>담당</dt><dd>' + esc(detail.owner || '미정') + '</dd>'
+        + '<dt>담당</dt><dd>' + esc(detail.owner || '담당자 미정') + '</dd>'
         + '<dt>기한</dt><dd>' + esc(detail.due || '미정') + '</dd>'
-        + '<dt>상태</dt><dd>' + (detail.status ? '<span class="tag ' + statusClass(detail.status) + '">' + esc(detail.status) + '</span>' : '미정') + '</dd>'
+        + '<dt>상태</dt><dd>' + (detail.status ? '<span class="tag ' + statusClass(detail.status) + '">' + esc(statusLabel(detail.status)) + '</span>' : '미정') + '</dd>'
         + '</dl>';
       if (detail.basis) h += '<div class="np-basis">↳ ' + esc(detail.basis) + '</div>';
     } else {
@@ -189,17 +196,17 @@
     }
 
     if (preds.length) {
-      h += '<div class="np-block"><div class="np-label">선행</div>'
+      h += '<div class="np-block"><div class="np-label">먼저 완료되어야 할 항목</div>'
         + preds.map(function (t) { return '<div class="np-dep">← ' + esc(t) + '</div>'; }).join('') + '</div>';
     }
     if (node.externals && node.externals.length) {
-      h += '<div class="np-block"><div class="np-label">외부 선행 · 회의록에 없음</div>'
+      h += '<div class="np-block"><div class="np-label">외부에서 먼저 완료되어야 할 항목 · 회의록에 없음</div>'
         + node.externals.map(function (x) { return '<div class="np-dep np-ext">? ' + esc(x) + '</div>'; }).join('') + '</div>';
     }
     return h;
   }
 
-  var api = { renderDag: renderDag, renderDagWarnings: renderDagWarnings, deptColor: deptColor, nodePanelHtml: nodePanelHtml, fitLines: fitLines };
+  var api = { renderDag: renderDag, renderDagWarnings: renderDagWarnings, deptColor: deptColor, nodePanelHtml: nodePanelHtml, fitLines: fitLines, statusLabel: statusLabel };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.DagView = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -176,15 +176,15 @@ test('실제 구버전 샘플01 파일이 크래시 없이 처리되고 성능 �
 
 const { NODE_W, GAP_X } = require('../B_직접/앱/graph.js');
 
-test('좌표: x는 깊이에 비례하고, 같은 열은 y가 겹치지 않는다', () => {
+test('좌표(세로 레이아웃): y는 깊이에 비례하고, 같은 행은 x가 겹치지 않는다', () => {
   const g = buildGraph([
     { id: 'T1', task: 'a', dept: '', blocked_by: [] },
     { id: 'T2', task: 'b', dept: '', blocked_by: [] },
     { id: 'T3', task: 'c', dept: '', blocked_by: ['T1'] },
   ]);
-  assert.equal(node(g, 'T1').x, 0);
-  assert.equal(node(g, 'T3').x, NODE_W + GAP_X);
-  assert.notEqual(node(g, 'T1').y, node(g, 'T2').y, '같은 열의 두 노드는 y가 달라야 한다');
+  assert.equal(node(g, 'T1').y, 0);
+  assert.equal(node(g, 'T3').y, NODE_H + GAP_X);
+  assert.notEqual(node(g, 'T1').x, node(g, 'T2').x, '같은 행의 두 노드는 x가 달라야 한다');
 });
 
 test('좌표는 결정적이다 — 같은 입력이면 같은 출력', () => {
@@ -235,7 +235,10 @@ test('DAG SVG: 병목 노드에 후행 개수 배지가 붙는다', () => {
   ]);
   const svg = renderDag(g);
   assert.match(svg, /^<svg /);
-  assert.match(svg, /후행 2개가 이걸 기다림/);
+  // 병목 문구는 박스 폭에 맞춰 2줄(tspan 2개)로 나뉘어 그려진다 — 줄바꿈 지점 앞뒤로 나눠 확인.
+  assert.match(svg, /class="dag-b"/);
+  assert.match(svg, /⚠ 2개 항목이 이 작업 완료를 기/);
+  assert.match(svg, /다리는 중/);
 });
 
 test('병목에서 나가는 엣지만 crit 클래스를 갖는다', () => {
@@ -628,9 +631,8 @@ test('nodePanelHtml: 매칭 상세는 담당/기한/상태를 담고, 병목은 
   const html = nodePanelHtml(n, { matched: true, owner: '박리드', due: '7/15', status: '확인필요', basis: '' }, g);
   assert.match(html, /박리드/);
   assert.match(html, /7\/15/);
-  assert.match(html, /확인필요/);
-  assert.match(html, /<span class="tag chk">확인필요<\/span>/);
-  assert.match(html, /후행 1개/);
+  assert.match(html, /<span class="tag chk">검토 필요<\/span>/);
+  assert.match(html, /1개 항목이 이 작업 완료를 기다리는 중/);
 });
 
 test('nodePanelHtml: 미매칭이면 부서 표 참조 안내로 축약한다', () => {
@@ -651,26 +653,26 @@ test('nodePanelHtml: 외부 선행을 나열하고 회의록 문자열을 이스
 
 const { NODE_H } = require('../B_직접/앱/graph.js');
 
-test('레이아웃: 엣지마다 route(소스 우변 포트 → 타깃 좌변 포트)가 붙는다', () => {
+test('레이아웃(세로): 엣지마다 route(소스 하변 포트 → 타깃 상변 포트)가 붙는다', () => {
   const g = buildGraph([
     { id: 'T1', task: 'a', dept: '', blocked_by: [] },
     { id: 'T2', task: 'b', dept: '', blocked_by: ['T1'] },
   ]);
   const e = g.edges[0], a = node(g, 'T1'), b = node(g, 'T2');
   assert.ok(Array.isArray(e.route) && e.route.length >= 2);
-  assert.equal(e.route[0].x, a.x + NODE_W, '시작은 소스 노드 우변');
-  assert.equal(e.route[e.route.length - 1].x, b.x, '끝은 타깃 노드 좌변');
-  assert.ok(e.route[0].y > a.y && e.route[0].y < a.y + NODE_H, '포트는 노드 세로 범위 안');
+  assert.equal(e.route[0].y, a.y + NODE_H, '시작은 소스 노드 하변');
+  assert.equal(e.route[e.route.length - 1].y, b.y, '끝은 타깃 노드 상변');
+  assert.ok(e.route[0].x > a.x && e.route[0].x < a.x + NODE_W, '포트는 노드 가로 범위 안');
 });
 
-test('레이아웃: 포트 분산 — 한 노드의 여러 나가는 엣지는 시작 y가 서로 다르다', () => {
+test('레이아웃(세로): 포트 분산 — 한 노드의 여러 나가는 엣지는 시작 x가 서로 다르다', () => {
   const g = buildGraph([
     { id: 'T1', task: 'a', dept: '', blocked_by: [] },
     { id: 'T2', task: 'b', dept: '', blocked_by: ['T1'] },
     { id: 'T3', task: 'c', dept: '', blocked_by: ['T1'] },
   ]);
   const e2 = g.edges.find(e => e.to === 'T2'), e3 = g.edges.find(e => e.to === 'T3');
-  assert.notEqual(e2.route[0].y, e3.route[0].y, 'T1의 두 나가는 엣지 포트가 분산돼야 한다');
+  assert.notEqual(e2.route[0].x, e3.route[0].x, 'T1의 두 나가는 엣지 포트가 분산돼야 한다');
 });
 
 test('레이아웃: 다열을 건너뛰는 엣지는 중간 열 통과 웨이포인트가 생긴다', () => {
