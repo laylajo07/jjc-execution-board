@@ -884,35 +884,55 @@ function ownerTotalsHtml(depts){
    본문 텍스트 최소 13px(요구사항 12pt=12px 이상을 여유 있게 충족). ── */
 function chartEmpty(msg){ return `<div class="chart-empty">${esc(msg||'아직 데이터가 없습니다')}</div>`; }
 
-// #15 프로젝트 진행률 추이(사용자 요청) — "1차~현재 회차까지 누적 전체 항목 중 완료 비율"로 그린다.
-// 각 회차 board는 그 시점까지의 프로젝트 전체 상태를 담고 있으므로(회차간 diff가 성립하는 이유이기도
-// 하다) completionRate(board)가 곧 그 회차까지의 누적 완료율이다.
-// 우상향 고정(하락 방지) 로직은 제거했다 — 화면 위치마다 다른 값이 보이는 게 더 큰 문제라는
-// 사용자 판단(자체검증에서 카드와 그래프 숫자가 달랐던 걸 발견) — 카드·그래프 모두 이 raw 값을
-// 그대로, 가공 없이 보여준다. 원본 데이터가 줄면(항목 삭제·정리 등) 그래프도 정직하게 내려간다.
-function cumulativeProgressScores(histProj){
+// #15 개념 분리(사용자 요청, 필수) — "회의 품질 점수"와 "프로젝트 진행률"은 절대 서로 섞이면 안 된다.
+//   회의 품질 점수: 회차마다 "독립적으로" 평가(qualityScore — 담당자/기한 미정·의사결정 미완 감점).
+//     이전 회차 값을 전혀 참조하지 않는다. 특정 회차 운영이 부실하면 그대로 드러나야 하므로
+//     하락 방지(클램프) 로직을 절대 두지 않는다.
+//   프로젝트 진행률: "02 미결→진행중→완료 흐름"과 같은 상태 집계(확정=완료)를 누적 관점으로 재사용.
+//     완료된 항목은 계속 완료로 반영돼야 하므로(기획 의도) 직전 회차 값과 max를 취해 우상향을 보장한다.
+//     이 클램프는 오직 이 지표에만 적용한다 — 품질 점수 쪽에는 절대 적용하지 않는다.
+function qualityScoreTrendData(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
-  return rounds.map(r=>({roundNo:r.roundNo,score:Math.round(BoardDerive.completionRate(normalize(r.raw))*100)}));
+  return rounds.map(r=>({roundNo:r.roundNo,score:BoardDerive.qualityScore(normalize(r.raw)).score}));
 }
-function qualityTrendHtml(histProj){
+function projectProgressData(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
-  if(!rounds.length) return chartEmpty();
-  if(rounds.length<2) return chartEmpty('2회차부터 트렌드를 확인할 수 있습니다.');
-  const pts=cumulativeProgressScores(histProj);
-  const W=640,H=120,PADX=32,PADY=24;   // 다른 카드 대비 과도하게 크지 않도록 축소(사용자 요청, 기존 H=160)
+  let running=0;
+  return rounds.map(r=>{
+    const raw=Math.round(BoardDerive.completionRate(normalize(r.raw))*100);
+    running=Math.max(running,raw);
+    return {roundNo:r.roundNo,score:running};
+  });
+}
+// 두 그래프가 그리는 방식(선+점+라벨)만 공유하는 렌더러 — 계산 로직(위 두 함수)은 완전히 분리돼 있어
+// 여기서 절대 섞이지 않는다. 좌우 50% 배치(사용자 요청)에 맞춰 기존 640×120보다 좁고 낮은 뷰박스 사용.
+function trendSvg(pts,ariaLabel){
+  const W=320,H=130,PADX=24,PADY=26;
   const n=pts.length;
   const xAt=i=>PADX+(n>1?i*((W-2*PADX)/(n-1)):0);
   const yAt=s=>H-PADY-(Math.max(0,Math.min(100,s))/100)*(H-2*PADY);
   const line=pts.map((p,i)=>xAt(i)+','+yAt(p.score)).join(' ');
   const marks=pts.map((p,i)=>
-    `<circle cx="${xAt(i)}" cy="${yAt(p.score)}" r="4.5" fill="var(--primary)"/>`+
-    `<text x="${xAt(i)}" y="${yAt(p.score)-12}" class="trend-val" text-anchor="middle">${p.score}</text>`+
+    `<circle cx="${xAt(i)}" cy="${yAt(p.score)}" r="4" fill="var(--primary)"/>`+
+    `<text x="${xAt(i)}" y="${yAt(p.score)-10}" class="trend-val" text-anchor="middle">${p.score}</text>`+
     `<text x="${xAt(i)}" y="${H-8}" class="trend-lab" text-anchor="middle">${p.roundNo}차</text>`
   ).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="회차별 주제 진행률 추이 그래프">`+
+  return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="${esc(ariaLabel)}">`+
     `<line x1="${PADX}" y1="${yAt(0)}" x2="${W-PADX}" y2="${yAt(0)}" class="trend-axis"/>`+
     `<polyline points="${line}" fill="none" stroke="var(--primary)" stroke-width="2.5"/>`+
     marks+`</svg>`;
+}
+function qualityTrendHtml(histProj){
+  const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
+  if(!rounds.length) return chartEmpty();
+  if(rounds.length<2) return chartEmpty('2회차부터 트렌드를 확인할 수 있습니다.');
+  return trendSvg(qualityScoreTrendData(histProj),'회차별 회의 품질 점수 추이 그래프');
+}
+function projectProgressHtml(histProj){
+  const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
+  if(!rounds.length) return chartEmpty();
+  if(rounds.length<2) return chartEmpty('2회차부터 추이를 확인할 수 있습니다.');
+  return trendSvg(projectProgressData(histProj),'회차별 프로젝트 진행률 그래프');
 }
 
 // 트렌드 그래프 아래 "왜 바뀌었는지" 1줄 설명(신규) — qualityScore가 이미 추적하는 지표
@@ -930,7 +950,7 @@ function reviewPendingCount(board){
 function qualityChangeReason(roundNo, prevBoard, curBoard, prevScore, curScore){
   const prevQ=BoardDerive.qualityScore(prevBoard), curQ=BoardDerive.qualityScore(curBoard);
   const delta=curScore-prevScore;
-  if(delta===0) return `${roundNo}차 — 이전 회차와 진행률 동일(${curScore}%)`;
+  if(delta===0) return `${roundNo}차 — 이전 회차와 점수 동일(${curScore}점)`;
   const up=delta>0;
   const ownerFixed=prevQ.ownerMissing-curQ.ownerMissing;
   const decisionFixed=prevQ.decisionOpen-curQ.decisionOpen;
@@ -950,13 +970,13 @@ function qualityChangeReason(roundNo, prevBoard, curBoard, prevScore, curScore){
   }
   reasons.sort((a,b)=>b.n-a.n);
   const tail=reasons.length?reasons.slice(0,2).map(r=>r.t).join(', '):'항목 세부 내용 변경';
-  return `${roundNo}차에서 ${Math.abs(delta)}%p ${up?'상승':'하락'} — ${tail}`;
+  return `${roundNo}차에서 ${Math.abs(delta)}점 ${up?'상승':'하락'} — ${tail}`;
 }
 function qualityChangeListHtml(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
   if(rounds.length<2) return '';
   const boards=rounds.map(r=>normalize(r.raw));
-  const scores=cumulativeProgressScores(histProj).map(p=>p.score);
+  const scores=qualityScoreTrendData(histProj).map(p=>p.score);
   const lines=rounds.map((r,i)=>i===0?`${r.roundNo}차 — 첫 번째 회의입니다`:qualityChangeReason(r.roundNo,boards[i-1],boards[i],scores[i-1],scores[i]));
   return `<div class="trend-reasons">`+lines.map(t=>`<div class="trend-reason-row">${esc(t)}</div>`).join('')+`</div>`;
 }
@@ -1722,8 +1742,13 @@ function renderBoard(d, raw){
 
   // ── 탭1: 회차 비교(신규) — "회차 비교"를 핵심 가치로 앞세워 트렌드·변동요약·diff·미결/진행/완료 흐름을 한 탭에 모은다(사용자 요청, UI 개편). ──
   let hCompare='';
-  hCompare+=secH('01','주제 진행률 추이');
-  hCompare+='<div class="change-digest insights"><div class="viz-block">'+qualityTrendHtml(histProj)+qualityChangeListHtml(histProj)+'</div></div>';
+  // 개념 분리(사용자 요청, 필수) — "회의 품질 점수"(회차별 독립 평가)와 "프로젝트 진행률"(누적 지표)을
+  // 좌우 카드로 나란히 배치해 서로 다른 개념임을 명확히 구분한다. 모바일에서는 viz-grid2가 세로로 쌓는다.
+  hCompare+=secH('01','회차별 추이 비교');
+  hCompare+='<div class="change-digest insights"><div class="viz-grid2">'
+    +'<div class="viz-block"><div class="viz-title">회의 품질 점수 추이</div>'+qualityTrendHtml(histProj)+qualityChangeListHtml(histProj)+'</div>'
+    +'<div class="viz-block"><div class="viz-title">프로젝트 진행률</div>'+projectProgressHtml(histProj)+'</div>'
+    +'</div></div>';
   hCompare+=secH('02','미결 → 진행중 → 완료 흐름');
   hCompare+='<div class="change-digest insights"><div class="viz-block">'+progressFlowHtml(histProj)+'</div></div>';
   if(digest && digest.total>0){
@@ -1769,21 +1794,19 @@ function renderBoard(d, raw){
   } else if(lastUpdatedIso){ const u=BoardCustom.fmtUpdatedAt(new Date(lastUpdatedIso)); if(u) stampLine=`업데이트 시각: ${esc(u)}`; }
   if(stampLine) hSummary+=`<div class="updated mono">${stampLine}</div>`;
   const qs=BoardDerive.qualityScore(d);
-  // 카드의 큰 숫자와 "회차 비교" 탭 그래프의 숫자가 서로 다른 계산식(qualityScore vs completionRate)을
-  // 쓰고 있어 같은 회차인데 위치마다 다르게 보이는 문제가 있었다(사용자 필수 수정 요청) — 카드도
-  // 그래프와 완전히 같은 값(completionRate, 가공 없는 raw 값)을 쓰도록 통일한다. 세부 칩(담당자
-  // 미정/기한 미확정/의사결정 미완)은 별개의 사실 정보라 qualityScore()를 그대로 유지한다.
-  const progressPct=Math.round(BoardDerive.completionRate(d)*100);
-  // 항목이 0건이면 그래프(completionRate 폴백)는 0을 보여주는데 카드는 아예 안 보이는(qs.total===0)
-  // 불일치가 있었다(자체검증에서 발견) — 카드도 무조건 그래프와 같은 값을 보이도록 조건 없이 렌더.
-  const qBand=progressPct>=80?'good':(progressPct>=50?'mid':'low');
-  hSummary+=`<div class="qscore q-${qBand}">`+
-    `<div class="qs-main"><span class="qs-num">${progressPct}</span><span class="qs-unit">%</span></div>`+
-    `<div class="qs-side"><div class="qs-label">주제 진행률</div><div class="qs-break">`+
+  // "회의 품질 점수"는 회차마다 "독립적으로" 평가한다(기획 의도, 필수 수정) — 이전 회차 값을 전혀
+  // 참조하지 않고 하락 방지 로직도 없다. "회차 비교" 탭의 "프로젝트 진행률"(누적 지표, completionRate
+  // 기반)과는 완전히 다른 계산이며 절대 값이 섞이면 안 된다 — 이 카드는 오직 qualityScore()만 쓴다.
+  if(qs.total>0){
+    const qBand=qs.score>=80?'good':(qs.score>=50?'mid':'low');
+    hSummary+=`<div class="qscore q-${qBand}">`+
+      `<div class="qs-main"><span class="qs-num">${qs.score}</span><span class="qs-unit">점</span></div>`+
+      `<div class="qs-side"><div class="qs-label">회의 품질 점수</div><div class="qs-break">`+
       `<button type="button" class="qs-stat" data-qfilter="owner">담당자 미정 <b>${qs.ownerMissing}</b></button>`+
       `<button type="button" class="qs-stat" data-qfilter="due">기한 미확정 <b>${qs.dueMissing}</b></button>`+
       `<span class="qs-stat qs-stat-plain">의사결정 미완 <b>${qs.decisionOpen}</b></span>`+
     `</div></div></div>`;
+  }
   hSummary+=`<h2>${esc(BoardDerive.friendlyTitle(d))}</h2>`;
   if(d.headline) hSummary+=`<div class="headline-sum">${esc(d.headline)}</div>`;
   if(d.top_actions&&d.top_actions.length){
