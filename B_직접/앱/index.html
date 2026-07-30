@@ -984,10 +984,13 @@ function trendSvg(pts,ariaLabel,color,unit){
   const line=pts.map((p,i)=>xAt(i)+','+yAt(p.score)).join(' ');
   const marks=pts.map((p,i)=>{
     const hasFactor=p.factor!=null&&p.factor!=='';
+    // 양 끝 점은 라벨을 중앙 정렬하면 텍스트 절반이 viewBox 밖으로 나가 잘린다(루트 svg는 기본
+    // overflow:hidden) — 첫 점은 왼쪽 정렬, 마지막 점은 오른쪽 정렬로 안쪽을 향해 자라게 한다.
+    const anchor=i===0?'start':(i===n-1?'end':'middle');
     return `<circle cx="${xAt(i)}" cy="${yAt(p.score)}" r="4" fill="${color}"/>`+
-    `<text x="${xAt(i)}" y="${yAt(p.score)-(hasFactor?21:10)}" class="trend-val" text-anchor="middle">${p.score}${unit}</text>`+
-    (hasFactor?`<text x="${xAt(i)}" y="${yAt(p.score)-9}" class="trend-factor" text-anchor="middle">${esc(p.factor)}</text>`:'')+
-    `<text x="${xAt(i)}" y="${H-8}" class="trend-lab" text-anchor="middle">${p.roundNo}차</text>`;
+    `<text x="${xAt(i)}" y="${yAt(p.score)-(hasFactor?21:10)}" class="trend-val" text-anchor="${anchor}">${p.score}${unit}</text>`+
+    (hasFactor?`<text x="${xAt(i)}" y="${yAt(p.score)-9}" class="trend-factor" text-anchor="${anchor}">${esc(p.factor)}</text>`:'')+
+    `<text x="${xAt(i)}" y="${H-8}" class="trend-lab" text-anchor="${anchor}">${p.roundNo}차</text>`;
   }).join('');
   return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="${esc(ariaLabel)}">`+
     `<line x1="${PADX}" y1="${yAt(0)}" x2="${W-PADX}" y2="${yAt(0)}" class="trend-axis"/>`+
