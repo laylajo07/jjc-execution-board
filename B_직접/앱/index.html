@@ -889,21 +889,17 @@ function chartEmpty(msg){ return `<div class="chart-empty">${esc(msg||'아직 �
 //   회의 품질 점수: 회차마다 "독립적으로" 평가(qualityScore — 담당자/기한 미정·의사결정 미완 감점).
 //     이전 회차 값을 전혀 참조하지 않는다. 특정 회차 운영이 부실하면 그대로 드러나야 하므로
 //     하락 방지(클램프) 로직을 절대 두지 않는다.
-//   프로젝트 진행률: "02 미결→진행중→완료 흐름"과 같은 상태 집계(확정=완료)를 누적 관점으로 재사용.
-//     완료된 항목은 계속 완료로 반영돼야 하므로(기획 의도) 직전 회차 값과 max를 취해 우상향을 보장한다.
-//     이 클램프는 오직 이 지표에만 적용한다 — 품질 점수 쪽에는 절대 적용하지 않는다.
+//   프로젝트 진행률: "02 미결→진행중→완료 흐름"과 같은 상태 집계(확정=완료)를 그 회차 기준으로 재사용
+//     ("완료 항목 수/그 시점 전체 항목 수" — 그 회차 board가 곧 그 시점 프로젝트 전체 상태다).
+//     하락 방지(직전 최고값 유지) 클램프는 넣지 않는다 — 새 미결/진행중 항목이 실제로 생겨 완료율이
+//     내려가도 100로 고정 표시되는 건 사실을 가린다는 사용자 판단(긴급 수정)으로 완전히 제거했다.
 function qualityScoreTrendData(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
   return rounds.map(r=>({roundNo:r.roundNo,score:BoardDerive.qualityScore(normalize(r.raw)).score}));
 }
 function projectProgressData(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
-  let running=0;
-  return rounds.map(r=>{
-    const raw=Math.round(BoardDerive.completionRate(normalize(r.raw))*100);
-    running=Math.max(running,raw);
-    return {roundNo:r.roundNo,score:running};
-  });
+  return rounds.map(r=>({roundNo:r.roundNo,score:Math.round(BoardDerive.completionRate(normalize(r.raw))*100)}));
 }
 // 두 그래프가 그리는 방식(선+점+라벨)만 공유하는 렌더러 — 계산 로직(위 두 함수)은 완전히 분리돼 있어
 // 여기서 절대 섞이지 않는다. 좌우 50% 배치(사용자 요청)에 맞춰 기존 640×120보다 좁고 낮은 뷰박스 사용.
