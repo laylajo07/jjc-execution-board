@@ -638,13 +638,17 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   <aside class="console">
     <section class="card pad">
       <div class="eyebrow">INPUT · 회의록</div>
-      <h1>회의록을 넣고 실행보드로</h1>
-      <p class="lead" id="lead">형식은 자유입니다. 녹취본·메모·카톡 붙여넣기 모두 됩니다.</p>
+      <h1>회의록을 누적 분석하여, 주제의 진행 방향과 변화를 한눈에 확인하세요.</h1>
+      <p class="lead" id="lead">1. 회의 주제를 설정합니다.
+2. 해당 주제로 이루어진 회의 내용을 직접 붙여넣기에 추가합니다.(텍스트 형식)
+3. 몇 회차로 진행된 회의인지 입력합니다.(주제, 회의 분석 1:N)
+4. '신규 분석' 또는 '업데이트'를 진행합니다.
+5. 추가로 회의 회차를 누적하여 분석을 진행하여 각 회의별 변경/진행 사항을 한눈에 확인할 수 있습니다.</p>
 
       <div class="sidebar-section sidebar-section-first">
-        <div class="field-label">회의 프로젝트 선택 <span class="hint" title="같은 프로젝트를 선택하면 1차·2차·3차… 회차가 계속 쌓여 회차 간 변화(품질 점수 추이, 신규/변경/완료 항목)를 자동으로 추적합니다">회차별 누적 추적</span></div>
+        <div class="field-label">회의 주제 선택 <span class="hint" title="같은 주제를 선택하면 1차·2차·3차… 회차가 계속 쌓여 회차 간 변화(품질 점수 추이, 신규/변경/완료 항목)를 자동으로 추적합니다">회차별 누적 추적</span></div>
         <div id="projList" class="proj-list"></div>
-        <button class="btn block" id="newProjBtn" style="margin:8px 0 0">＋ 새 프로젝트</button>
+        <button class="btn block" id="newProjBtn" style="margin:8px 0 0">＋ 새 주제</button>
       </div>
 
       <div id="projHistory" class="proj-history sidebar-section" hidden></div>
@@ -905,7 +909,7 @@ function qualityTrendHtml(histProj){
     `<text x="${xAt(i)}" y="${yAt(p.score)-12}" class="trend-val" text-anchor="middle">${p.score}</text>`+
     `<text x="${xAt(i)}" y="${H-8}" class="trend-lab" text-anchor="middle">${p.roundNo}차</text>`
   ).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="회차별 프로젝트 진행률 추이 그래프">`+
+  return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="회차별 주제 진행률 추이 그래프">`+
     `<line x1="${PADX}" y1="${yAt(0)}" x2="${W-PADX}" y2="${yAt(0)}" class="trend-axis"/>`+
     `<polyline points="${line}" fill="none" stroke="var(--primary)" stroke-width="2.5"/>`+
     marks+`</svg>`;
@@ -1176,7 +1180,7 @@ async function probeRunner(){try{const r=await fetch('/api/health',{cache:'no-st
 function applyMode(){
   AUTO=true;
   $('#autoBox').style.display='block';$('#copyFlow').style.display='none';$('#analyzeBtn').style.display='';
-  $('#lead').textContent='1. 회의록을 선택하거나 직접 붙여넣기\n2. 해당 회의록의 프로젝트를 선택 또는 신규 생성\n3. 회의 회차를 입력하고 분석 시작\n\n💡 회차를 거듭할수록 무엇이 결정됐고, 무엇이 남았는지 자동으로 추적됩니다.';
+  $('#lead').textContent="1. 회의 주제를 설정합니다.\n2. 해당 주제로 이루어진 회의 내용을 직접 붙여넣기에 추가합니다.(텍스트 형식)\n3. 몇 회차로 진행된 회의인지 입력합니다.(주제, 회의 분석 1:N)\n4. '신규 분석' 또는 '업데이트'를 진행합니다.\n5. 추가로 회의 회차를 누적하여 분석을 진행하여 각 회의별 변경/진행 사항을 한눈에 확인할 수 있습니다.";
   $('#modelSel').disabled=false;loadNotes();
 }
 function initMode(){
@@ -1199,8 +1203,8 @@ $('#roundNoInput').oninput=refreshRoundHint;
 // #newProjBtn과 동일한 새 프로젝트 생성 플로우를 그 자리에서 띄우고, 취소하면 분석을 진행하지 않는다.
 function ensureProjectSelected(){
   if(projState&&projState.current) return true;
-  const name=prompt('분석 결과를 저장할 프로젝트 이름을 입력하세요\n(취소하면 분석을 진행하지 않습니다)');
-  if(!name||!name.trim()){ toast('프로젝트를 먼저 만들어야 분석할 수 있습니다'); return false; }
+  const name=prompt('분석 결과를 저장할 주제 이름을 입력하세요\n(취소하면 분석을 진행하지 않습니다)');
+  if(!name||!name.trim()){ toast('주제를 먼저 만들어야 분석할 수 있습니다'); return false; }
   const r=ProjectStore.createProject(projState,name);
   projState=r.state;
   ProjectStore.saveProjects(projState);
@@ -1718,7 +1722,7 @@ function renderBoard(d, raw){
 
   // ── 탭1: 회차 비교(신규) — "회차 비교"를 핵심 가치로 앞세워 트렌드·변동요약·diff·미결/진행/완료 흐름을 한 탭에 모은다(사용자 요청, UI 개편). ──
   let hCompare='';
-  hCompare+=secH('01','프로젝트 진행률 추이');
+  hCompare+=secH('01','주제 진행률 추이');
   hCompare+='<div class="change-digest insights"><div class="viz-block">'+qualityTrendHtml(histProj)+qualityChangeListHtml(histProj)+'</div></div>';
   hCompare+=secH('02','미결 → 진행중 → 완료 흐름');
   hCompare+='<div class="change-digest insights"><div class="viz-block">'+progressFlowHtml(histProj)+'</div></div>';
@@ -1775,7 +1779,7 @@ function renderBoard(d, raw){
   const qBand=progressPct>=80?'good':(progressPct>=50?'mid':'low');
   hSummary+=`<div class="qscore q-${qBand}">`+
     `<div class="qs-main"><span class="qs-num">${progressPct}</span><span class="qs-unit">%</span></div>`+
-    `<div class="qs-side"><div class="qs-label">프로젝트 진행률</div><div class="qs-break">`+
+    `<div class="qs-side"><div class="qs-label">주제 진행률</div><div class="qs-break">`+
       `<button type="button" class="qs-stat" data-qfilter="owner">담당자 미정 <b>${qs.ownerMissing}</b></button>`+
       `<button type="button" class="qs-stat" data-qfilter="due">기한 미확정 <b>${qs.dueMissing}</b></button>`+
       `<span class="qs-stat qs-stat-plain">의사결정 미완 <b>${qs.decisionOpen}</b></span>`+
@@ -2029,7 +2033,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') $('#cmpOverlay').c
 function renderProjList(){
   const box=$('#projList'); if(!box)return;
   if(!projState.projects.length){
-    box.innerHTML='<div class="dept-empty">아직 프로젝트가 없습니다. 아래 ＋ 버튼으로 만들어보세요.</div>';
+    box.innerHTML='<div class="dept-empty">아직 주제가 없습니다. 아래 ＋ 버튼으로 만들어보세요.</div>';
     return;
   }
   box.innerHTML='<div class="hist-list">'+projState.projects.map(p=>{
@@ -2038,8 +2042,8 @@ function renderProjList(){
       +`<span class="hist-title">${esc(p.name)}</span>`
       +`<span class="hist-t">회차 ${p.rounds.length}개</span>`
       +`</button>`
-      +`<button type="button" class="hist-rename" data-pid="${esc(p.id)}" title="프로젝트 이름 수정" aria-label="${esc(p.name)} 이름 수정">✎</button>`
-      +`<button type="button" class="hist-del" data-pid="${esc(p.id)}" title="이 프로젝트 삭제" aria-label="${esc(p.name)} 삭제">✕</button>`
+      +`<button type="button" class="hist-rename" data-pid="${esc(p.id)}" title="주제 이름 수정" aria-label="${esc(p.name)} 이름 수정">✎</button>`
+      +`<button type="button" class="hist-del" data-pid="${esc(p.id)}" title="이 주제 삭제" aria-label="${esc(p.name)} 삭제">✕</button>`
       +`</div>`;
   }).join('')+'</div>';
   box.querySelectorAll('.hist-main').forEach(btn=>{
@@ -2062,7 +2066,7 @@ function renderProjList(){
       const pid=btn.dataset.pid;
       const p=ProjectStore.getProject(projState,pid);
       if(!p)return;
-      const name=prompt('프로젝트 이름 수정', p.name);
+      const name=prompt('주제 이름 수정', p.name);
       if(name===null)return;                 // 취소
       if(!name.trim()){ toast('이름은 비울 수 없습니다'); return; }
       projState=ProjectStore.renameProject(projState,pid,name);
@@ -2075,8 +2079,8 @@ function renderProjList(){
     btn.onclick=()=>{
       const pid=btn.dataset.pid;
       const p=ProjectStore.getProject(projState,pid);
-      const name=p?p.name:'이 프로젝트', roundCount=p?p.rounds.length:0;
-      if(!confirm(`"${name}" 프로젝트를 삭제할까요?\n회차 ${roundCount}개가 모두 함께 삭제되며 되돌릴 수 없습니다.`))return;
+      const name=p?p.name:'이 주제', roundCount=p?p.rounds.length:0;
+      if(!confirm(`"${name}" 주제를 삭제할까요?\n회차 ${roundCount}개가 모두 함께 삭제되며 되돌릴 수 없습니다.`))return;
       const wasCurrent=(pid===projState.current);
       projState=ProjectStore.deleteProject(projState,pid);
       if(wasCurrent){ currentRoundId=null; clearResultPanel(); }
@@ -2084,7 +2088,7 @@ function renderProjList(){
       renderProjList();
       renderProjHistory();
       setDefaultRoundNo();
-      toast(`"${name}" 프로젝트를 삭제했습니다`);
+      toast(`"${name}" 주제를 삭제했습니다`);
     };
   });
 }
@@ -2217,7 +2221,7 @@ function renderProjHistory(){
   });
 }
 $('#newProjBtn').onclick=()=>{
-  const name=prompt('새 프로젝트 이름을 입력하세요');
+  const name=prompt('새 주제 이름을 입력하세요');
   if(!name||!name.trim())return;
   const r=ProjectStore.createProject(projState,name);
   projState=r.state;
