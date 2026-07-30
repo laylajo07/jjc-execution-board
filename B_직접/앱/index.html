@@ -980,10 +980,10 @@ function projectProgressData(histProj){
 // 작은 글자(trend-factor)로, 점수 자체가 시각적으로 더 강조되도록 한다.
 function trendSvg(pts,ariaLabel,color,unit){
   // 점수 텍스트가 18px로 커져(#31-텍스트위계) 상단 여백(PADY)과 데이터 포인트 간 가로 폭(W)을
-  // 함께 넓힘 — 그대로 두면 회차 4개일 때 인접 포인트의 요인 라벨끼리 간격이 너무 좁아진다(실측
-  // getBBox()로 확인, 11유닛까지 좁혀짐). 폭을 12.5%만 늘려 실측 간격을 24유닛 이상으로 확보하면서도
-  // 모바일(좁은 화면)에서 렌더 배율이 과하게 줄어 11px 미만으로 내려가지 않을 정도로만 조정.
-  const W=360,H=150,PADX=24,PADY=44;
+  // 함께 넓힘 — 그대로 두면 회차 4개일 때 인접 포인트의 요인 라벨끼리 간격이 너무 좁아진다. 실측
+  // getBBox()로 재확인하며 320→360으로는 여전히 3유닛까지 좁혀지는 지점이 남아 400까지 늘림.
+  // 모바일(좁은 화면)에서도 렌더 배율이 11px 미만으로 내려가지 않을 정도까지만 조정.
+  const W=400,H=165,PADX=24,PADY=44;
   const n=pts.length;
   const xAt=i=>PADX+(n>1?i*((W-2*PADX)/(n-1)):0);
   const yAt=s=>H-PADY-(Math.max(0,Math.min(100,s))/100)*(H-2*PADY);
