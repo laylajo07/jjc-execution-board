@@ -348,29 +348,21 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .viz-grid2{display:grid;gap:18px;margin-top:14px}
   @media(min-width:640px){.viz-grid2{grid-template-columns:1fr 1fr}}
   .viz-grid2 .viz-block{margin-top:0}
-  /* 회의 품질 점수 세로 막대(#31-재수정, 꺾은선 폐기): 상단만 둥근 모서리, 점수 구간별 색상. */
-  .qbar-row{display:flex;align-items:flex-end;gap:14px;height:126px;padding:0 4px}
-  .qbar-col{flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;min-width:0}
-  .qbar-val{font-size:13px;font-weight:700;color:var(--ink);margin-bottom:6px}
-  .qbar-bar{width:100%;max-width:46px;border-radius:8px 8px 0 0}
-  .qbar-good{background:var(--ok)} .qbar-mid{background:var(--est)} .qbar-low{background:var(--chk)}
-  .qbar-labs{display:flex;gap:14px;padding:0 4px;margin-top:8px}
-  .qbar-lab{flex:1 1 0;text-align:center;font-size:13px;color:var(--muted);min-width:0}
-  .qbar-legend{display:flex;gap:16px;margin-top:14px;flex-wrap:wrap}
-  .qbar-lg{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
-  .qbar-dot{width:9px;height:9px;border-radius:3px;flex:none}
+  .trend-svg{width:100%;height:auto;display:block}
+  .trend-axis{stroke:var(--line);stroke-width:1}
+  .trend-val{font-size:13px;font-weight:700;fill:var(--ink)}
+  .trend-factor{font-size:9.5px;fill:var(--faint)}
+  .trend-lab{font-size:13px;fill:var(--muted)}
   .trend-reasons{margin-top:10px;display:flex;flex-direction:column;gap:5px}
   .trend-reason-row{font-size:13.5px;color:var(--muted);line-height:1.5;word-break:keep-all;overflow-wrap:break-word}
-  /* 프로젝트 진행률 전용 게이지(#31-재요청): 회의 품질 점수 그래프와 절대 재사용하지 않는 별도 컴포넌트.
-     점·연결선 없이, 왼쪽부터 채워지는 단일 가로 막대 + 회차 구간 경계 세로선 + 구간별 명도 차이만 사용. */
-  .pg-wrap{margin-top:8px}
-  .pg-labels{position:relative;height:32px}
-  .pg-lab{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap;text-align:center;font-family:var(--mono)}
-  .pg-lab b{display:block;font-size:11.5px;font-weight:800;color:var(--muted)}
-  .pg-lab span{font-size:13px;font-weight:700;color:var(--ink)}
-  .pg-track{position:relative;height:34px;border-radius:8px;background:var(--surface2);border:1px solid var(--line);overflow:hidden}
-  .pg-seg{position:absolute;top:0;bottom:0;background:var(--ok)}
-  .pg-div{position:absolute;top:0;bottom:0;width:2px;background:var(--surface)}
+  /* 프로젝트 진행률 전용 렌더러(#31-재수정): 회의 품질 점수 그래프와 절대 재사용하지 않는 별도 컴포넌트.
+     회차마다 완전히 별도의 가로 막대를 세로로 나열 — 값이 같아도 병합하지 않고 각자 자기 줄을 갖는다. */
+  .pg-rows{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+  .pg-row{display:flex;align-items:center;gap:10px}
+  .pg-rlab{width:32px;flex:none;font-size:13px;font-weight:700;color:var(--muted);text-align:right}
+  .pg-rtrack{flex:1;height:18px;border-radius:6px;background:var(--surface2);border:1px solid var(--line);overflow:hidden}
+  .pg-rfill{height:100%;border-radius:6px;background:var(--ok)}
+  .pg-rpct{width:38px;flex:none;font-size:13px;font-weight:700;color:var(--ink);text-align:right;font-family:var(--mono)}
   .flow-legend{display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap}
   .flow-lg{display:flex;align-items:center;gap:5px;font-size:13.5px;color:var(--muted)}
   .flow-dot{width:8px;height:8px;border-radius:50%;flex:none}
@@ -921,7 +913,37 @@ function chartEmpty(msg){ return `<div class="chart-empty">${esc(msg||'아직 �
 //     이 안전장치를 두지 않는다(그 지표는 회차마다 완전히 독립적이어야 하므로).
 function qualityScoreTrendData(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
-  return rounds.map(r=>({roundNo:r.roundNo,score:BoardDerive.qualityScore(normalize(r.raw)).score}));
+  const boards=rounds.map(r=>normalize(r.raw));
+  return rounds.map((r,i)=>({roundNo:r.roundNo,score:BoardDerive.qualityScore(boards[i]).score,factor:qualityPointFactor(i,boards)}));
+}
+// 그래프 데이터 포인트 옆에 붙는 짧은 변동 요인 라벨(사용자 요청) — qualityScore()의 세 감점 항목과
+// '확인필요'(미결) 상태 건수, 총 네 후보 중 가장 큰 값 하나만 "라벨 N건"으로 보여준다. 1차는 비교
+// 대상이 없어 그 회차 자체의 절대 건수로, 2차부터는 직전 회차 대비 변화량(절대값)으로 고른다 —
+// qualityChangeReason()이 아래 상세 설명 문장을 만들 때 쓰는 것과 같은 네 후보·같은 우선순위 기준이라
+// 그래프 라벨(요약)과 그 아래 문장(상세)이 서로 다른 이야기를 하지 않는다.
+function topFactorLabel(items,zeroText){
+  const maxN=Math.max(...items.map(i=>i.n));
+  if(maxN<=0)return zeroText;
+  const top=items.filter(i=>i.n===maxN)[0];
+  return `${top.label} ${top.n}건`;
+}
+function qualityPointFactor(i,boards){
+  const qs=BoardDerive.qualityScore(boards[i]);
+  if(i===0){
+    return topFactorLabel([
+      {label:'미결',n:reviewPendingCount(boards[0])},
+      {label:'담당자 미정',n:qs.ownerMissing},
+      {label:'기한 미확정',n:qs.dueMissing},
+      {label:'의사결정 미완',n:qs.decisionOpen}
+    ],'완료 다수');
+  }
+  const prevQs=BoardDerive.qualityScore(boards[i-1]);
+  return topFactorLabel([
+    {label:'미결',n:Math.abs(reviewPendingCount(boards[i-1])-reviewPendingCount(boards[i]))},
+    {label:'담당자 미정',n:Math.abs(prevQs.ownerMissing-qs.ownerMissing)},
+    {label:'기한 미확정',n:Math.abs(prevQs.dueMissing-qs.dueMissing)},
+    {label:'의사결정 미완',n:Math.abs(prevQs.decisionOpen-qs.decisionOpen)}
+  ],'항목 변경');
 }
 function projectProgressData(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
@@ -944,77 +966,62 @@ function projectProgressData(histProj){
     return {roundNo:r.roundNo,score:runningPct};
   });
 }
-// 회의 품질 점수 전용 세로 막대 그래프(꺾은선 재요청 폐기 — 사용자 재수정). 점수 구간별로 막대
-// 색상을 다르게 줘서 숫자를 안 봐도 상태를 바로 알 수 있게 한다 — 기존 상태 색상 역할(지시사항
-// #31: 완료=Green, 확인 필요=Amber, 필수조치=Red 계열)을 그대로 재사용해 색의 의미가 앱 전체에서
-// 일관되게 유지되도록 한다.
-function qualityScoreColor(score){
-  if(score>=80)return 'qbar-good';
-  if(score>=60)return 'qbar-mid';
-  return 'qbar-low';
+// 두 그래프가 그리는 방식(선+점+라벨)만 공유하는 렌더러 — 계산 로직(위 두 함수)은 완전히 분리돼 있어
+// 여기서 절대 섞이지 않는다. 좌우 50% 배치(사용자 요청)에 맞춰 기존 640×120보다 좁고 낮은 뷰박스 사용.
+// color: 두 그래프가 숫자만 다른 게 아니라 한눈에도 다른 개념임을 알 수 있도록(사용자 요청) 선 색을
+// 다르게 준다 — 기존 상태 색상 역할(지시사항 #31: 완료=Green, 확인 필요=Amber)을 그대로 재사용한다.
+// unit: 품질 점수는 "점", 진행률은 "%"를 값 옆에 바로 붙여 두 숫자를 헷갈리지 않게 한다(사용자 요청).
+// p.factor(선택): 점수 숫자 바로 아래에 작고 옅은 색으로 붙는 변동 요인 한 줄(사용자 요청) — 점수보다
+// 작은 글자(trend-factor)로, 점수 자체가 시각적으로 더 강조되도록 한다.
+function trendSvg(pts,ariaLabel,color,unit){
+  const W=320,H=140,PADX=24,PADY=34;
+  const n=pts.length;
+  const xAt=i=>PADX+(n>1?i*((W-2*PADX)/(n-1)):0);
+  const yAt=s=>H-PADY-(Math.max(0,Math.min(100,s))/100)*(H-2*PADY);
+  const line=pts.map((p,i)=>xAt(i)+','+yAt(p.score)).join(' ');
+  const marks=pts.map((p,i)=>{
+    const hasFactor=p.factor!=null&&p.factor!=='';
+    // 양 끝 점은 라벨을 중앙 정렬하면 텍스트 절반이 viewBox 밖으로 나가 잘린다(루트 svg는 기본
+    // overflow:hidden) — 첫 점은 왼쪽 정렬, 마지막 점은 오른쪽 정렬로 안쪽을 향해 자라게 한다.
+    const anchor=i===0?'start':(i===n-1?'end':'middle');
+    return `<circle cx="${xAt(i)}" cy="${yAt(p.score)}" r="4" fill="${color}"/>`+
+    `<text x="${xAt(i)}" y="${yAt(p.score)-(hasFactor?21:10)}" class="trend-val" text-anchor="${anchor}">${p.score}${unit}</text>`+
+    (hasFactor?`<text x="${xAt(i)}" y="${yAt(p.score)-9}" class="trend-factor" text-anchor="${anchor}">${esc(p.factor)}</text>`:'')+
+    `<text x="${xAt(i)}" y="${H-8}" class="trend-lab" text-anchor="${anchor}">${p.roundNo}차</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="${esc(ariaLabel)}">`+
+    `<line x1="${PADX}" y1="${yAt(0)}" x2="${W-PADX}" y2="${yAt(0)}" class="trend-axis"/>`+
+    `<polyline points="${line}" fill="none" stroke="${color}" stroke-width="2.5"/>`+
+    marks+`</svg>`;
 }
-function qualityBarChartHtml(histProj){
+function qualityTrendHtml(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
   if(!rounds.length) return chartEmpty();
   if(rounds.length<2) return chartEmpty('2회차부터 트렌드를 확인할 수 있습니다.');
-  const pts=qualityScoreTrendData(histProj);
-  const MAXH=104; // 100점일 때 막대 높이(px) — 나머지는 이 값에 비례
-  const bars=pts.map(p=>{
-    const s=Math.max(0,Math.min(100,p.score));
-    const h=Math.max(2,Math.round(s/100*MAXH)); // 0점도 완전히 안 보이진 않게 최소 2px만 보장(수치는 그대로 정확)
-    return `<div class="qbar-col"><div class="qbar-val">${p.score}점</div>`+
-      `<div class="qbar-bar ${qualityScoreColor(p.score)}" style="height:${h}px"></div></div>`;
-  }).join('');
-  const labs=pts.map(p=>`<div class="qbar-lab">${p.roundNo}차</div>`).join('');
-  const ariaTxt=pts.map(p=>`${p.roundNo}차 ${p.score}점`).join(', ');
-  const legend=`<div class="qbar-legend">`+
-    `<span class="qbar-lg"><span class="qbar-dot qbar-good"></span>양호(80점 이상)</span>`+
-    `<span class="qbar-lg"><span class="qbar-dot qbar-mid"></span>보통(60~79점)</span>`+
-    `<span class="qbar-lg"><span class="qbar-dot qbar-low"></span>주의(60점 미만)</span>`+
-    `</div>`;
-  return `<div class="qbar-wrap" role="img" aria-label="${esc('회차별 회의 품질 점수: '+ariaTxt)}">`+
-    `<div class="qbar-row">${bars}</div><div class="qbar-labs">${labs}</div>${legend}</div>`;
+  return trendSvg(qualityScoreTrendData(histProj),'회차별 회의 품질 점수 추이 그래프','var(--est)','점');
 }
-function qualityTrendHtml(histProj){
-  return qualityBarChartHtml(histProj);
-}
-// 프로젝트 진행률 전용 렌더러 — 회의 품질 점수 그래프와 시각적으로 절대 같은 컴포넌트를 쓰지 말라는
-// 재요청(사용자)에 따라 완전히 새로 만든다. 점(dot)·연결선(line) 대신, 하나의 가로 막대를 왼쪽부터
-// 누적 진행률만큼 채우고, 그 안을 회차 구간 경계(얇은 세로선)로 나눠 구간마다 명도를 다르게 준다.
-// 값이 그대로인 연속 회차(예: 67%→67%)는 폭 0인 구간이라 화면에 새 구간이 안 보이는 게 맞으므로,
-// 그런 회차들은 라벨도 하나로 묶어("1~2차") 같은 위치에 라벨 두 개가 겹치는 문제를 피한다.
-function progressGaugeHtml(histProj){
+// 프로젝트 진행률 전용 렌더러(사용자 재수정) — 회차마다 완전히 별도의 가로 막대를 세로로 나열한다.
+// 값이 같은 회차(예: 1차·2차 둘 다 67%)여도 각각 자기 몫의 막대를 그대로 그린다(병합하지 않음).
+// 회차가 진행될수록 채우는 색이 같은 계열 내에서 점점 짙어지도록 filter:brightness()만 다르게 준다.
+function progressBarsHtml(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
   if(!rounds.length) return chartEmpty();
   if(rounds.length<2) return chartEmpty('2회차부터 추이를 확인할 수 있습니다.');
   const pts=projectProgressData(histProj);
-  const groups=[];
-  pts.forEach(p=>{
-    const g=groups[groups.length-1];
-    if(g && g.score===p.score) g.toRound=p.roundNo;
-    else groups.push({fromRound:p.roundNo,toRound:p.roundNo,score:p.score});
-  });
-  const n=groups.length;
-  let segs='',divs='';
-  groups.forEach((g,i)=>{
-    const start=i===0?0:groups[i-1].score;
-    const w=g.score-start;
+  const n=pts.length;
+  const rows=pts.map((p,i)=>{
     const shade=(1.3-(n>1?i/(n-1):0)*0.55).toFixed(2);
-    if(w>0)segs+=`<div class="pg-seg" style="left:${start}%;width:${w}%;filter:brightness(${shade})"></div>`;
-    if(i>0)divs+=`<div class="pg-div" style="left:${start}%"></div>`;
-  });
-  const roundLabel=g=>g.fromRound===g.toRound?`${g.fromRound}차`:`${g.fromRound}~${g.toRound}차`;
-  const labels=groups.map(g=>
-    `<div class="pg-lab" style="left:${Math.min(94,Math.max(6,g.score))}%"><b>${roundLabel(g)}</b><span>${g.score}%</span></div>`
-  ).join('');
-  const ariaTxt=groups.map(g=>`${roundLabel(g)} ${g.score}%`).join(', ');
-  return `<div class="pg-wrap">`+
-    `<div class="pg-labels">${labels}</div>`+
-    `<div class="pg-track" role="img" aria-label="${esc('회차별 누적 프로젝트 진행률: '+ariaTxt)}">${segs}${divs}</div>`+
-  `</div>`;
+    return `<div class="pg-row">`+
+      `<div class="pg-rlab">${p.roundNo}차</div>`+
+      `<div class="pg-rtrack"><div class="pg-rfill" style="width:${p.score}%;filter:brightness(${shade})"></div></div>`+
+      `<div class="pg-rpct">${p.score}%</div>`+
+    `</div>`;
+  }).join('');
+  const ariaTxt=pts.map(p=>`${p.roundNo}차 ${p.score}%`).join(', ');
+  return `<div class="pg-rows" role="img" aria-label="${esc('회차별 프로젝트 진행률: '+ariaTxt)}">${rows}</div>`;
 }
 function projectProgressHtml(histProj){
-  return progressGaugeHtml(histProj);
+  return progressBarsHtml(histProj);
 }
 
 // "회의 품질 점수" 카드의 감점 근거 1줄 요약(사용자 요청) — qualityScore()의 세 감점 항목(담당자
