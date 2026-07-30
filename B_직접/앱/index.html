@@ -909,7 +909,8 @@ function projectProgressData(histProj){
 // 여기서 절대 섞이지 않는다. 좌우 50% 배치(사용자 요청)에 맞춰 기존 640×120보다 좁고 낮은 뷰박스 사용.
 // color: 두 그래프가 숫자만 다른 게 아니라 한눈에도 다른 개념임을 알 수 있도록(사용자 요청) 선 색을
 // 다르게 준다 — 기존 상태 색상 역할(지시사항 #31: 완료=Green, 확인 필요=Amber)을 그대로 재사용한다.
-function trendSvg(pts,ariaLabel,color){
+// unit: 품질 점수는 "점", 진행률은 "%"를 값 옆에 바로 붙여 두 숫자를 헷갈리지 않게 한다(사용자 요청).
+function trendSvg(pts,ariaLabel,color,unit){
   const W=320,H=130,PADX=24,PADY=26;
   const n=pts.length;
   const xAt=i=>PADX+(n>1?i*((W-2*PADX)/(n-1)):0);
@@ -917,7 +918,7 @@ function trendSvg(pts,ariaLabel,color){
   const line=pts.map((p,i)=>xAt(i)+','+yAt(p.score)).join(' ');
   const marks=pts.map((p,i)=>
     `<circle cx="${xAt(i)}" cy="${yAt(p.score)}" r="4" fill="${color}"/>`+
-    `<text x="${xAt(i)}" y="${yAt(p.score)-10}" class="trend-val" text-anchor="middle">${p.score}</text>`+
+    `<text x="${xAt(i)}" y="${yAt(p.score)-10}" class="trend-val" text-anchor="middle">${p.score}${unit}</text>`+
     `<text x="${xAt(i)}" y="${H-8}" class="trend-lab" text-anchor="middle">${p.roundNo}차</text>`
   ).join('');
   return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="${esc(ariaLabel)}">`+
@@ -929,13 +930,13 @@ function qualityTrendHtml(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
   if(!rounds.length) return chartEmpty();
   if(rounds.length<2) return chartEmpty('2회차부터 트렌드를 확인할 수 있습니다.');
-  return trendSvg(qualityScoreTrendData(histProj),'회차별 회의 품질 점수 추이 그래프','var(--est)');
+  return trendSvg(qualityScoreTrendData(histProj),'회차별 회의 품질 점수 추이 그래프','var(--est)','점');
 }
 function projectProgressHtml(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
   if(!rounds.length) return chartEmpty();
   if(rounds.length<2) return chartEmpty('2회차부터 추이를 확인할 수 있습니다.');
-  return trendSvg(projectProgressData(histProj),'회차별 프로젝트 진행률 그래프','var(--ok)');
+  return trendSvg(projectProgressData(histProj),'회차별 프로젝트 진행률 그래프','var(--ok)','%');
 }
 
 // "회의 품질 점수" 카드의 감점 근거 1줄 요약(사용자 요청) — qualityScore()의 세 감점 항목(담당자
