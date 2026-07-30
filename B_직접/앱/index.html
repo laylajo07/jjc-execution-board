@@ -348,9 +348,17 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .viz-block:first-of-type{margin-top:14px}
   .viz-title{font-size:14px;font-weight:500;color:var(--muted);margin-bottom:10px}
   .chart-empty{font-size:13px;color:var(--faint);padding:18px 4px;text-align:center;background:var(--surface2);border-radius:var(--radius-sm)}
-  .viz-grid2{display:grid;gap:18px;margin-top:14px}
+  .viz-grid2{display:grid;gap:18px;margin-top:14px;align-items:stretch}
   @media(min-width:640px){.viz-grid2{grid-template-columns:1fr 1fr}}
   .viz-grid2 .viz-block{margin-top:0}
+  /* 02(미결→진행중→완료 흐름)·03(이전 회차 대비 변경점) 좌우 2단(사용자 요청) — viz-grid2 재사용,
+     좁은 화면에선 자동으로 세로 스택(기존 640px 미디어쿼리 그대로). */
+  .cmp-row2 .sec-h{margin-top:0}
+  .viz-col{min-width:0;display:flex;flex-direction:column}
+  .viz-col .change-digest{flex:1;margin-bottom:0}
+  /* 03 카드가 02 카드 높이를 그대로 따라가게(grid stretch) 하고, 넘치는 항목만 내부 스크롤 —
+     min-height:0이 없으면 grid 기본값(min-height:auto)이 콘텐츠 크기만큼 행을 늘려버린다. */
+  .cd-scroll{min-height:0;overflow-y:auto}
   .trend-svg{width:100%;height:auto;display:block}
   .trend-axis{stroke:var(--line);stroke-width:1}
   /* 텍스트 위계(사용자 요청, #31-텍스트위계): 값(18/500/primary) > 회차 라벨(13/400/secondary)
@@ -1843,11 +1851,17 @@ function renderBoard(d, raw){
     +'<div class="viz-block"><div class="viz-title">회의 품질 점수 추이</div>'+qualityTrendHtml(histProj)+qualityChangeListHtml(histProj)+'</div>'
     +'<div class="viz-block"><div class="viz-title">프로젝트 진행률</div>'+projectProgressHtml(histProj)+'</div>'
     +'</div></div>';
-  hCompare+=secH('02','미결 → 진행중 → 완료 흐름');
-  hCompare+='<div class="change-digest insights"><div class="viz-block">'+progressFlowHtml(histProj)+'</div></div>';
-  if(digest && digest.total>0){
-    hCompare+=secH('03','이전 회차 대비 변경점');
-    hCompare+='<div class="change-digest insights"><div class="cd-h"><span class="cd-title">신규 · 수정 · 완료 항목</span>'+
+  // 02(미결→진행중→완료 흐름)·03(이전 회차 대비 변경점)을 좌우 2단으로 합침(사용자 요청) — 02는
+  // 회차 수만큼 자연스러운 높이로 두고, 03은 grid stretch로 02와 같은 높이를 따라간 뒤 내부만
+  // 스크롤(.cd-scroll: min-height:0으로 grid 기본 min-height:auto를 꺼야 행이 03 콘텐츠 크기로
+  // 안 늘어나고 02 높이를 그대로 따라간다). 03 항목이 없으면(digest 없음) 02 혼자 기존처럼 전체 폭.
+  const hasDigest = digest && digest.total>0;
+  hCompare+='<div class="viz-grid2 cmp-row2">';
+  hCompare+='<div class="viz-col">'+secH('02','미결 → 진행중 → 완료 흐름')+
+    '<div class="change-digest insights"><div class="viz-block">'+progressFlowHtml(histProj)+'</div></div></div>';
+  if(hasDigest){
+    hCompare+='<div class="viz-col">'+secH('03','이전 회차 대비 변경점')+
+      '<div class="change-digest insights cd-scroll"><div class="cd-h"><span class="cd-title">신규 · 수정 · 완료 항목</span>'+
        `<span class="cd-counts">`+
          `<button type="button" class="tag ok cd-filter-btn" data-filter="new" aria-pressed="false">＋ 신규 ${digest.added}</button>`+
          `<button type="button" class="tag est cd-filter-btn" data-filter="changed" aria-pressed="false">✎ 변경 ${digest.changed}</button>`+
@@ -1861,8 +1875,9 @@ function renderBoard(d, raw){
       const strike=(it.tag==='done'&&it.reason==='dropped')?' style="text-decoration:line-through"':'';
       return `<div class="cd-it" data-tag="${it.tag}"><span class="tag ${cls}">${lab}</span><span class="cd-txt"${strike}>${esc(it.text)}</span><span class="cd-dept mono">${esc(it.dept)}${it.label?' · '+esc(it.label):''}</span></div>`;
     }).join('')+'</div>';
-    hCompare+='</div>';
+    hCompare+='</div></div>';   // .cd-scroll 닫기 + .viz-col 닫기
   }
+  hCompare+='</div>';   // .viz-grid2.cmp-row2 닫기
 
   // ── 탭2: 이번 회의 요약(SUMMARY) ──
   let hSummary='';
