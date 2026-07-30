@@ -320,6 +320,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .qscore .qs-unit{font-size:15px;font-weight:700;color:var(--muted)}
   .qscore .qs-side{display:flex;flex-direction:column;gap:8px;min-width:0}
   .qscore .qs-label{font-size:13px;font-weight:700;color:var(--muted)}
+  .qscore .qs-reason{font-size:13px;color:var(--ink2)}   /* 감점 근거 1줄 요약(사용자 요청) — qs-side가 이미 flex gap:8px로 간격을 준다 */
   .qscore .qs-break{display:flex;flex-wrap:wrap;gap:8px}
   .qscore .qs-stat{font-family:var(--mono);font-size:13.5px;color:var(--muted);background:var(--surface);
     border:1px solid var(--line);border-radius:999px;padding:5px 12px;display:inline-flex;align-items:center;gap:4px}
@@ -935,6 +936,20 @@ function projectProgressHtml(histProj){
   return trendSvg(projectProgressData(histProj),'회차별 프로젝트 진행률 그래프');
 }
 
+// "회의 품질 점수" 카드의 감점 근거 1줄 요약(사용자 요청) — qualityScore()의 세 감점 항목(담당자
+// 미정/기한 미확정/의사결정 미완) 중 개수가 가장 많은 것을 근거로 삼는다. 지어내지 않는다 — 이미
+// 배지로 보여주는 세 숫자를 그대로 비교해 요약할 뿐, 새로운 판단을 추가하지 않는다. 동점이면 모두 나열.
+function qualityScoreReasonLine(qs){
+  const items=[
+    {label:'담당자 미정',n:qs.ownerMissing},
+    {label:'기한 미확정',n:qs.dueMissing},
+    {label:'의사결정 미완',n:qs.decisionOpen}
+  ];
+  const maxN=Math.max(...items.map(i=>i.n));
+  if(maxN<=0) return '감점 요인 없음';
+  const top=items.filter(i=>i.n===maxN).map(i=>`${i.label}(${i.n}건)`).join(', ');
+  return `주요 감점 요인: ${top}`;
+}
 // 트렌드 그래프 아래 "왜 바뀌었는지" 1줄 설명(신규) — qualityScore가 이미 추적하는 지표
 // (담당자 미정·기한 미확정·의사결정 미확정 수)와 '확인필요' 상태 항목 수를 전/현재 회차 사이에서
 // 비교해 문구를 만든다. 지어내지 않는다 — 실제로 움직인 지표만 문장에 넣고, 아무것도 안 움직였으면
@@ -1801,7 +1816,9 @@ function renderBoard(d, raw){
     const qBand=qs.score>=80?'good':(qs.score>=50?'mid':'low');
     hSummary+=`<div class="qscore q-${qBand}">`+
       `<div class="qs-main"><span class="qs-num">${qs.score}</span><span class="qs-unit">점</span></div>`+
-      `<div class="qs-side"><div class="qs-label">회의 품질 점수</div><div class="qs-break">`+
+      `<div class="qs-side"><div class="qs-label">회의 품질 점수</div>`+
+      `<div class="qs-reason">${esc(qualityScoreReasonLine(qs))}</div>`+
+      `<div class="qs-break">`+
       `<button type="button" class="qs-stat" data-qfilter="owner">담당자 미정 <b>${qs.ownerMissing}</b></button>`+
       `<button type="button" class="qs-stat" data-qfilter="due">기한 미확정 <b>${qs.dueMissing}</b></button>`+
       `<span class="qs-stat qs-stat-plain">의사결정 미완 <b>${qs.decisionOpen}</b></span>`+
