@@ -303,9 +303,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .summary{background:var(--surface);
     border:1px solid var(--line);border-radius:var(--radius);padding:24px 28px;margin-bottom:16px}
   .summary .eyebrow{color:var(--primary-ink)}
-  .meta-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}   /* 회의 날짜+회의 성격 배지를 한 줄로(사용자 요청) */
-  .mtype-badge{display:inline-flex;font-size:13.5px;font-weight:700;color:var(--primary-ink);
-    background:var(--primary-soft);border-radius:999px;padding:4px 12px;margin:0}
+  .meta-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .summary .updated{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:2px}
   .summary h2{margin:8px 0 14px;font-size:18px;line-height:1.4;letter-spacing:-.01em}
   .top3{display:grid;gap:9px}
@@ -897,15 +895,7 @@ function cumulativeProgressScores(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
   let running=0;
   return rounds.map(r=>{
-    const board=normalize(r.raw);
-    // 완료 보고인데 항목을 서술로만 보고해 by_department가 통째로 비면 completionRate가 0/0=0이라
-    // 그래프가 오히려 떨어져 보일 수 있다(자체검증에서 발견, meetingTypeScore와 같은 보정).
-    const q=BoardDerive.qualityScore(board);
-    const hasItems=(q.itemCount+q.decisionCount)>0;
-    const baseline=histProj?ProjectStore.findBaseline(histProj,r.roundNo):null;
-    const diff=baseline?BoardDiff.diffBoards(normalize(baseline.raw),board):null;
-    const type=BoardDerive.classifyMeetingType(board,diff);
-    const raw=(!hasItems&&type==='completion')?100:Math.round(BoardDerive.completionRate(board)*100);
+    const raw=Math.round(BoardDerive.completionRate(normalize(r.raw))*100);
     running=Math.max(running,raw);
     return {roundNo:r.roundNo,score:running};
   });
@@ -1770,11 +1760,10 @@ function renderBoard(d, raw){
   // ── 탭2: 이번 회의 요약(SUMMARY) ──
   let hSummary='';
   hSummary+=secH('01','이번 회의 요약');
-  // "SUMMARY" 킥커는 바로 위 탭 제목("이번 회의 요약")과 중복이라 제거 — 회의 날짜에 명확한 라벨을 달고,
-  // 회의 성격 배지를 같은 줄에 통합한다(군더더기 지적·명칭 명확화 요청).
-  hSummary+=`<div class="summary"><div class="meta-row"><div class="eyebrow">회의 날짜: ${esc(mt.datetime||'일시 미상')}</div>`;
-  const meetingType=BoardDerive.classifyMeetingType(d,diff);
-  hSummary+=`<div class="mtype-badge">${esc(BoardDerive.MEETING_TYPE_LABEL[meetingType]||'')}</div></div>`;
+  // "SUMMARY" 킥커는 바로 위 탭 제목("이번 회의 요약")과 중복이라 제거, 회의 날짜에 명확한 라벨을 단다.
+  // 회의 성격 배지는 제거(사용자 요청) — AI가 회의록 텍스트만 보고 매번 추론해 붙이는 값이라
+  // 사용자가 지정하지 않은 분류를 고정 배지로 노출하는 게 부적절하다는 판단.
+  hSummary+=`<div class="summary"><div class="meta-row"><div class="eyebrow">회의 날짜: ${esc(mt.datetime||'일시 미상')}</div></div>`;
   // 지시 24: 회차가 있으면 최초 분석 vs 마지막 업데이트를 구분 표기. 없으면 기존 board updated_at 라인.
   // "분석 시각"이라고 명시해 위 회의 날짜(회의가 열린 시점)와 다른 기준(AI가 분석을 실행한 시점)임을 구분한다.
   let stampLine='';
@@ -1786,15 +1775,11 @@ function renderBoard(d, raw){
   } else if(lastUpdatedIso){ const u=BoardCustom.fmtUpdatedAt(new Date(lastUpdatedIso)); if(u) stampLine=`업데이트 시각: ${esc(u)}`; }
   if(stampLine) hSummary+=`<div class="updated mono">${stampLine}</div>`;
   const qs=BoardDerive.qualityScore(d);
-  // 완료 보고인데 항목을 서술로만 보고해 by_department가 통째로 비면 qs.total===0이라 카드 자체가
-  // 안 보였다(자체검증에서 발견) — meetingTypeScore가 이 경우 100을 주므로 카드도 함께 보여준다.
-  if(qs.total>0 || meetingType==='completion'){
-    // 화면 상단 큰 숫자만 회의 성격별 산정 방식으로 바꾸고, 아래 세부 칩(담당자/기한/의사결정)은
-    // 여전히 원래 qualityScore()의 실수치를 그대로 보여준다(집계 항목 자체는 성격과 무관하게 사실이므로).
-    const typedScore=BoardDerive.meetingTypeScore(d,meetingType,diff);
-    const qBand=typedScore>=80?'good':(typedScore>=50?'mid':'low');
+  // 회의 성격별 가중치·필수 항목 차등을 없애고(사용자 요청) 모든 회차에 동일한 qualityScore()만 적용.
+  if(qs.total>0){
+    const qBand=qs.score>=80?'good':(qs.score>=50?'mid':'low');
     hSummary+=`<div class="qscore q-${qBand}">`+
-      `<div class="qs-main"><span class="qs-num">${typedScore}</span><span class="qs-unit">점</span></div>`+
+      `<div class="qs-main"><span class="qs-num">${qs.score}</span><span class="qs-unit">점</span></div>`+
       `<div class="qs-side"><div class="qs-label">회의록 품질 점수</div><div class="qs-break">`+
         `<button type="button" class="qs-stat" data-qfilter="owner">담당자 미정 <b>${qs.ownerMissing}</b></button>`+
         `<button type="button" class="qs-stat" data-qfilter="due">기한 미확정 <b>${qs.dueMissing}</b></button>`+

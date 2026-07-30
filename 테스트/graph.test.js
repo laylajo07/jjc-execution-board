@@ -596,50 +596,8 @@ test('qualityScore: 불변 — 입력 board를 변형하지 않는다', () => {
   assert.deepEqual(board, snapshot);
 });
 
-// ── classifyMeetingType / completionRate / meetingTypeScore (회의 성격별 품질 점수, 사용자 요청) ──
-const { classifyMeetingType, completionRate, meetingTypeScore } = require('../B_직접/앱/board-derive.js');
-
-test('classifyMeetingType: 제목에 "킥오프"/"기획"이 있으면 diff와 무관하게 기획으로 본다', () => {
-  const board = { meeting: { title: '[2026-07-21] 킥오프 기획 회의' }, by_department: [] };
-  assert.equal(classifyMeetingType(board, { done: [] }), 'planning');
-});
-
-test('classifyMeetingType: 제목에 "중간 점검"이 있으면 중간점검으로 본다', () => {
-  const board = { meeting: { title: '진행 2차 - 중간 점검' }, by_department: [] };
-  assert.equal(classifyMeetingType(board, { done: [] }), 'midcheck');
-});
-
-test('classifyMeetingType: 제목/헤드라인에 "완료 보고"가 있으면 완료보고로 본다', () => {
-  const board = { meeting: { title: '4차 완료 보고 회의' }, by_department: [] };
-  assert.equal(classifyMeetingType(board, { done: [] }), 'completion');
-});
-
-test('classifyMeetingType: 키워드가 없고 diff(이전 회차)가 없으면(첫 회차) 기획으로 폴백한다', () => {
-  const board = { meeting: { title: '2026-07-21 정기 회의' }, by_department: [] };
-  assert.equal(classifyMeetingType(board, null), 'planning');
-});
-
-test('classifyMeetingType: 키워드가 없고 완료율이 높고 미결이 없으면 완료보고로 폴백한다', () => {
-  const board = { meeting: { title: '정기 회의' }, by_department: [
-    { dept: 'X', action_items: [
-      { what: 'a', owner: '철수', due: '7/1', status: '확정' },
-      { what: 'b', owner: '영희', due: '7/2', status: '확정' },
-    ], documents: [], decisions_needed: [] },
-  ] };
-  assert.equal(classifyMeetingType(board, { done: [] }), 'completion');
-});
-
-test('classifyMeetingType: 키워드도 없고 완료율도 낮으면 중간점검으로 폴백한다', () => {
-  const board = { meeting: { title: '정기 회의' }, by_department: [
-    { dept: 'X', action_items: [{ what: 'a', owner: '철수', due: '7/1', status: '확인필요' }], documents: [], decisions_needed: [] },
-  ] };
-  assert.equal(classifyMeetingType(board, { done: [] }), 'midcheck');
-});
-
-test('classifyMeetingType: 기형 입력에도 예외 없이 기획으로 안전하게 떨어진다', () => {
-  assert.doesNotThrow(() => classifyMeetingType(null, null));
-  assert.equal(classifyMeetingType(null, null), 'planning');
-});
+// ── completionRate (모든 회차 동일 기준 품질 점수의 재료 — 회의 성격별 가중치는 제거됨, 사용자 요청) ──
+const { completionRate } = require('../B_직접/앱/board-derive.js');
 
 test('completionRate: 확정 비율을 반환하고, 항목이 없으면 0이다', () => {
   const board = { by_department: [
@@ -650,48 +608,6 @@ test('completionRate: 확정 비율을 반환하고, 항목이 없으면 0이다
   assert.equal(completionRate(board), 0.5);
   assert.equal(completionRate({ by_department: [] }), 0);
   assert.doesNotThrow(() => completionRate(null));
-});
-
-test('meetingTypeScore: planning 타입은 qualityScore와 동일하다(지시사항 14 그대로)', () => {
-  const board = { by_department: [
-    { dept: 'X', action_items: [{ what: 'a', owner: '', due: '7/1' }], documents: [], decisions_needed: [] },
-  ] };
-  assert.equal(meetingTypeScore(board, 'planning', null), qualityScore(board).score);
-});
-
-test('meetingTypeScore: completion 타입은 완료율이 높을수록, 미결·미정이 없을수록 높다', () => {
-  const allDone = { by_department: [
-    { dept: 'X', action_items: [{ what: 'a', owner: '철수', due: '7/1', status: '확정' }], documents: [], decisions_needed: [] },
-  ] };
-  const halfDone = { by_department: [
-    { dept: 'X', action_items: [
-      { what: 'a', owner: '철수', due: '7/1', status: '확정' },
-      { what: 'b', owner: '', due: '', status: '확인필요' },
-    ], documents: [], decisions_needed: [] },
-  ] };
-  const scoreAll = meetingTypeScore(allDone, 'completion', null);
-  const scoreHalf = meetingTypeScore(halfDone, 'completion', null);
-  assert.equal(scoreAll, 100);
-  assert.ok(scoreHalf < scoreAll, '절반만 완료된 보드는 완료보고 점수도 더 낮아야 한다');
-});
-
-test('meetingTypeScore: midcheck 타입은 이전 회차 대비 새로 확정된 항목이 많을수록 높다', () => {
-  const board = { by_department: [
-    { dept: 'X', action_items: [{ what: 'a', owner: '철수', due: '7/1', status: '확정' }], documents: [], decisions_needed: [] },
-  ] };
-  const noProgress = meetingTypeScore(board, 'midcheck', { done: [] });
-  const withProgress = meetingTypeScore(board, 'midcheck', { done: [{ reason: 'confirmed', kind: 'action' }] });
-  assert.ok(withProgress > noProgress, '새로 확정된 항목이 있으면 점수가 더 높아야 한다');
-});
-
-test('meetingTypeScore: midcheck 타입에 diff가 없으면(비교 기준 없음) qualityScore로 폴백한다', () => {
-  const board = { by_department: [{ dept: 'X', action_items: [{ what: 'a', owner: '', due: '' }], documents: [], decisions_needed: [] }] };
-  assert.equal(meetingTypeScore(board, 'midcheck', null), qualityScore(board).score);
-});
-
-test('meetingTypeScore: 기형 입력에도 예외를 던지지 않는다', () => {
-  assert.doesNotThrow(() => meetingTypeScore(null, 'completion', null));
-  assert.doesNotThrow(() => meetingTypeScore(null, 'midcheck', { done: 'not-array' }));
 });
 
 // ── friendlyTitle (사용자 친화 타이틀) ──

@@ -169,13 +169,6 @@
     return (Number.isFinite(n) && n >= 1) ? n : null;
   }
 
-  // ── 회의 성격 자동 판단 + 성격별 품질 점수(사용자 요청) ──
-  // 회의록 제목/헤드라인에 성격을 드러내는 표현이 있으면 최우선으로 신뢰한다(작성자가 직접
-  // 붙인 표현이 가장 직접적인 신호). 명확한 표현이 없으면 구조적 신호로 대체 추론한다:
-  // 이전 회차(diff)가 아예 없으면(=첫 회차) 기획/킥오프로, 완료율이 매우 높고 미결이 전혀
-  // 없으면 완료보고로, 그 외에는 중간점검으로 본다.
-  var MEETING_TYPE_LABEL = { planning: '📋 기획 회의', midcheck: '🔍 중간 점검', completion: '✅ 완료 보고' };
-
   // action_items/documents/decisions_needed 전체 대비 status==='확정' 비율. 순수·결정적.
   function completionRate(board) {
     try {
@@ -195,54 +188,8 @@
     } catch (e) { return 0; }
   }
 
-  // diff는 index.html의 BoardDiff.diffBoards(prevBoard,curBoard) 결과(이전 회차 없으면 null).
-  function classifyMeetingType(board, diff) {
-    try {
-      var mt = (board && board.meeting) || {};
-      var text = [mt.title, board && board.headline].filter(Boolean).join(' ');
-      if (/킥오프|기획/.test(text)) return 'planning';
-      if (/중간\s*점검|점검/.test(text)) return 'midcheck';
-      if (/완료\s*보고|완료보고|오픈|종료\s*보고/.test(text)) return 'completion';
-      if (!diff) return 'planning';   // 이전 회차 자체가 없으면 첫 회차 = 기획/킥오프
-      var q = qualityScore(board);
-      if (completionRate(board) >= 0.85 && q.decisionOpen === 0 && q.ownerMissing === 0) return 'completion';
-      return 'midcheck';
-    } catch (e) { return 'planning'; }
-  }
-
-  // 회의 성격별 점수(0-100 정수). qualityScore()의 세부 항목(ownerMissing 등)은 그대로 두고
-  // "요약 화면 상단 큰 숫자"만 성격에 맞게 다시 계산한다 — qs-stat 칩·품질 트렌드 사유 등
-  // 다른 소비자는 원래 qualityScore()를 그대로 계속 쓴다.
-  //   기획/킥오프: 기존 산정 방식 그대로(미결·담당자 미정·기한 미확정 기준, 지시사항 14).
-  //   중간점검: 이전 회차 대비 이번에 새로 확정된 항목 비율(진행률) + 새로 확정된 의사결정 보너스.
-  //   완료보고: 전체 완료율을 60%, 기존 산정 점수(미결·담당자·기한)를 40% 비중으로 반영.
-  function meetingTypeScore(board, type, diff) {
-    var q = qualityScore(board);
-    try {
-      var hasItems = (q.itemCount + q.decisionCount) > 0;
-      if (type === 'completion') {
-        // 완료 보고 회의는 개별 항목을 다시 나열하지 않고 "모두 완료됐다"고 서술로만 보고하는
-        // 경우가 실제로 있다(자체검증에서 발견) — 그러면 by_department가 통째로 비어 completionRate가
-        // 0/0=0이 되어 오히려 낮은 점수로 보인다. 항목이 하나도 없는 완료 보고는 전부 완료로 간주한다.
-        if (!hasItems) return 100;
-        var cr = completionRate(board);
-        return Math.max(0, Math.min(100, Math.round(cr * 100 * 0.6 + q.score * 0.4)));
-      }
-      if (type === 'midcheck') {
-        if (!diff || !Array.isArray(diff.done)) return q.score;   // 비교 기준 없으면 기존 점수로 폴백
-        var confirmedNow = diff.done.filter(function (d) { return d.reason === 'confirmed'; }).length;
-        var newDecisions = diff.done.filter(function (d) { return d.reason === 'confirmed' && d.kind === 'decision'; }).length;
-        var totalItems = q.itemCount + q.decisionCount;
-        var progressRatio = totalItems > 0 ? confirmedNow / totalItems : 0;
-        var decisionBonus = Math.min(30, newDecisions * 10);
-        return Math.max(0, Math.min(100, Math.round(progressRatio * 70 + decisionBonus)));
-      }
-      return q.score;
-    } catch (e) { return q.score; }
-  }
-
   var api = { buildDetailMap: buildDetailMap, rankItems: rankItems, qualityScore: qualityScore, friendlyTitle: friendlyTitle, inferRoundNo: inferRoundNo,
-    classifyMeetingType: classifyMeetingType, meetingTypeScore: meetingTypeScore, completionRate: completionRate, MEETING_TYPE_LABEL: MEETING_TYPE_LABEL };
+    completionRate: completionRate };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.BoardDerive = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
