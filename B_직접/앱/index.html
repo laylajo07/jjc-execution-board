@@ -401,8 +401,6 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .cd-filter-btn{border:none;font:inherit;cursor:pointer;-webkit-appearance:none;appearance:none}
   .cd-filter-btn:hover{filter:brightness(0.92)}
   .cd-filter-btn[aria-pressed="true"]{box-shadow:0 0 0 2px currentColor inset}
-  .cd-more-detail{margin-top:10px}
-  .cd-more-detail>.cd-items{margin-top:8px}
   @media(max-width:560px){.change-digest .cd-dept{display:none}}
 
   /* section heading */
@@ -537,22 +535,12 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .np-label{font-family:var(--mono);font-size:11px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
   .np-dep{font-size:14px;color:var(--ink2);padding:3px 0}
   .np-dep.np-ext{color:var(--muted);font-family:var(--mono)}
-  /* 정보 위계 아코디언 (#5) */
-  details.acc{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);margin:14px 2px 0;overflow:hidden}
-  details.acc.secondary{background:var(--surface2);border-style:dashed}   /* 정보 위계 2순위(참고용) — insights와 같은 톤 */
-  details.acc>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:16px 20px;font-size:15px;font-weight:500;letter-spacing:-.01em}
-  details.acc>summary::-webkit-details-marker{display:none}
-  details.acc>summary::before{content:"▸";color:var(--muted);font-size:11px;transition:transform .15s}
-  details.acc[open]>summary::before{transform:rotate(90deg)}
-  details.acc>summary:hover{color:var(--primary-ink)}
-  details.acc .cnt{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:500;color:var(--muted);background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
-  details.acc>.acc-body{padding:0 20px 20px}
-  /* 더보기 토글 (#3) */
-  details.more{margin-top:2px}
-  details.more>summary{cursor:pointer;list-style:none;color:var(--muted);font-family:var(--mono);font-size:11px;padding:5px 0}
-  details.more>summary::-webkit-details-marker{display:none}
-  details.more>summary:hover{color:var(--primary-ink)}
-  details.more[open]>summary{margin-bottom:6px}
+  /* 정보 위계 블록(#5) — 접기/펼치기 없이 항상 펼쳐진 정적 카드(사용자 요청으로 아코디언 제거) */
+  .acc-static{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);margin:14px 2px 0;overflow:hidden}
+  .acc-static.secondary{background:var(--surface2);border-style:dashed}   /* 정보 위계 2순위(참고용) — insights와 같은 톤 */
+  .acc-static-h{display:flex;align-items:center;gap:10px;padding:16px 20px;font-size:15px;font-weight:500;letter-spacing:-.01em}
+  .acc-static .cnt{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:500;color:var(--muted);background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+  .acc-static .acc-body{padding:0 20px 20px}
 
   /* 탭(요약/크리티컬 패스/부서별 실행 항목) — 화면 스크롤을 줄이려 섹션별 전체 페이지 스크롤 대신
      탭으로 전환한다(사용자 요청). 재렌더(부서 편집 등)에도 activeTab을 유지해 탭이 안 튄다. */
@@ -1557,20 +1545,17 @@ document.addEventListener('keydown',e=>{
   else if(e.key==='ArrowRight')openNodeAt(npIndex+1);
 });
 // extraHtml: 제목 오른쪽 컨트롤 슬롯(부서 편집 토글). 안 넘기면 기존과 같은 마크업.
-// data-acc: 재렌더 후 열림 상태를 되살리는 키. 제목은 코드 상수라 사용자 입력이 아니다.
 // secondary: 정보 위계 2순위(참고용) 표시 — 인사이트·변경점과 같은 톤으로 낮춘다(사용자 요청).
-function acc(title,count,bodyHtml,extraHtml,openDefault,secondary){
-  return `<details class="acc${secondary?' secondary':''}" data-acc="${esc(title)}"${openDefault?' open':''}><summary><span class="acc-t">${esc(title)}</span>${extraHtml||''}<span class="cnt">${count}</span></summary><div class="acc-body">${bodyHtml}</div></details>`;
+// 접기/펼치기 UI를 전부 없애 달라는 요청(사용자)에 따라 <details> 대신 항상 펼쳐진 정적 블록으로 렌더.
+function acc(title,count,bodyHtml,extraHtml,secondary){
+  return `<div class="acc-static${secondary?' secondary':''}"><div class="acc-static-h"><span class="acc-t">${esc(title)}</span>${extraHtml||''}<span class="cnt">${count}</span></div><div class="acc-body">${bodyHtml}</div></div>`;
 }
-/* 우선순위 칩(#3): 랭킹 → top5 + 더보기 */
+/* 우선순위 칩(#3): 랭킹만 매겨서 전부 표시 — 접기/더보기 없이 항상 전체 펼침(사용자 요청) */
 function rankedChips(items,cls,graph){
   const ranked=BoardDerive.rankItems(graph,items||[]).map(r=>r.text);
   if(!ranked.length)return '<span class="chip">없음</span>';
   const chip=t=>`<span class="chip ${cls}">${esc(t)}</span>`;
-  const top=ranked.slice(0,5),rest=ranked.slice(5);
-  let out=top.map(chip).join('');
-  if(rest.length)out+=`<details class="more"><summary>더보기 (+${rest.length})</summary>${rest.map(chip).join('')}</details>`;
-  return out;
+  return ranked.map(chip).join('');
 }
 // _hidden:false와 "키 자체가 없음"을 같은 값으로 취급해야 숨김→해제 왕복이 "편집 없음"으로 정확히
 // 판정된다(그렇지 않으면 JSON.stringify 비교가 항상 다르다고 오판한다) — un-hide는 setHideDept(false)라
@@ -1588,14 +1573,6 @@ function applyEdit(next){
   lastBoard=next; lastUpdatedIso=nowIso(); renderBoard(lastBoard); return true;
 }
 
-// renderBoard가 #result를 통째로 다시 그리므로 열려 있던 아코디언이 매 편집마다 접힌다.
-// 재렌더 직전에 기록해 두고 직후에 되살린다.
-function accOpenState(){
-  const st={}; document.querySelectorAll('#result details.acc[data-acc]').forEach(el=>{st[el.dataset.acc]=el.open;}); return st;
-}
-function restoreAccOpen(st){
-  document.querySelectorAll('#result details.acc[data-acc]').forEach(el=>{ if(st[el.dataset.acc]) el.open=true; });
-}
 
 function deptToolsHtml(dep,i,all){
   const opts=all.map((o,j)=> j===i?'':`<option value="${j}">→ ${esc(o.dept)}</option>`).join('');
@@ -1844,7 +1821,6 @@ function renderBoard(d, raw){
   const diff = histPrev ? BoardDiff.diffBoards(normalize(histPrev.raw), d) : null;
   const diffTags = diff ? diff.tags : null;
   const digest = diff ? BoardDiff.changeDigest(diff, d) : null;   // 회차 간 주요 변경점(메인 노출)
-  const accOpen=accOpenState();   // #result를 갈아끼우기 전에 열린 아코디언을 기록
   const mt=d.meeting||{};
 
   // 숨긴 부서는 DAG 노드로 남으면 안 된다(사용자 결정) — 그래프·상세는 visibleBoard 기준.
@@ -1871,20 +1847,14 @@ function renderBoard(d, raw){
          `<button type="button" class="tag est cd-filter-btn" data-filter="changed" aria-pressed="false">✎ 변경 ${digest.changed}</button>`+
          `<button type="button" class="tag cd-done cd-filter-btn" data-filter="done" aria-pressed="false">✓ 완료 ${digest.done}</button>`+
        `</span></div>`;
-    hCompare+='<div class="cd-items">'+digest.items.map(it=>{
+    // 접기/더보기 없이 신규+더보기 항목 전부를 하나로 이어 항상 펼친 상태로 보여준다(사용자 요청).
+    const cdAllItems=digest.items.concat(digest.moreItems||[]);
+    hCompare+='<div class="cd-items">'+cdAllItems.map(it=>{
       const cls=it.tag==='new'?'ok':(it.tag==='changed'?'est':'cd-done');
       const lab=it.tag==='new'?'＋ 새로 추가됨':(it.tag==='changed'?'✎ 내용 수정됨':'✓ 완료');
       const strike=(it.tag==='done'&&it.reason==='dropped')?' style="text-decoration:line-through"':'';
       return `<div class="cd-it" data-tag="${it.tag}"><span class="tag ${cls}">${lab}</span><span class="cd-txt"${strike}>${esc(it.text)}</span><span class="cd-dept mono">${esc(it.dept)}${it.label?' · '+esc(it.label):''}</span></div>`;
     }).join('')+'</div>';
-    if(digest.moreItems&&digest.moreItems.length){
-      hCompare+=`<details class="more cd-more-detail"><summary>외 ${digest.moreItems.length}건 더</summary><div class="cd-items">`+
-        digest.moreItems.map(it=>{
-          const lab=it.tag==='new'?'＋ 새로 추가됨':(it.tag==='changed'?'✎ 내용 수정됨':'✓ 완료');
-          return `<div class="cd-it" data-tag="${it.tag}"><span class="tag ${it.tag==='new'?'ok':(it.tag==='changed'?'est':'cd-done')}">${lab}</span><span class="cd-txt">${esc(it.text)}</span><span class="cd-dept mono">${esc(it.dept)}${it.label?' · '+esc(it.label):''}</span></div>`;
-        }).join('')+
-        `</div></details>`;
-    }
     hCompare+='</div>';
   }
 
@@ -1947,7 +1917,7 @@ function renderBoard(d, raw){
       +`<div class="panelbox"><div class="block__l">🧩 전제 조건</div><div class="chips">${rankedChips(d.assumptions,'asm',g)}</div></div>`
       +'</div>';
     hPending+=secH('01','아직 결정 안 된 사항');
-    hPending+=acc('아직 결정 안 된 사항 & 전제 조건', gc+asmc, body, null, accOpen['아직 결정 안 된 사항 & 전제 조건']!==false, true);   // 기본 펼침 — 사용자가 접었던 경우(재렌더)만 유지. 2순위(참고) 톤
+    hPending+=acc('아직 결정 안 된 사항 & 전제 조건', gc+asmc, body, null, true);   // 접기/펼치기 없이 항상 펼침(사용자 요청). 2순위(참고) 톤
   }
 
   // ── 다음 회의 전 체크리스트(#12) — 미결 사항을 카톡/슬랙에 바로 붙여넣을 수 있는 평문으로 정리 ──
@@ -2032,7 +2002,6 @@ function renderBoard(d, raw){
   h+=`<details class="raw"><summary>원본 마크다운 / JSON</summary><pre>${esc(lastMarkdown||'')}\n\n${esc(JSON.stringify(lastData,null,2))}</pre></details>`;
   $('#result').innerHTML=h;
   updateWorkspaceCtx();
-  restoreAccOpen(accOpen);   // 편집할 때마다 부서 목록이 접히면 못 쓴다
   bindDeptEdit(allDepts);
   document.querySelectorAll('.tab-btn').forEach(btn=>{ btn.onclick=()=>switchTab(btn.dataset.tab); });
   // 품질점수의 "담당자 미정"/"기한 미확정" 클릭 → 부서별 실행 항목 탭으로 이동 + 해당 행 하이라이트.
