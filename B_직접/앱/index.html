@@ -354,6 +354,16 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .trend-lab{font-size:13px;fill:var(--muted)}
   .trend-reasons{margin-top:10px;display:flex;flex-direction:column;gap:5px}
   .trend-reason-row{font-size:13.5px;color:var(--muted);line-height:1.5;word-break:keep-all;overflow-wrap:break-word}
+  /* 프로젝트 진행률 전용 게이지(#31-재요청): 꺾은선(trend-svg)과 절대 재사용하지 않는 별도 컴포넌트.
+     점·연결선 없이, 왼쪽부터 채워지는 단일 가로 막대 + 회차 구간 경계 세로선 + 구간별 명도 차이만 사용. */
+  .pg-wrap{margin-top:8px}
+  .pg-labels{position:relative;height:32px}
+  .pg-lab{position:absolute;top:0;transform:translateX(-50%);white-space:nowrap;text-align:center;font-family:var(--mono)}
+  .pg-lab b{display:block;font-size:11.5px;font-weight:800;color:var(--muted)}
+  .pg-lab span{font-size:13px;font-weight:700;color:var(--ink)}
+  .pg-track{position:relative;height:34px;border-radius:8px;background:var(--surface2);border:1px solid var(--line);overflow:hidden}
+  .pg-seg{position:absolute;top:0;bottom:0;background:var(--ok)}
+  .pg-div{position:absolute;top:0;bottom:0;width:2px;background:var(--surface)}
   .flow-legend{display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap}
   .flow-lg{display:flex;align-items:center;gap:5px;font-size:13.5px;color:var(--muted)}
   .flow-dot{width:8px;height:8px;border-radius:50%;flex:none}
@@ -954,11 +964,43 @@ function qualityTrendHtml(histProj){
   if(rounds.length<2) return chartEmpty('2회차부터 트렌드를 확인할 수 있습니다.');
   return trendSvg(qualityScoreTrendData(histProj),'회차별 회의 품질 점수 추이 그래프','var(--est)','점');
 }
-function projectProgressHtml(histProj){
+// 프로젝트 진행률 전용 렌더러 — 꺾은선(trendSvg)과 시각적으로 절대 같은 컴포넌트를 쓰지 말라는
+// 재요청(사용자)에 따라 완전히 새로 만든다. 점(dot)·연결선(line) 대신, 하나의 가로 막대를 왼쪽부터
+// 누적 진행률만큼 채우고, 그 안을 회차 구간 경계(얇은 세로선)로 나눠 구간마다 명도를 다르게 준다.
+// 값이 그대로인 연속 회차(예: 67%→67%)는 폭 0인 구간이라 화면에 새 구간이 안 보이는 게 맞으므로,
+// 그런 회차들은 라벨도 하나로 묶어("1~2차") 같은 위치에 라벨 두 개가 겹치는 문제를 피한다.
+function progressGaugeHtml(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
   if(!rounds.length) return chartEmpty();
   if(rounds.length<2) return chartEmpty('2회차부터 추이를 확인할 수 있습니다.');
-  return trendSvg(projectProgressData(histProj),'회차별 프로젝트 진행률 그래프','var(--ok)','%');
+  const pts=projectProgressData(histProj);
+  const groups=[];
+  pts.forEach(p=>{
+    const g=groups[groups.length-1];
+    if(g && g.score===p.score) g.toRound=p.roundNo;
+    else groups.push({fromRound:p.roundNo,toRound:p.roundNo,score:p.score});
+  });
+  const n=groups.length;
+  let segs='',divs='';
+  groups.forEach((g,i)=>{
+    const start=i===0?0:groups[i-1].score;
+    const w=g.score-start;
+    const shade=(1.3-(n>1?i/(n-1):0)*0.55).toFixed(2);
+    if(w>0)segs+=`<div class="pg-seg" style="left:${start}%;width:${w}%;filter:brightness(${shade})"></div>`;
+    if(i>0)divs+=`<div class="pg-div" style="left:${start}%"></div>`;
+  });
+  const roundLabel=g=>g.fromRound===g.toRound?`${g.fromRound}차`:`${g.fromRound}~${g.toRound}차`;
+  const labels=groups.map(g=>
+    `<div class="pg-lab" style="left:${Math.min(94,Math.max(6,g.score))}%"><b>${roundLabel(g)}</b><span>${g.score}%</span></div>`
+  ).join('');
+  const ariaTxt=groups.map(g=>`${roundLabel(g)} ${g.score}%`).join(', ');
+  return `<div class="pg-wrap">`+
+    `<div class="pg-labels">${labels}</div>`+
+    `<div class="pg-track" role="img" aria-label="${esc('회차별 누적 프로젝트 진행률: '+ariaTxt)}">${segs}${divs}</div>`+
+  `</div>`;
+}
+function projectProgressHtml(histProj){
+  return progressGaugeHtml(histProj);
 }
 
 // "회의 품질 점수" 카드의 감점 근거 1줄 요약(사용자 요청) — qualityScore()의 세 감점 항목(담당자
