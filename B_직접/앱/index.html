@@ -545,7 +545,11 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   /* 탭(요약/크리티컬 패스/부서별 실행 항목) — 화면 스크롤을 줄이려 섹션별 전체 페이지 스크롤 대신
      탭으로 전환한다(사용자 요청). 재렌더(부서 편집 등)에도 activeTab을 유지해 탭이 안 튄다. */
   .tabs{display:flex;gap:2px;margin:18px 2px 0;border-bottom:1px solid var(--line2);
-    overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+    /* overflow-x만 지정하고 overflow-y를 안 정하면, 스펙상 visible이 아닌 축이 하나라도 있으면
+       나머지 축도 auto로 강제 계산된다(CSS2.1 §11.1.1) — 그래서 세로 스크롤이 없어야 할 가로
+       탭 줄에 세로 스크롤바가 떴었다(버그 리포트로 실측 확인). overflow-y를 hidden으로 명시해
+       그 자동 승격을 막는다 — 가로 스크롤(탭 많을 때)만 허용, 세로는 어떤 경우에도 없음. */
+    overflow-x:auto;overflow-y:hidden;height:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
   .tab-btn{appearance:none;background:none;border:none;padding:14px 22px;font-size:15px;font-weight:500;
     color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px;font-family:var(--sans);flex:none;
     border-radius:8px 8px 0 0;transition:.13s}   /* 탭 UI 확대(사용자 요청) — 폰트·패딩·밑줄 두께 한 단계씩 키움 */
