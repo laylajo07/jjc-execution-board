@@ -106,7 +106,6 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 }
 규칙: 값이 없으면 빈 문자열/빈 배열. status는 세 값 중 하나. 마크다운(A)과 JSON(B)의 내용은 일치해야 한다.
 입력이 비어 있거나 회의 내용이 없으면 headline에 "처리할 회의 내용이 없습니다"를 넣고 빈 구조를 반환한다.</script>
-<script type="application/json" id="app-meta">{"approach":"B · 클로드에게 직접 설계"}</script>
 <style>
   :root{
     --paper:#fafafa; --surface:#ffffff; --surface2:#f6f6f7; --inset:#f2f2f3;
@@ -218,7 +217,6 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .iconbtn{width:32px;height:32px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink2);
     cursor:pointer;font-size:15px;display:grid;place-items:center}
   .iconbtn:hover{border-color:var(--primary)}
-  .approach{font-size:12px;font-weight:700;color:var(--primary-ink);background:var(--primary-soft);border-radius:999px;padding:5px 11px;white-space:nowrap}
 
   /* ── Shell ── */
   .app{max-width:1800px;margin:0 auto;padding:clamp(20px,3vw,44px) clamp(20px,4vw,56px);
@@ -623,8 +621,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   <div class="spacer"></div>
   <div class="ctl">
     <button class="iconbtn" id="sidebarToggleBtn" title="사이드바 접기/펼치기" aria-expanded="true">☰</button>
-    <span id="mode" class="pill">모드 확인 중…</span>
-    <span class="selwrap"><select class="model" id="modelSel" title="자동 모드에서 사용할 모델">
+    <span class="selwrap"><select class="model" id="modelSel" title="분석에 사용할 모델">
       <option value="">모델: 러너 기본</option>
       <option value="claude-haiku-4-5-20251001">Haiku 4.5 · 최속</option>
       <option value="claude-sonnet-5">Sonnet 5 · 균형</option>
@@ -633,7 +630,6 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     <button class="pill" id="deptCfgBtn" title="부서 추가·매핑 규칙 설정">⚙️ 부서</button>
     <button class="iconbtn" id="themeBtn" title="라이트/다크 전환">◐</button>
     <button class="pill cmp-btn" id="compareBtn" title="A안(웹페이지)과 비교 — 다른 버전 열기">↗ A안 비교</button>
-    <span class="approach" id="approachTag">산출물</span>
   </div>
 </header>
 
@@ -646,7 +642,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
       <p class="lead" id="lead">형식은 자유입니다. 녹취본·메모·카톡 붙여넣기 모두 됩니다.</p>
 
       <div class="sidebar-section sidebar-section-first">
-        <div class="field-label">회의 프로젝트 선택 <span class="hint">회차 누적</span></div>
+        <div class="field-label">회의 프로젝트 선택 <span class="hint" title="같은 프로젝트를 선택하면 1차·2차·3차… 회차가 계속 쌓여 회차 간 변화(품질 점수 추이, 신규/변경/완료 항목)를 자동으로 추적합니다">회차별 누적 추적</span></div>
         <div id="projList" class="proj-list"></div>
         <button class="btn block" id="newProjBtn" style="margin:8px 0 0">＋ 새 프로젝트</button>
       </div>
@@ -774,8 +770,6 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 <script>
 const $ = s => document.querySelector(s);
 const SYS = $('#sys-prompt').textContent.trim();
-const META = JSON.parse($('#app-meta').textContent);
-$('#approachTag').textContent = META.approach;
 let lastData=null, lastBoard=null, lastUpdatedIso=null, lastMarkdown='', AUTO=false;
 let projState=null;   // 프로젝트 히스토리(설계 §3-1) — ProjectStore가 다루는 {current, projects[]}
 let suppressSave=false, currentRoundId=null;   // 과거 회차 열람 시 저장 억제 + "지금 보는 회차" id(Task 4, 설계 §3-2)
@@ -1176,11 +1170,11 @@ function updateWorkspaceCtx(){
   el.hidden=false;
 }
 
-/* mode: 자동 모드 고정 노출 — 복붙 모드 UI(#copyFlow)는 화면에서 숨김 */
+/* mode: 자동 모드 고정 — 복붙 모드 UI(#copyFlow)는 화면에서 숨김. 사용자에게 노출되는 토글이
+   아니라 내부 동작 방식이라 상태 배지(구 #mode pill)는 제거함(프로덕션 정리 요청). */
 async function probeRunner(){try{const r=await fetch('/api/health',{cache:'no-store'});return r.ok;}catch(e){return false;}}
 function applyMode(){
   AUTO=true;
-  $('#mode').className='pill on';$('#mode').textContent='⚡ 자동 모드';
   $('#autoBox').style.display='block';$('#copyFlow').style.display='none';$('#analyzeBtn').style.display='';
   $('#lead').textContent='1. 회의록을 선택하거나 직접 붙여넣기\n2. 해당 회의록의 프로젝트를 선택 또는 신규 생성\n3. 회의 회차를 입력하고 분석 시작\n\n💡 회차를 거듭할수록 무엇이 결정됐고, 무엇이 남았는지 자동으로 추적됩니다.';
   $('#modelSel').disabled=false;loadNotes();
