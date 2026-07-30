@@ -113,6 +113,9 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     --line:#e5e6e8; --line2:#edeef0;
     --primary:#2f5fd8; --primary-ink:#2347b3; --primary-soft:#eef2fd;
     --ok:#0f9d58; --ok-bg:#e9f7ef; --est:#b7791f; --est-bg:#faf3e1; --chk:#d1435b; --chk-bg:#fceef1;
+    /* 텍스트 위계 토큰(사용자 요청, #31-텍스트위계) — ink/muted/faint의 의미론적 별칭.
+       "값-보조라벨-부가설명" 구조를 갖는 그래프·카드가 앞으로 재사용할 표준 이름. */
+    --text-primary:var(--ink); --text-secondary:var(--muted); --text-muted:var(--faint);
     --radius:10px; --radius-sm:7px;
     --shadow-sm:none; --shadow:none;
     --sans:"Nanum Gothic","나눔고딕","Malgun Gothic","Apple SD Gothic Neo",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
@@ -153,20 +156,20 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     padding:16px clamp(20px,3vw,40px);border-bottom:1px solid var(--line);
     background:var(--surface)}
   .brand{display:flex;align-items:center;gap:11px;min-width:0}
-  .glyph{width:34px;height:34px;border-radius:8px;flex:none;display:grid;place-items:center;color:#fff;font-weight:800;font-size:16px;
+  .glyph{width:34px;height:34px;border-radius:8px;flex:none;display:grid;place-items:center;color:#fff;font-weight:500;font-size:16px;
     background:var(--primary)}
-  .brand b{font-size:18px;font-weight:800;letter-spacing:-.03em;display:block;line-height:1.1}
-  .brand span{font-size:12.5px;color:var(--muted);letter-spacing:.01em;font-weight:600}
+  .brand b{font-size:18px;font-weight:500;letter-spacing:-.03em;display:block;line-height:1.1}
+  .brand span{font-size:12.5px;color:var(--muted);letter-spacing:.01em;font-weight:400}
   .top .spacer{margin-left:auto}
   .ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .pill{font-size:13px;font-weight:700;border-radius:999px;padding:5px 11px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .pill{font-size:13px;font-weight:500;border-radius:999px;padding:5px 11px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
   /* 앱 간 비교 링크 */
   .cmp-btn{cursor:pointer;background:var(--primary-soft);color:var(--primary-ink);border-color:transparent}
   .cmp-btn:hover{filter:brightness(.97);border-color:var(--primary)}
   .cmp-overlay{position:fixed;inset:0;z-index:70;display:none;place-items:center;background:rgba(4,10,20,.34);padding:20px}
   .cmp-overlay.on{display:grid}
   .cmp-dialog{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 20px;max-width:340px;width:100%}
-  .cmp-dialog .cmp-title{font-size:15px;font-weight:800;margin-bottom:14px;letter-spacing:-.01em}
+  .cmp-dialog .cmp-title{font-size:15px;font-weight:500;margin-bottom:14px;letter-spacing:-.01em}
   .cmp-dialog .cmp-actions{display:flex;gap:8px}
   .cmp-dialog .cmp-actions .btn{flex:1;justify-content:center}
   .cmp-remember{display:flex;align-items:center;gap:7px;margin-top:12px;font-size:13px;color:var(--muted);cursor:pointer}
@@ -196,9 +199,9 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .hist-item .hist-t{font-family:var(--mono);font-size:11.5px;color:var(--faint)}
   .hist-item .hist-title{font-size:14px;color:var(--ink2);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .hist-item.on{background:var(--primary-soft);border-color:transparent}
-  .hist-item.on .hist-title{color:var(--primary-ink);font-weight:700}
-  .hist-item .hist-no{font-size:12px;font-weight:800;color:var(--primary)}
-  .hist-item .hist-stale{font-size:11px;font-weight:700;color:var(--chk)}
+  .hist-item.on .hist-title{color:var(--primary-ink);font-weight:500}
+  .hist-item .hist-no{font-size:12px;font-weight:500;color:var(--primary)}
+  .hist-item .hist-stale{font-size:11px;font-weight:500;color:var(--chk)}
   .hist-del{flex:none;align-self:center;width:26px;height:26px;margin-right:6px;border:none;background:none;
     color:var(--faint);cursor:pointer;border-radius:6px;font-size:13px;line-height:1;display:grid;place-items:center}
   .hist-del:hover{color:var(--chk);background:var(--chk-bg)}
@@ -209,8 +212,8 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .pill.off{color:var(--est);background:var(--est-bg);border-color:transparent}
   button.pill:hover{border-color:var(--primary);color:var(--primary-ink)}   /* .pill은 라벨(span)로도 쓰여서 button 한정으로만 hover */
   .selwrap{position:relative;display:inline-flex;align-items:center}
-  .selwrap::after{content:"▾";position:absolute;right:9px;color:var(--muted);font-size:10px;pointer-events:none}
-  select.model{appearance:none;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink);
+  .selwrap::after{content:"▾";position:absolute;right:9px;color:var(--muted);font-size:11px;pointer-events:none}
+  select.model{appearance:none;font-family:var(--sans);font-size:13px;font-weight:400;color:var(--ink);
     background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:6px 26px 6px 10px;cursor:pointer}
   select.model:hover{border-color:var(--primary)}
   select.model:disabled{opacity:.5;cursor:not-allowed}
@@ -237,16 +240,16 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
 
   /* Workspace Context Header — 지금 보고 있는 게 어느 프로젝트·회차인지 보드 상단에 표시 */
   .workspace-ctx{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px;color:var(--muted);margin-bottom:10px}
-  .workspace-ctx .wc-proj{font-weight:800;color:var(--ink2)}
+  .workspace-ctx .wc-proj{font-weight:500;color:var(--ink2)}
   .workspace-ctx .wc-sep{color:var(--faint)}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
   .card.pad{padding:24px}
-  .eyebrow{font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--primary)}
-  .console h1{margin:6px 0 3px;font-size:18px;font-weight:800;letter-spacing:-.01em;color:var(--ink)}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;font-weight:400;letter-spacing:.14em;text-transform:uppercase;color:var(--primary)}
+  .console h1{margin:6px 0 3px;font-size:18px;font-weight:500;letter-spacing:-.01em;color:var(--ink)}
   .console .lead{margin:0 0 14px;font-size:14px;color:var(--muted);white-space:pre-line;line-height:1.55}
-  .field-label{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;font-size:15px;font-weight:700;color:var(--ink2);margin:14px 0 6px}
+  .field-label{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;font-size:15px;font-weight:500;color:var(--ink2);margin:14px 0 6px}
   .field-label .hint{font-size:13px;font-weight:500;color:var(--faint);white-space:nowrap;margin-left:auto}
-  .field-label .hint.warn{color:var(--est);font-weight:700}
+  .field-label .hint.warn{color:var(--est);font-weight:500}
   select.note, textarea, .paste{width:100%;font-family:var(--sans);font-size:13px;color:var(--ink);
     background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:11px}
   select.note{appearance:none;cursor:pointer;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);
@@ -255,7 +258,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   textarea{min-height:300px;max-height:420px;overflow-y:auto;resize:vertical;line-height:1.55}   /* 회의록 원문은 내부 스크롤로 제한 — 사이드바가 무한정 길어지지 않게 */
   textarea.paste{min-height:160px;font-family:var(--mono);font-size:13px}
   .row{display:flex;gap:8px}
-  .btn{font-family:var(--sans);font-size:13px;font-weight:700;border-radius:var(--radius-sm);border:1px solid var(--line);
+  .btn{font-family:var(--sans);font-size:13px;font-weight:500;border-radius:var(--radius-sm);border:1px solid var(--line);
     background:var(--surface);color:var(--ink);padding:11px 14px;cursor:pointer;transition:.13s;white-space:nowrap}
   .btn:hover{border-color:var(--primary)}
   .btn:disabled{opacity:.5;cursor:not-allowed}
@@ -267,7 +270,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .flow ol{margin:0 0 12px;padding:0;list-style:none;counter-reset:s}
   .flow li{position:relative;padding:0 0 9px 26px;font-size:14px;color:var(--muted)}
   .flow li::before{counter-increment:s;content:counter(s);position:absolute;left:0;top:-1px;width:18px;height:18px;border-radius:6px;
-    background:var(--primary-soft);color:var(--primary-ink);font-family:var(--mono);font-weight:700;font-size:10px;display:grid;place-items:center}
+    background:var(--primary-soft);color:var(--primary-ink);font-family:var(--mono);font-weight:500;font-size:11px;display:grid;place-items:center}
   .flow li b{color:var(--ink2)}
 
   /* ── Board (right) ── */
@@ -282,14 +285,14 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     display:grid;place-items:center;min-height:56vh;text-align:center;color:var(--muted);padding:48px}
   .empty .art{width:74px;height:74px;border-radius:20px;display:grid;place-items:center;margin:0 auto 16px;font-size:32px;
     background:var(--surface2);border:1px solid var(--line);color:var(--faint)}
-  .empty h3{margin:0 0 6px;color:var(--ink);font-size:18px;font-weight:800;letter-spacing:-.01em}
+  .empty h3{margin:0 0 6px;color:var(--ink);font-size:18px;font-weight:500;letter-spacing:-.01em}
   .empty p{margin:0;font-size:14px;max-width:460px;line-height:1.6}
   .empty .dots{display:inline-flex;gap:5px;margin-bottom:14px}
   .empty .dots i{width:8px;height:8px;border-radius:50%;background:var(--primary);opacity:.4;animation:blink 1.2s infinite}
   .empty .dots i:nth-child(2){animation-delay:.2s}.empty .dots i:nth-child(3){animation-delay:.4s}
   @keyframes blink{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
   .streaming{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px}
-  .stream-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-weight:800;letter-spacing:-.01em;color:var(--ink);margin-bottom:12px;font-size:18px}
+  .stream-head{display:flex;align-items:center;gap:9px;flex-wrap:wrap;font-weight:500;letter-spacing:-.01em;color:var(--ink);margin-bottom:12px;font-size:18px}
   .stream-head .dots{display:inline-flex;gap:5px}
   .stream-head .dots i{width:7px;height:7px;border-radius:50%;background:var(--primary);animation:blink 1.2s infinite}
   .stream-head .dots i:nth-child(2){animation-delay:.2s}.stream-head .dots i:nth-child(3){animation-delay:.4s}
@@ -309,22 +312,22 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .top3 .it{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--primary);border-radius:var(--radius-sm);padding:10px 12px;
     width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}   /* 정보 위계 1순위 — qscore와 같은 좌측 강조선 언어 */
   .top3 .it:hover{border-color:var(--primary)}
-  .top3 .rk{font-family:var(--mono);font-weight:800;color:#fff;background:var(--primary);border-radius:6px;min-width:20px;height:20px;
+  .top3 .rk{font-family:var(--mono);font-weight:500;color:#fff;background:var(--primary);border-radius:6px;min-width:20px;height:20px;
     display:grid;place-items:center;font-size:11px;flex:none;margin-top:1px}
-  .top3 .wt{font-size:13px;font-weight:600;line-height:1.35}
+  .top3 .wt{font-size:13px;font-weight:400;line-height:1.35}
   .top3 .mt{font-size:12px;color:var(--muted);margin-top:4px}
   .qscore{display:flex;flex-wrap:wrap;align-items:center;gap:20px;
     margin:14px 0 16px;padding:20px 24px;border-radius:var(--radius);border:1px solid var(--line);border-left:4px solid var(--line)}
   .qscore .qs-main{display:flex;align-items:baseline;gap:3px;flex:none}
-  .qscore .qs-num{font-family:var(--mono);font-size:48px;font-weight:800;line-height:1}
-  .qscore .qs-unit{font-size:15px;font-weight:700;color:var(--muted)}
+  .qscore .qs-num{font-family:var(--mono);font-size:48px;font-weight:500;line-height:1}
+  .qscore .qs-unit{font-size:15px;font-weight:500;color:var(--muted)}
   .qscore .qs-side{display:flex;flex-direction:column;gap:8px;min-width:0}
-  .qscore .qs-label{font-size:13px;font-weight:700;color:var(--muted)}
+  .qscore .qs-label{font-size:13px;font-weight:500;color:var(--muted)}
   .qscore .qs-reason{font-size:13px;color:var(--ink2)}   /* 감점 근거 1줄 요약(사용자 요청) — qs-side가 이미 flex gap:8px로 간격을 준다 */
   .qscore .qs-break{display:flex;flex-wrap:wrap;gap:8px}
   .qscore .qs-stat{font-family:var(--mono);font-size:13.5px;color:var(--muted);background:var(--surface);
     border:1px solid var(--line);border-radius:999px;padding:5px 12px;display:inline-flex;align-items:center;gap:4px}
-  .qscore .qs-stat b{font-weight:800;color:var(--ink)}
+  .qscore .qs-stat b{font-weight:500;color:var(--ink)}
   button.qs-stat{cursor:pointer;font-family:var(--mono);appearance:none;transition:.13s}
   button.qs-stat:hover{border-color:var(--primary);color:var(--primary-ink)}
   .qscore.q-good{background:var(--ok-bg);border-left-color:var(--ok)} .qscore.q-good .qs-num{color:var(--ok)}
@@ -335,41 +338,43 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .change-digest{background:var(--surface);border:1px solid var(--line);
     border-radius:var(--radius);padding:18px 20px;margin-bottom:16px}
   .change-digest .cd-h{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 12px;margin-bottom:12px}
-  .change-digest .cd-title{font-size:18px;font-weight:800;letter-spacing:-.01em;color:var(--ink)}
+  .change-digest .cd-title{font-size:18px;font-weight:500;letter-spacing:-.01em;color:var(--ink)}
   /* 카드 간 정보 위계: 참고용 시각화 대시보드는 실행이 필요한 카드(변경점·체크리스트)보다 한 단 낮은 톤으로 */
   .change-digest.insights{background:var(--surface2);border-style:dashed}
-  .change-digest.insights .cd-title{font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+  .change-digest.insights .cd-title{font-size:14px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
   .checklist-pre{margin:0;white-space:pre-wrap;word-break:break-word;font-family:var(--sans);font-size:14px;line-height:1.6;color:var(--ink2)}
   /* 시각화 5종(#15-19) 공통(#20): 최소 13px 텍스트, 반응형(viewBox·%폭), 긴 이름은 줄바꿈 */
   .viz-block{margin-top:14px}
   .viz-block:first-of-type{margin-top:14px}
-  .viz-title{font-size:14px;font-weight:700;color:var(--muted);margin-bottom:10px}
+  .viz-title{font-size:14px;font-weight:500;color:var(--muted);margin-bottom:10px}
   .chart-empty{font-size:13px;color:var(--faint);padding:18px 4px;text-align:center;background:var(--surface2);border-radius:var(--radius-sm)}
   .viz-grid2{display:grid;gap:18px;margin-top:14px}
   @media(min-width:640px){.viz-grid2{grid-template-columns:1fr 1fr}}
   .viz-grid2 .viz-block{margin-top:0}
   .trend-svg{width:100%;height:auto;display:block}
   .trend-axis{stroke:var(--line);stroke-width:1}
-  .trend-val{font-size:13px;font-weight:700;fill:var(--ink)}
-  .trend-factor{font-size:9.5px;fill:var(--faint)}
-  .trend-lab{font-size:13px;fill:var(--muted)}
+  /* 텍스트 위계(사용자 요청, #31-텍스트위계): 값(18/500/primary) > 회차 라벨(13/400/secondary)
+     > 요인 라벨(12/400/muted). 굵기는 400·500만 사용, 크기는 11px 밑으로 내려가지 않음. */
+  .trend-val{font-size:18px;font-weight:500;fill:var(--text-primary)}
+  .trend-factor{font-size:12px;font-weight:400;fill:var(--text-muted)}
+  .trend-lab{font-size:13px;font-weight:400;fill:var(--text-secondary)}
   .trend-reasons{margin-top:10px;display:flex;flex-direction:column;gap:5px}
   .trend-reason-row{font-size:13.5px;color:var(--muted);line-height:1.5;word-break:keep-all;overflow-wrap:break-word}
   /* 프로젝트 진행률 전용 렌더러(#31-재수정): 회의 품질 점수 그래프와 절대 재사용하지 않는 별도 컴포넌트.
      회차마다 완전히 별도의 가로 막대를 세로로 나열 — 값이 같아도 병합하지 않고 각자 자기 줄을 갖는다. */
   .pg-rows{display:flex;flex-direction:column;gap:10px;margin-top:8px}
   .pg-row{display:flex;align-items:center;gap:10px}
-  .pg-rlab{width:32px;flex:none;font-size:13px;font-weight:700;color:var(--muted);text-align:right}
+  .pg-rlab{width:32px;flex:none;font-size:13px;font-weight:500;color:var(--muted);text-align:right}
   .pg-rtrack{flex:1;height:18px;border-radius:6px;background:var(--surface2);border:1px solid var(--line);overflow:hidden}
   .pg-rfill{height:100%;border-radius:6px;background:var(--ok)}
-  .pg-rpct{width:38px;flex:none;font-size:13px;font-weight:700;color:var(--ink);text-align:right;font-family:var(--mono)}
+  .pg-rpct{width:38px;flex:none;font-size:13px;font-weight:500;color:var(--ink);text-align:right;font-family:var(--mono)}
   .flow-legend{display:flex;gap:14px;margin-bottom:12px;flex-wrap:wrap}
   .flow-lg{display:flex;align-items:center;gap:5px;font-size:13.5px;color:var(--muted)}
   .flow-dot{width:8px;height:8px;border-radius:50%;flex:none}
   .flow-blocked{background:var(--est)} .flow-doing{background:var(--primary)} .flow-done{background:var(--ok)}   /* 미결(확인필요)=Amber, 진행중=Blue — 상태 색상 역할 통일(지시#8) */
   .flow-rounds{display:flex;flex-direction:column;gap:10px}
   .flow-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .flow-lab{width:36px;flex:none;font-size:13.5px;font-weight:700;color:var(--ink2)}
+  .flow-lab{width:36px;flex:none;font-size:13.5px;font-weight:500;color:var(--ink2)}
   .flow-bar{flex:1 1 140px;min-width:100px;display:flex;height:16px;border-radius:6px;overflow:hidden;background:var(--line)}
   .flow-seg{display:block;height:100%}
   .flow-nums{flex:none;font-family:var(--mono);font-size:13px;color:var(--muted)}
@@ -403,18 +408,18 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   /* section heading */
   .sec-h{display:flex;align-items:center;gap:10px;margin:28px 2px 16px}
   .sec-h .n{font-family:var(--mono);font-size:12px;color:var(--muted);letter-spacing:.1em}
-  .sec-h h3{margin:0;font-size:18px;font-weight:800;letter-spacing:-.01em;color:var(--ink)}
+  .sec-h h3{margin:0;font-size:18px;font-weight:500;letter-spacing:-.01em;color:var(--ink)}
   .sec-h .rule{flex:1;height:1px;background:var(--line)}
 
   /* dept grid */
   .depts{display:flex;flex-direction:column;gap:20px}
   .dept-sort{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:0 2px 16px}
-  .dept-sort-label{font-size:14px;font-weight:700;color:var(--muted)}
+  .dept-sort-label{font-size:14px;font-weight:500;color:var(--muted)}
   .dept-sort-btns{display:flex;gap:6px;flex-wrap:wrap}
-  .dept-sort-btn{font-family:var(--sans);font-size:13.5px;font-weight:600;color:var(--muted);
+  .dept-sort-btn{font-family:var(--sans);font-size:13.5px;font-weight:400;color:var(--muted);
     background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:5px 12px;cursor:pointer}
   .dept-sort-btn:hover{border-color:var(--primary);color:var(--primary-ink)}
-  .dept-sort-btn.on{background:var(--primary-soft);color:var(--primary-ink);border-color:transparent;font-weight:700}
+  .dept-sort-btn.on{background:var(--primary-soft);color:var(--primary-ink);border-color:transparent;font-weight:500}
   /* 담당자별 TODO 누적 현황(#13) */
   .owner-totals{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:20px}
   .owner-totals-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
@@ -422,7 +427,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;cursor:pointer;font-family:var(--sans)}
   .owner-total-card:hover{border-color:var(--primary)}
   .owner-total-card.on{background:var(--primary-soft);border-color:transparent}
-  .ot-name{font-size:14px;font-weight:700;color:var(--ink)}
+  .ot-name{font-size:14px;font-weight:500;color:var(--ink)}
   .ot-bar{display:block;width:100%;height:5px;border-radius:99px;background:var(--line)}
   .ot-bar-fill{display:block;height:100%;border-radius:99px;background:var(--ok)}
   .ot-nums{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
@@ -437,14 +442,14 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .dept__h{display:flex;align-items:center;gap:8px;padding:16px 20px;border-bottom:1px solid var(--line2);
     background:var(--surface)}
   .dept__h .dot{width:9px;height:9px;border-radius:3px;background:var(--primary);flex:none}
-  .dept__h .nm{font-weight:800;font-size:15px;letter-spacing:-.01em}
+  .dept__h .nm{font-weight:500;font-size:15px;letter-spacing:-.01em}
   .dept__b{padding:10px 20px 20px}
   .block{margin-top:16px}
-  .block__l{font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:5px}
+  .block__l{font-family:var(--mono);font-size:11.5px;font-weight:400;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:5px}
   /* table-layout:fixed — 컬럼이 내용 길이로 늘어나지 않게 고정. 담당/기한 같은 좁은 컬럼이
      긴 값("미정 (원문 …)")으로 폭을 먹어 내용 컬럼이 0에 수렴→글자당 줄바꿈(세로 늘어짐)하던 문제 방지. */
   table.t{width:100%;max-width:100%;table-layout:fixed;border-collapse:collapse;font-size:14px}
-  table.t th{text-align:left;font-size:11.5px;font-weight:600;color:var(--faint);padding:4px 8px 4px 0;border-bottom:1px solid var(--line2)}
+  table.t th{text-align:left;font-size:11.5px;font-weight:400;color:var(--faint);padding:4px 8px 4px 0;border-bottom:1px solid var(--line2)}
   table.t td{padding:10px 8px 10px 0;border-bottom:1px solid var(--line2);vertical-align:top}
   table.t tr{transition:background-color .8s}
   table.t tr.miss-flash{background:var(--primary-soft)}
@@ -461,7 +466,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .clip2{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
   .basis{color:var(--muted);font-size:14px;margin-top:2px}
   [hidden]{display:none!important}   /* 클래스의 display가 hidden 속성을 덮지 않도록 (재구성본 배지) */
-  .tag{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:700;border-radius:5px;padding:2px 6px;white-space:nowrap}
+  .tag{display:inline-block;font-family:var(--mono);font-size:11px;font-weight:500;border-radius:5px;padding:2px 6px;white-space:nowrap}
   .tag.ok{color:var(--ok);background:var(--ok-bg)} .tag.est{color:var(--est);background:var(--est-bg)} .tag.chk{color:var(--chk);background:var(--chk-bg)}
   .tag.gray{color:var(--muted);background:var(--inset)}   /* 지시#31: 빨강은 지연·오류·필수조치 전용 — '추정'은 보조정보로 회색 */
 
@@ -477,29 +482,29 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .node.bott .dot{border-color:var(--chk);box-shadow:0 0 0 4px var(--chk-bg)}
   .node .nc{background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:9px 12px}
   .node.bott .nc{border-color:color-mix(in srgb,var(--chk) 50%,var(--line));background:color-mix(in srgb,var(--chk-bg) 60%,var(--surface2))}
-  .node .tk{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-  .node .flag{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--chk);background:var(--chk-bg);border-radius:5px;padding:1px 6px}
+  .node .tk{font-size:15px;font-weight:500;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .node .flag{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--chk);background:var(--chk-bg);border-radius:5px;padding:1px 6px}
   .node .dep{font-family:var(--mono);font-size:13px;color:var(--muted);margin-top:4px}
   .node .dchip{color:var(--primary-ink)}
 
   /* 크리티컬 패스 · 계층형 DAG */
   .dag-wrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px 18px}
   .dag{max-width:100%;height:auto;display:block}   /* 고유 크기로 렌더, 넓을 때만 축소 — 항목 적을 때 확대 방지 */
-  .dag-col{font-size:10px;fill:var(--muted);letter-spacing:1px}
+  .dag-col{font-size:11px;fill:var(--muted);letter-spacing:1px}
   .dag-e{stroke:var(--line2);stroke-width:1.6;fill:none}
   .dag-e.crit{stroke:var(--chk);stroke-width:2.6}
   .dag-n rect:first-child{fill:var(--surface2);stroke:var(--line);stroke-width:1.2}
   .dag-n.bott rect:first-child{fill:var(--chk-bg);stroke:var(--chk);stroke-width:2.6}
-  .dag-t{font-size:15px;font-weight:700;fill:var(--ink)}
+  .dag-t{font-size:15px;font-weight:500;fill:var(--ink)}
   .dag-d{font-size:13px;fill:var(--muted)}
-  .dag-b{font-size:12.5px;font-weight:700;fill:var(--chk)}
+  .dag-b{font-size:12.5px;font-weight:500;fill:var(--chk)}
   .dag-x rect{fill:none;stroke:var(--muted);stroke-width:1;stroke-dasharray:4 3;opacity:.7}
-  .dag-x text{font-size:8px;fill:var(--muted)}
+  .dag-x text{font-size:11px;fill:var(--muted)}
   .dag-single{padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
   .dag-warn{margin-bottom:8px}
   .w-row{font-size:14px;padding:6px 10px;border-radius:var(--radius-sm);margin-bottom:4px}
   .w-info{background:var(--inset);color:var(--muted)}
-  .w-bad{background:var(--chk-bg);color:var(--chk);font-weight:700}
+  .w-bad{background:var(--chk-bg);color:var(--chk);font-weight:500}
 
   /* 노드 상세 팝업 — 중앙 모달(#2, #3: 사이드 패널 → 가운데 팝업 + 이전/다음) */
   .dag-n[data-id]{cursor:pointer}
@@ -520,27 +525,27 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .np-close:hover{border-color:var(--primary)}
   .np-head{display:flex;gap:10px;align-items:flex-start;margin:2px 34px 12px 0}
   .np-dept{width:8px;height:38px;border-radius:4px;flex:none;margin-top:2px}
-  .np-title{font-size:18px;font-weight:800;letter-spacing:-.01em;line-height:1.3;color:var(--ink)}
+  .np-title{font-size:18px;font-weight:500;letter-spacing:-.01em;line-height:1.3;color:var(--ink)}
   .np-sub{font-size:14px;color:var(--muted);margin-top:2px}
-  .np-bott{font-size:14px;font-weight:700;color:var(--chk);background:var(--chk-bg);border-radius:8px;padding:7px 10px;margin-bottom:12px}
+  .np-bott{font-size:14px;font-weight:500;color:var(--chk);background:var(--chk-bg);border-radius:8px;padding:7px 10px;margin-bottom:12px}
   .np-facts{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0 0 10px}
-  .np-facts dt{font-size:12px;color:var(--faint);font-weight:600}
+  .np-facts dt{font-size:12px;color:var(--faint);font-weight:400}
   .np-facts dd{margin:0;font-size:14px;color:var(--ink);font-family:var(--mono)}
   .np-basis{font-size:14px;color:var(--muted);margin-bottom:10px}
   .np-note{font-size:14px;color:var(--muted);background:var(--surface2);border:1px dashed var(--line);border-radius:8px;padding:9px 11px;margin-bottom:10px}
   .np-block{margin-top:10px}
-  .np-label{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .np-label{font-family:var(--mono);font-size:11px;font-weight:400;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
   .np-dep{font-size:14px;color:var(--ink2);padding:3px 0}
   .np-dep.np-ext{color:var(--muted);font-family:var(--mono)}
   /* 정보 위계 아코디언 (#5) */
   details.acc{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);margin:14px 2px 0;overflow:hidden}
   details.acc.secondary{background:var(--surface2);border-style:dashed}   /* 정보 위계 2순위(참고용) — insights와 같은 톤 */
-  details.acc>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:16px 20px;font-size:15px;font-weight:800;letter-spacing:-.01em}
+  details.acc>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:10px;padding:16px 20px;font-size:15px;font-weight:500;letter-spacing:-.01em}
   details.acc>summary::-webkit-details-marker{display:none}
   details.acc>summary::before{content:"▸";color:var(--muted);font-size:11px;transition:transform .15s}
   details.acc[open]>summary::before{transform:rotate(90deg)}
   details.acc>summary:hover{color:var(--primary-ink)}
-  details.acc .cnt{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted);background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
+  details.acc .cnt{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:500;color:var(--muted);background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
   details.acc>.acc-body{padding:0 20px 20px}
   /* 더보기 토글 (#3) */
   details.more{margin-top:2px}
@@ -553,7 +558,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
      탭으로 전환한다(사용자 요청). 재렌더(부서 편집 등)에도 activeTab을 유지해 탭이 안 튄다. */
   .tabs{display:flex;gap:2px;margin:18px 2px 0;border-bottom:1px solid var(--line2);
     overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
-  .tab-btn{appearance:none;background:none;border:none;padding:14px 22px;font-size:15px;font-weight:700;
+  .tab-btn{appearance:none;background:none;border:none;padding:14px 22px;font-size:15px;font-weight:500;
     color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px;font-family:var(--sans);flex:none;
     border-radius:8px 8px 0 0;transition:.13s}   /* 탭 UI 확대(사용자 요청) — 폰트·패딩·밑줄 두께 한 단계씩 키움 */
   .tab-btn:hover{color:var(--ink);background:var(--surface2)}
@@ -561,19 +566,19 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .tabpanel{padding-top:2px}
   .tabpanel[hidden]{display:none}
   .tab-head{display:flex;align-items:center;gap:10px;margin:18px 2px 14px}
-  .tab-head .tab-t{font-size:18px;font-weight:800;letter-spacing:-.01em}
-  .tab-head .cnt{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:700;color:var(--muted);
+  .tab-head .tab-t{font-size:18px;font-weight:500;letter-spacing:-.01em}
+  .tab-head .cnt{margin-left:auto;font-family:var(--mono);font-size:11px;font-weight:500;color:var(--muted);
     background:var(--surface2);border:1px solid var(--line);border-radius:999px;padding:2px 9px}
 
   /* 부서 편집 모드 (설계 2-3) */
-  .acc-edit{font-family:var(--sans);font-size:11px;font-weight:700;border-radius:999px;padding:4px 10px;
+  .acc-edit{font-family:var(--sans);font-size:11px;font-weight:500;border-radius:999px;padding:4px 10px;
     border:1px solid var(--line);background:var(--surface2);color:var(--muted);cursor:pointer}
   .acc-edit:hover{border-color:var(--primary);color:var(--primary-ink)}
   .acc-edit.on{background:var(--primary-soft);color:var(--primary-ink);border-color:transparent}
   .dept.is-hidden{opacity:.5}
-  .dept__h .exc{font-family:var(--mono);font-size:10px;font-weight:700;color:var(--est);background:var(--est-bg);
+  .dept__h .exc{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--est);background:var(--est-bg);
     border-radius:5px;padding:2px 6px;white-space:nowrap;flex:none}
-  .de-name{flex:1;min-width:90px;font-family:var(--sans);font-size:13px;font-weight:800;color:var(--ink);
+  .de-name{flex:1;min-width:90px;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--ink);
     background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
   .de-tools{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding:8px 15px;
     border-bottom:1px solid var(--line2);background:var(--surface2)}
@@ -582,7 +587,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .de-btn:hover{border-color:var(--primary)}
   .de-btn.on{background:var(--est-bg);color:var(--est);border-color:transparent}
   .de-btn.danger:hover{border-color:var(--chk);color:var(--chk)}
-  select.de-merge{appearance:none;font-family:var(--sans);font-size:13px;font-weight:700;color:var(--ink2);
+  select.de-merge{appearance:none;font-family:var(--sans);font-size:13px;font-weight:500;color:var(--ink2);
     background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 8px;cursor:pointer;max-width:150px}
   select.de-merge:hover{border-color:var(--primary)}
   .de-add{display:flex;gap:8px;align-items:center;margin-top:12px}
@@ -609,7 +614,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     border-radius:50%;display:inline-block;animation:sp .8s linear infinite;vertical-align:-3px}
   @keyframes sp{to{transform:rotate(360deg)}}
   .toast{position:fixed;bottom:22px;left:50%;transform:translate(-50%,20px);opacity:0;background:var(--ink);color:var(--paper);
-    padding:10px 18px;border-radius:10px;font-size:13px;font-weight:700;transition:.22s;pointer-events:none;z-index:40;box-shadow:var(--shadow)}
+    padding:10px 18px;border-radius:10px;font-size:13px;font-weight:500;transition:.22s;pointer-events:none;z-index:40;box-shadow:var(--shadow)}
   .toast.on{opacity:1;transform:translate(-50%,0)}
   :focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:6px}
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
@@ -974,7 +979,7 @@ function projectProgressData(histProj){
 // p.factor(선택): 점수 숫자 바로 아래에 작고 옅은 색으로 붙는 변동 요인 한 줄(사용자 요청) — 점수보다
 // 작은 글자(trend-factor)로, 점수 자체가 시각적으로 더 강조되도록 한다.
 function trendSvg(pts,ariaLabel,color,unit){
-  const W=320,H=140,PADX=24,PADY=34;
+  const W=320,H=140,PADX=24,PADY=44; // 점수 텍스트가 18px로 커져(#31-텍스트위계) 상단 여백을 넉넉히 잡음
   const n=pts.length;
   const xAt=i=>PADX+(n>1?i*((W-2*PADX)/(n-1)):0);
   const yAt=s=>H-PADY-(Math.max(0,Math.min(100,s))/100)*(H-2*PADY);
