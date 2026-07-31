@@ -41,13 +41,17 @@
 ================================================================
 [부서 표준화] — 테크핀레이팅스 본부 체계로 정규화
 ================================================================
-- 고객솔루션본부(영업)  ← 영업, 세일즈, 영업팀
+- 고객솔루션본부(영업)  ← 영업, 세일즈
 - 사업성장본부(마케팅)  ← 마케팅, 브랜드
-- CB본부(신용평가·모형) ← 평가본부, 데사팀(데이터사이언스), 모형, 리스크
+- CB본부(신용평가·모형) ← 평가본부, 모형, 리스크
 - ICT본부(데이터·개발)  ← 개발, 플랫폼, 데이터엔지니어링, 인프라
 - 경영본부(경영지원)    ← 경영지원, 재무, 회계, 인사, PMO/PM
 - 법무실               ← 법무, 컴플라이언스(준법감시)
 * 매핑이 불확실하면 원문 표기 + "[본부 확인필요]"를 병기한다. 사람↔부서가 불명확하면 [미상] 부서로 둔다.
+* 위 표준화는 본부 단위의 일반적 업무 언급에 적용된다. 회의록에 "OO팀"처럼 구체적인 팀 이름이 명시되면,
+  그 팀 이름을 임의로 상위 본부명으로 뭉개지 마라. 아래(있으면) [사용자 추가 부서] 블록의 "등록된 팀"
+  목록에서 먼저 일치를 찾아 그 팀명을(소속 본부가 있으면 "본부명(팀명)" 형식으로) 그대로 쓰고,
+  등록되지 않은 새 팀명이면 원문 표기를 그대로 dept 값에 쓰고 뒤에 "[신규 팀 확인필요]"를 병기한다.
 
 ================================================================
 [처리 절차]
@@ -180,7 +184,19 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .dept-dialog .field-label:first-of-type{margin-top:2px}
   .dept-input{flex:1;min-width:120px;font-family:var(--sans);font-size:13px;color:var(--ink);
     background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:8px 10px}
-  .dept-chips{display:flex;flex-wrap:wrap;gap:6px}
+  /* 본부 → 팀 계층(사용자 요청) — 본부(표준·커스텀)마다 카드 하나, 그 안에 소속 팀 칩을 나열.
+     맨 끝에 소속 미정 팀 카드를 별도로 붙인다. */
+  .dept-tree{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+  .dept-tree-item{background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:9px 11px}
+  .dept-tree-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .dept-tree-name{font-size:13.5px;font-weight:500;color:var(--ink);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dept-tree-teams{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+  .dept-tree-empty{font-size:12px;color:var(--faint)}
+  .team-chip{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;background:var(--surface);
+    border:1px solid var(--line);border-radius:999px;padding:3px 3px 3px 10px;color:var(--ink2)}
+  .team-chip button{width:16px;height:16px;flex:none;border:none;background:none;color:var(--faint);
+    cursor:pointer;border-radius:50%;font-size:10px;line-height:1;display:grid;place-items:center}
+  .team-chip button:hover{color:var(--chk);background:var(--chk-bg)}
   .dept-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
   .dept-row{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface2);
     border:1px solid var(--line);border-radius:var(--radius-sm);font-size:13px}
@@ -768,17 +784,23 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     <button class="np-close" id="deptCloseBtn" aria-label="닫기">✕</button>
     <div class="cmp-title">⚙️ 부서 설정</div>
 
-    <div class="field-label">표준 본부 <span class="hint">추가만 가능 · 삭제 불가</span></div>
-    <div class="dept-chips" id="deptStdChips"></div>
+    <div class="field-label">부서 계층 <span class="hint">본부 → 팀 · 본부는 추가만 가능·삭제 불가</span></div>
+    <div class="dept-tree" id="deptTree"></div>
 
-    <div class="field-label">추가 부서</div>
+    <div class="field-label">본부 추가</div>
     <div class="row">
       <input type="text" class="dept-input" id="deptCustomInput" placeholder="예: R&D센터" maxlength="40">
       <button class="btn" id="deptAddCustomBtn">추가</button>
     </div>
-    <div class="dept-list" id="deptCustomList"></div>
 
-    <div class="field-label">매핑 규칙 <span class="hint">원문 표기 → 부서, 표준화보다 우선 적용</span></div>
+    <div class="field-label">팀 추가 <span class="hint">소속 본부 선택, 없으면 미지정</span></div>
+    <div class="row">
+      <input type="text" class="dept-input" id="deptTeamInput" placeholder="예: 영업팀" maxlength="40">
+      <span class="selwrap"><select class="model" id="deptTeamParentSelect"></select></span>
+      <button class="btn" id="deptAddTeamBtn">추가</button>
+    </div>
+
+    <div class="field-label">매핑 규칙 <span class="hint">원문 표기 → 부서/팀, 표준화보다 우선 적용</span></div>
     <div class="row">
       <input type="text" class="dept-input" id="deptMapRawInput" placeholder="원문 표기 (예: AI실)" maxlength="40">
       <span class="selwrap"><select class="model" id="deptMapDeptSelect"></select></span>
@@ -1213,32 +1235,57 @@ const statusLabel = st => ({'확인필요':'검토 필요','확정':'완료'}[st
 // 지시#30: 상태를 색상 하나로만 구분하지 않고 아이콘을 함께 표기한다.
 const statusIcon = st => ({'확정':'✓','확인필요':'⚠','추정':'~'}[st]||'');
 
-/* ⚙️ 부서 설정 패널 — 로컬 임시 상태에서 편집, [저장] 눌러야 localStorage에 반영 */
-let deptTempDepts=[], deptTempMaps=[];
+/* ⚙️ 부서 설정 패널 — 로컬 임시 상태에서 편집, [저장] 눌러야 localStorage에 반영.
+   본부 → 팀 계층(사용자 요청): deptTempTeams={name,parent}[] — parent는 본부명(표준·커스텀) 또는
+   ''(소속 미정). 팀은 본부처럼 삭제 불가 제약이 없고, 소속 본부가 지워지면 삭제 대신 소속
+   미정으로 강등한다(board-custom.js sanitizeTeams와 같은 완화된 방향 — 데이터 유실 최소화). */
+let deptTempDepts=[], deptTempTeams=[], deptTempMaps=[];
 function deptAllDepts(){ return BoardCustom.STD_DEPTS.concat(deptTempDepts); }
-function deptRenderStd(){ $('#deptStdChips').innerHTML = BoardCustom.STD_DEPTS.map(d=>`<span class="pill" aria-disabled="true">${esc(d)}</span>`).join(''); }
-function deptRenderCustom(){
-  $('#deptCustomList').innerHTML = deptTempDepts.length
-    ? deptTempDepts.map((d,i)=>`<div class="dept-row"><span class="nm">${esc(d)}</span><button type="button" class="btn mini" data-act="rmDept" data-i="${i}" aria-label="삭제">✕</button></div>`).join('')
-    : '<div class="dept-empty">추가된 부서가 없습니다</div>';
+// 팀의 "표준 표시 형식" — 매핑 드롭다운 값·매핑 정리(cascade) 양쪽에서 같은 기준으로 쓴다.
+function teamDisplay(t){ return t.parent ? `${t.parent}(${t.name})` : t.name; }
+function deptRenderTree(){
+  const teamChips=(dept)=>{
+    const teams=deptTempTeams.filter(t=>t.parent===dept);
+    if(!teams.length) return '<div class="dept-tree-empty">등록된 팀 없음</div>';
+    return teams.map(t=>`<span class="team-chip">${esc(t.name)}<button type="button" data-act="rmTeam" data-name="${esc(t.name)}" aria-label="${esc(t.name)} 삭제">✕</button></span>`).join('');
+  };
+  const deptCards=deptAllDepts().map(d=>{
+    const isStd=BoardCustom.STD_DEPTS.includes(d);
+    const idx=deptTempDepts.indexOf(d);
+    const head=isStd
+      ? `<span class="pill" aria-disabled="true">${esc(d)}</span>`
+      : `<span class="dept-tree-name">${esc(d)}</span><button type="button" class="btn mini" data-act="rmDept" data-i="${idx}" aria-label="${esc(d)} 삭제">✕</button>`;
+    return `<div class="dept-tree-item"><div class="dept-tree-h">${head}</div><div class="dept-tree-teams">${teamChips(d)}</div></div>`;
+  }).join('');
+  const unassigned=deptTempTeams.filter(t=>!t.parent);
+  const unassignedCard=`<div class="dept-tree-item dept-tree-unassigned"><div class="dept-tree-h"><span class="dept-tree-name">소속 미정 팀</span></div>`+
+    `<div class="dept-tree-teams">${unassigned.length?unassigned.map(t=>`<span class="team-chip">${esc(t.name)}<button type="button" data-act="rmTeam" data-name="${esc(t.name)}" aria-label="${esc(t.name)} 삭제">✕</button></span>`).join(''):'<div class="dept-tree-empty">없음</div>'}</div></div>`;
+  $('#deptTree').innerHTML = deptCards + unassignedCard;
+}
+function deptRenderTeamParentSelect(){
+  const sel=$('#deptTeamParentSelect'), cur=sel.value;
+  sel.innerHTML = '<option value="">(미지정)</option>' + deptAllDepts().map(d=>`<option>${esc(d)}</option>`).join('');
+  if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
 }
 function deptRenderMapOptions(){
-  const sel=$('#deptMapDeptSelect'), cur=sel.value, list=deptAllDepts();
-  sel.innerHTML='';
-  list.forEach(d=>{const o=document.createElement('option');o.value=d;o.textContent=d;sel.appendChild(o);});
-  if(list.includes(cur)) sel.value=cur;
+  const sel=$('#deptMapDeptSelect'), cur=sel.value;
+  const deptOpts=deptAllDepts().map(d=>`<option>${esc(d)}</option>`).join('');
+  const teamOpts=deptTempTeams.map(t=>{ const v=teamDisplay(t); return `<option value="${esc(v)}">${esc(v)}</option>`; }).join('');
+  sel.innerHTML = `<optgroup label="본부">${deptOpts}</optgroup>` + (deptTempTeams.length?`<optgroup label="팀">${teamOpts}</optgroup>`:'');
+  if([...sel.options].some(o=>o.value===cur)) sel.value=cur;
 }
 function deptRenderMaps(){
   $('#deptMapList').innerHTML = deptTempMaps.length
     ? deptTempMaps.map((m,i)=>`<div class="dept-row"><span class="nm">"${esc(m.raw)}" → ${esc(m.dept)}</span><button type="button" class="btn mini" data-act="rmMap" data-i="${i}" aria-label="삭제">✕</button></div>`).join('')
     : '<div class="dept-empty">추가된 매핑이 없습니다</div>';
 }
-function deptRenderAll(){ deptRenderStd(); deptRenderCustom(); deptRenderMapOptions(); deptRenderMaps(); }
+function deptRenderAll(){ deptRenderTree(); deptRenderTeamParentSelect(); deptRenderMapOptions(); deptRenderMaps(); }
 function deptOpen(){
   const cfg=BoardCustom.load();
   deptTempDepts=cfg.customDepts.slice();
+  deptTempTeams=cfg.customTeams.map(t=>({name:t.name,parent:t.parent}));
   deptTempMaps=cfg.customMappings.map(m=>({raw:m.raw,dept:m.dept}));
-  $('#deptCustomInput').value=''; $('#deptMapRawInput').value='';
+  $('#deptCustomInput').value=''; $('#deptTeamInput').value=''; $('#deptMapRawInput').value='';
   deptRenderAll();
   $('#deptOverlay').classList.add('on');
   $('#deptCloseBtn').focus();
@@ -1253,6 +1300,20 @@ function deptRemoveCustom(i){
   const name=deptTempDepts[i]; if(name===undefined) return;
   deptTempDepts.splice(i,1);
   deptTempMaps=deptTempMaps.filter(m=>m.dept!==name); // 부서 삭제 시 그 부서를 가리키던 매핑도 정리(유령 부서 방지)
+  // 본부가 삭제돼도 소속 팀은 지우지 않고 소속 미정으로 강등(sanitizeTeams와 같은 완화 방향).
+  deptTempTeams=deptTempTeams.map(t=>t.parent===name?{name:t.name,parent:''}:t);
+  deptRenderAll();
+}
+function deptAddTeam(){
+  const name=$('#deptTeamInput').value.trim(), parent=$('#deptTeamParentSelect').value;
+  if(!name || deptAllDepts().includes(name) || deptTempTeams.some(t=>t.name===name)){ $('#deptTeamInput').value=''; return; }
+  deptTempTeams.push({name:name,parent:parent}); $('#deptTeamInput').value=''; deptRenderAll();
+}
+function deptRemoveTeam(name){
+  const t=deptTempTeams.find(x=>x.name===name); if(!t) return;
+  const display=teamDisplay(t);
+  deptTempTeams=deptTempTeams.filter(x=>x.name!==name);
+  deptTempMaps=deptTempMaps.filter(m=>m.dept!==display); // 팀 삭제 시 그 팀을 가리키던 매핑도 정리
   deptRenderAll();
 }
 function deptAddMapping(){
@@ -1262,7 +1323,7 @@ function deptAddMapping(){
 }
 function deptRemoveMapping(i){ if(deptTempMaps[i]===undefined) return; deptTempMaps.splice(i,1); deptRenderMaps(); }
 function deptSave(){
-  BoardCustom.save({customDepts:deptTempDepts, customMappings:deptTempMaps});
+  BoardCustom.save({customDepts:deptTempDepts, customTeams:deptTempTeams, customMappings:deptTempMaps});
   toast('부서 설정이 저장되었습니다');
   deptClose();
 }
@@ -1270,11 +1331,16 @@ $('#deptCfgBtn').onclick=deptOpen;
 $('#deptCloseBtn').onclick=deptClose;
 $('#deptOverlay').onclick=e=>{ if(e.target.id==='deptOverlay') deptClose(); };
 $('#deptAddCustomBtn').onclick=deptAddCustom;
+$('#deptAddTeamBtn').onclick=deptAddTeam;
 $('#deptAddMapBtn').onclick=deptAddMapping;
 $('#deptSaveBtn').onclick=deptSave;
 $('#deptCustomInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();deptAddCustom();} });
+$('#deptTeamInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();deptAddTeam();} });
 $('#deptMapRawInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();deptAddMapping();} });
-$('#deptCustomList').addEventListener('click',e=>{ const b=e.target.closest('button[data-act="rmDept"]'); if(b)deptRemoveCustom(+b.dataset.i); });
+$('#deptTree').addEventListener('click',e=>{
+  const rd=e.target.closest('button[data-act="rmDept"]'); if(rd){ deptRemoveCustom(+rd.dataset.i); return; }
+  const rt=e.target.closest('button[data-act="rmTeam"]'); if(rt){ deptRemoveTeam(rt.dataset.name); }
+});
 $('#deptMapList').addEventListener('click',e=>{ const b=e.target.closest('button[data-act="rmMap"]'); if(b)deptRemoveMapping(+b.dataset.i); });
 // Esc: 부서 패널이 열려 있을 때만 그것만 닫는다(node-panel·cmp-overlay의 기존 Esc 핸들러와 겹쳐서 여러 개가 같이 닫히는 것 방지).
 // 이 리스너를 아래쪽의 두 기존 keydown 리스너보다 먼저 등록해, 열려 있을 때 stopImmediatePropagation으로 뒤 리스너를 막는다.

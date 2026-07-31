@@ -1,12 +1,14 @@
-/* 조정치 · 부서 커스터마이징 — 사용자 설정(customDepts/customMappings) → 프롬프트 블록 + localStorage 저장.
-   순수(DOM 접근 없음; load/save만 브라우저 스토리지를 씀). file:// 더블클릭 지원을 위해 클래식 스크립트. A·B 바이트 동일.
-   보드 표시 유틸(fmtUpdatedAt 등)도 이 모듈이 겸한다. */
+/* 조정치 · 부서 커스터마이징 — 사용자 설정(customDepts/customTeams/customMappings) → 프롬프트 블록 +
+   localStorage 저장. customTeams: 본부(표준 6본부 또는 customDepts) 아래 소속되거나(parent) 소속 미정으로
+   독립 등록되는 "팀" 계층(사용자 요청). 순수(DOM 접근 없음; load/save만 브라우저 스토리지를 씀).
+   file:// 더블클릭 지원을 위해 클래식 스크립트. A·B 바이트 동일. 보드 표시 유틸(fmtUpdatedAt 등)도 이 모듈이 겸한다. */
 (function (root) {
   'use strict';
 
   var STORAGE_KEY = 'jjc-dept-config';
-  var MAX_NAME_LEN = 40;         // 문자열 1개(부서명·raw·dept)당 최대 길이
+  var MAX_NAME_LEN = 40;         // 문자열 1개(부서명·팀명·raw·dept)당 최대 길이
   var MAX_CUSTOM_DEPTS = 30;     // customDepts 최대 개수
+  var MAX_CUSTOM_TEAMS = 60;     // customTeams 최대 개수
   var MAX_CUSTOM_MAPPINGS = 60;  // customMappings 최대 개수
 
   // 표준 6본부 — 추가만 가능, 삭제 불가(설계 7절). 동결해 호출자가 못 망가뜨리게 한다.
@@ -38,6 +40,29 @@
     return out;
   }
 
+  // 본부 → 팀 계층(사용자 요청) — 팀은 등록된 본부(표준 6본부 또는 customDepts) 중 하나에 소속되거나,
+  // parent를 비워 "소속 미정" 팀으로 독립 등록될 수 있다. depts는 이미 sanitizeDepts를 거친
+  // customDepts 목록 — parent가 표준 본부·customDepts 어디에도 없으면 소속 미정으로 강등한다
+  // (끊긴 참조 방지). 팀명이 본부명과 겹치면 버린다(드롭다운·프롬프트에서 모호해지므로).
+  function sanitizeTeams(arr, depts) {
+    if (!Array.isArray(arr)) return [];
+    var deptSet = Object.create(null);
+    STD_DEPTS.forEach(function (d) { deptSet[d] = true; });
+    (depts || []).forEach(function (d) { deptSet[d] = true; });
+    var seen = Object.create(null), out = [], i, item, name, parent;
+    for (i = 0; i < arr.length && out.length < MAX_CUSTOM_TEAMS; i++) {
+      item = arr[i];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+      name = sanitizeName(item.name);
+      if (!name || deptSet[name] || seen[name]) continue;
+      parent = sanitizeName(item.parent);
+      if (parent && !deptSet[parent]) parent = '';
+      seen[name] = true;
+      out.push({ name: name, parent: parent });
+    }
+    return out;
+  }
+
   function sanitizeMappings(arr) {
     if (!Array.isArray(arr)) return [];
     var seenRaw = Object.create(null), out = [], i, m, raw, dept;
@@ -53,25 +78,51 @@
     return out;
   }
 
-  // 방어적 정규화(순수 — 입력을 변형하지 않는다). 항상 {customDepts:[], customMappings:[]}를 반환한다.
+  // 방어적 정규화(순수 — 입력을 변형하지 않는다). 항상 {customDepts:[], customTeams:[], customMappings:[]}를 반환한다.
   function sanitize(config) {
     var src = (config && typeof config === 'object' && !Array.isArray(config)) ? config : {};
-    return { customDepts: sanitizeDepts(src.customDepts), customMappings: sanitizeMappings(src.customMappings) };
+    var depts = sanitizeDepts(src.customDepts);
+    return {
+      customDepts: depts,
+      customTeams: sanitizeTeams(src.customTeams, depts),
+      customMappings: sanitizeMappings(src.customMappings)
+    };
   }
 
-  // 설정 → 프롬프트 블록(설계 1-3, 문구 고정). 비어 있으면 ''. 앞뒤 개행 없이 블록만 반환 —
-  // 호출자가 '\n\n'으로 이어붙인다.
+  // customTeams → "본부 소속(팀, 팀); 소속 미정(팀)" 한 줄 요약. teams는 이미 sanitize를 거친 배열.
+  function teamsLine(teams) {
+    var byParent = Object.create(null), order = [], unassigned = [], i, t;
+    for (i = 0; i < teams.length; i++) {
+      t = teams[i];
+      if (t.parent) {
+        if (!byParent[t.parent]) { byParent[t.parent] = []; order.push(t.parent); }
+        byParent[t.parent].push(t.name);
+      } else {
+        unassigned.push(t.name);
+      }
+    }
+    var parts = order.map(function (p) { return p + ' 소속(' + byParent[p].join(', ') + ')'; });
+    if (unassigned.length) parts.push('소속 미정(' + unassigned.join(', ') + ')');
+    return parts.join('; ');
+  }
+
+  // 설정 → 프롬프트 블록(설계 1-3, 문구 고정. 팀 계층은 사용자 요청으로 추가). 비어 있으면 ''.
+  // 앞뒤 개행 없이 블록만 반환 — 호출자가 '\n\n'으로 이어붙인다.
   function deptConfigToPrompt(config) {
     var c = sanitize(config);
-    if (!c.customDepts.length && !c.customMappings.length) return '';
+    if (!c.customDepts.length && !c.customTeams.length && !c.customMappings.length) return '';
     var lines = ['[사용자 추가 부서 — 표준 본부와 동일하게 취급]'];
     if (c.customDepts.length) lines.push('- 추가 부서: ' + c.customDepts.join(', '));
+    if (c.customTeams.length) lines.push('- 등록된 팀: ' + teamsLine(c.customTeams));
     if (c.customMappings.length) {
       lines.push('- 매핑(우선 적용): ' + c.customMappings.map(function (m) {
         return '"' + m.raw + '"→' + m.dept;
       }).join(', '));
     }
     lines.push('표준 6본부 + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다.');
+    // 신뢰도 버그 수정(사용자 요청): 등록된 팀은 원문 그대로의 팀명을 dept 값으로 쓰게 해
+    // 임의로 상위 본부명에 뭉개 넣지 않도록 한다(예: "영업팀"이 "고객솔루션본부"로만 표시되던 문제).
+    if (c.customTeams.length) lines.push('등록된 팀은 원문에 나오면 그 팀명을 그대로 dept 값에 쓴다(소속 본부가 있으면 "본부명(팀명)" 형식).');
     return lines.join('\n');
   }
 

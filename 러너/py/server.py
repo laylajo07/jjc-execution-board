@@ -26,6 +26,8 @@ DEPT_MAX_CUSTOM_DEPTS = 30
 DEPT_MAX_CUSTOM_MAPPINGS = 60
 # 표준 6본부 — 추가만 가능, 삭제 불가. 커스텀 부서 중 이름이 겹치면 버린다.
 DEPT_STD_DEPTS = ('CB본부', 'ICT본부', '경영본부', '법무실', '고객솔루션본부', '사업성장본부')
+# customTeams 최대 개수(본부 → 팀 계층, 3개 언어 중 하나)
+DEPT_MAX_CUSTOM_TEAMS = 60
 
 _DEPT_CONTROL_CHARS_RE = re.compile(r'[\x00-\x1F\x7F-\x9F]')
 # JS의 (유니코드 비인식) \s는 U+FEFF(BOM/ZWNBSP)를 공백으로 취급하지만 파이썬의
@@ -62,6 +64,31 @@ def sanitize_depts(arr):
     return out
 
 
+def sanitize_teams(arr, depts):
+    """본부 → 팀 계층(board-custom.js sanitizeTeams 와 동일 규칙). depts는 이미 sanitize_depts를
+    거친 customDepts 목록 — parent가 표준 본부·customDepts 어디에도 없으면 소속 미정으로 강등한다.
+    팀명이 본부명과 겹치면 버린다."""
+    if not isinstance(arr, list):
+        return []
+    dept_set = set(DEPT_STD_DEPTS) | set(depts or [])
+    seen = set()
+    out = []
+    for item in arr:
+        if len(out) >= DEPT_MAX_CUSTOM_TEAMS:
+            break
+        if not isinstance(item, dict):
+            continue
+        name = sanitize_dept_name(item.get('name'))
+        if not name or name in dept_set or name in seen:
+            continue
+        parent = sanitize_dept_name(item.get('parent'))
+        if parent and parent not in dept_set:
+            parent = ''
+        seen.add(name)
+        out.append({'name': name, 'parent': parent})
+    return out
+
+
 def sanitize_mappings(arr):
     if not isinstance(arr, list):
         return []
@@ -82,26 +109,51 @@ def sanitize_mappings(arr):
 
 
 def sanitize_dept_config(config):
-    """방어적 정규화(순수). 항상 {'customDepts': [], 'customMappings': []} 모양을 반환한다."""
+    """방어적 정규화(순수). 항상 {'customDepts': [], 'customTeams': [], 'customMappings': []} 모양을 반환한다."""
     src = config if isinstance(config, dict) else {}
+    depts = sanitize_depts(src.get('customDepts'))
     return {
-        'customDepts': sanitize_depts(src.get('customDepts')),
+        'customDepts': depts,
+        'customTeams': sanitize_teams(src.get('customTeams'), depts),
         'customMappings': sanitize_mappings(src.get('customMappings')),
     }
 
 
+def teams_line(teams):
+    """customTeams → "본부 소속(팀, 팀); 소속 미정(팀)" 한 줄 요약. teams는 이미 sanitize를 거친 리스트."""
+    by_parent = {}
+    order = []
+    unassigned = []
+    for t in teams:
+        if t['parent']:
+            if t['parent'] not in by_parent:
+                by_parent[t['parent']] = []
+                order.append(t['parent'])
+            by_parent[t['parent']].append(t['name'])
+        else:
+            unassigned.append(t['name'])
+    parts = [p + ' 소속(' + ', '.join(by_parent[p]) + ')' for p in order]
+    if unassigned:
+        parts.append('소속 미정(' + ', '.join(unassigned) + ')')
+    return '; '.join(parts)
+
+
 def dept_config_to_prompt(config):
-    """설정 → 프롬프트 블록(board-custom.js deptConfigToPrompt 과 문구·형식 동일). 비어 있으면 ''."""
+    """설정 → 프롬프트 블록(board-custom.js deptConfigToPrompt 과 문구·형식 동일, 팀 계층 포함). 비어 있으면 ''."""
     c = sanitize_dept_config(config)
-    if not c['customDepts'] and not c['customMappings']:
+    if not c['customDepts'] and not c['customTeams'] and not c['customMappings']:
         return ''
     lines = ['[사용자 추가 부서 — 표준 본부와 동일하게 취급]']
     if c['customDepts']:
         lines.append('- 추가 부서: ' + ', '.join(c['customDepts']))
+    if c['customTeams']:
+        lines.append('- 등록된 팀: ' + teams_line(c['customTeams']))
     if c['customMappings']:
         lines.append('- 매핑(우선 적용): ' + ', '.join(
             '"' + m['raw'] + '"→' + m['dept'] for m in c['customMappings']))
     lines.append('표준 6본부 + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다.')
+    if c['customTeams']:
+        lines.append('등록된 팀은 원문에 나오면 그 팀명을 그대로 dept 값에 쓴다(소속 본부가 있으면 "본부명(팀명)" 형식).')
     return '\n'.join(lines)
 
 

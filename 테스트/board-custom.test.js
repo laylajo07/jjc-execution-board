@@ -108,6 +108,89 @@ test('customMappings는 raw 기준 중복 제거 — 뒤에 온 항목을 버린
   assert.equal(result.customMappings[0].dept, 'CB본부', '먼저 온 매핑이 남아야 한다');
 });
 
+// ── 본부 → 팀 계층(customTeams, 사용자 요청) ──
+
+test('customTeams: 표준 본부·커스텀 본부 어느 쪽이든 parent로 유지된다', () => {
+  const result = sanitize({
+    customDepts: ['신설본부'],
+    customTeams: [
+      { name: '마케팅팀', parent: '사업성장본부' },
+      { name: '연구팀', parent: '신설본부' },
+      { name: 'TF팀', parent: '' }
+    ]
+  });
+  assert.deepEqual(result.customTeams, [
+    { name: '마케팅팀', parent: '사업성장본부' },
+    { name: '연구팀', parent: '신설본부' },
+    { name: 'TF팀', parent: '' }
+  ]);
+});
+
+test('customTeams: parent가 표준 본부·커스텀 본부 어디에도 없으면 소속 미정으로 강등된다', () => {
+  const result = sanitize({ customTeams: [{ name: '영업팀', parent: '없는본부' }] });
+  assert.deepEqual(result.customTeams, [{ name: '영업팀', parent: '' }]);
+});
+
+test('customTeams: 팀명이 표준 본부·커스텀 본부와 겹치면 버린다', () => {
+  const result = sanitize({
+    customDepts: ['신설본부'],
+    customTeams: [
+      { name: 'CB본부', parent: '' },
+      { name: '신설본부', parent: '' },
+      { name: '정상팀', parent: '' }
+    ]
+  });
+  assert.deepEqual(result.customTeams, [{ name: '정상팀', parent: '' }]);
+});
+
+test('customTeams: name이 없거나 문자열이 아니면 버린다', () => {
+  const result = sanitize({
+    customTeams: [
+      { name: '', parent: '' }, { name: '   ', parent: '' }, null, 'x', 123,
+      { parent: '' }, { name: '정상팀', parent: '' }
+    ]
+  });
+  assert.deepEqual(result.customTeams, [{ name: '정상팀', parent: '' }]);
+});
+
+test('customTeams: name 기준 중복 제거 — 먼저 온 항목(과 그 parent)이 남는다', () => {
+  const result = sanitize({
+    customTeams: [
+      { name: '영업팀', parent: '사업성장본부' },
+      { name: '영업팀', parent: 'CB본부' }
+    ]
+  });
+  assert.equal(result.customTeams.length, 1);
+  assert.equal(result.customTeams[0].parent, '사업성장본부');
+});
+
+test('customTeams는 최대 60개까지만 남는다', () => {
+  const many = [];
+  for (let i = 0; i < 70; i++) many.push({ name: '팀' + i, parent: '' });
+  const result = sanitize({ customTeams: many });
+  assert.equal(result.customTeams.length, 60);
+  assert.equal(result.customTeams[0].name, '팀0');
+  assert.equal(result.customTeams[59].name, '팀59');
+});
+
+test('deptConfigToPrompt: 등록된 팀은 본부별로 묶이고 소속 미정은 별도 줄로 나온다', () => {
+  const block = deptConfigToPrompt({
+    customTeams: [
+      { name: '마케팅팀', parent: '사업성장본부' },
+      { name: '영업팀', parent: '사업성장본부' },
+      { name: 'TF팀', parent: '' }
+    ]
+  });
+  assert.ok(block.includes('- 등록된 팀: 사업성장본부 소속(마케팅팀, 영업팀); 소속 미정(TF팀)'));
+  assert.ok(block.includes('등록된 팀은 원문에 나오면 그 팀명을 그대로 dept 값에 쓴다'),
+    '팀이 등록돼 있으면 임의 본부 편입을 금지하는 지시문이 붙어야 한다');
+});
+
+test('deptConfigToPrompt: 팀이 하나도 없으면 "등록된 팀" 줄도, 팀 관련 지시문도 없다', () => {
+  const block = deptConfigToPrompt({ customDepts: ['신설본부'], customMappings: [] });
+  assert.ok(!block.includes('등록된 팀'));
+});
+
 test('sanitize는 입력 객체를 변형하지 않는다', () => {
   const original = { customDepts: ['A', 'B', 'C'], customMappings: [{ raw: 'x', dept: 'CB본부' }] };
   sanitize(original);
@@ -118,11 +201,12 @@ test('sanitize는 입력 객체를 변형하지 않는다', () => {
 });
 
 test('sanitize: null·배열·문자열·undefined 입력도 예외 없이 빈 config를 반환한다', () => {
-  assert.deepEqual(sanitize(null), { customDepts: [], customMappings: [] });
-  assert.deepEqual(sanitize(undefined), { customDepts: [], customMappings: [] });
-  assert.deepEqual(sanitize([1, 2, 3]), { customDepts: [], customMappings: [] });
-  assert.deepEqual(sanitize('문자열'), { customDepts: [], customMappings: [] });
-  assert.deepEqual(sanitize({}), { customDepts: [], customMappings: [] });
+  const empty = { customDepts: [], customTeams: [], customMappings: [] };
+  assert.deepEqual(sanitize(null), empty);
+  assert.deepEqual(sanitize(undefined), empty);
+  assert.deepEqual(sanitize([1, 2, 3]), empty);
+  assert.deepEqual(sanitize('문자열'), empty);
+  assert.deepEqual(sanitize({}), empty);
 });
 
 test('STD_DEPTS는 동결되어 호출자가 배열을 깨뜨릴 수 없다', () => {
@@ -135,7 +219,7 @@ test('STD_DEPTS는 동결되어 호출자가 배열을 깨뜨릴 수 없다', ()
 test('load()는 Node(localStorage 없음)에서 예외 없이 빈 config를 반환한다', () => {
   assert.equal(typeof localStorage, 'undefined');
   const c = load();
-  assert.deepEqual(c, { customDepts: [], customMappings: [] });
+  assert.deepEqual(c, { customDepts: [], customTeams: [], customMappings: [] });
 });
 
 test('save()는 Node(localStorage 없음)에서 예외 없이 false를 반환한다', () => {
