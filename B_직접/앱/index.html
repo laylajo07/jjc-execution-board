@@ -186,19 +186,37 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .cmp-dialog .cmp-actions .btn{flex:1;justify-content:center}
   .cmp-remember{display:flex;align-items:center;gap:7px;margin-top:12px;font-size:13px;color:var(--muted);cursor:pointer}
   /* 부서 설정 패널 — cmp-dialog 패턴 재사용. 좌(부서 계층)·우(본부/팀 추가·매핑 규칙) 2단 배치로
-     세로 길이를 줄여 다이얼로그 자체는 좌우·위아래 스크롤이 필요 없게 하고(사용자 요청), 부서 계층
-     쪽만 항목이 아주 많아질 때를 대비한 내부 스크롤을 안전장치로 둔다. 좁은 화면(<760px)에서는
-     2단이 나란히 들어갈 공간이 없어 1단으로 쌓는다(viz-grid2·cols2와 같은 모바일 우선 패턴). */
-  .dept-dialog{max-width:820px;text-align:left;max-height:95vh;overflow-y:auto;overflow-x:hidden}
+     세로 길이를 줄여 다이얼로그 자체는 좌우·위아래 스크롤이 필요 없게 한다(사용자 요청). 노트북
+     해상도(예: 1366×768)처럼 뷰포트가 낮으면 다이얼로그 전체 스크롤만으로는 부족할 수 있어,
+     넓은 화면(≥760px)에서는 부서 계층 목록·오른쪽 폼 영역이 "저장" 버튼과 독립적으로 각자 내부
+     스크롤을 갖는 flex 구조로 바꿔, 항목이 아무리 늘어나도 저장 버튼은 항상 스크롤 없이 보이게
+     한다. 좁은 화면(<760px)에서는 2단이 들어갈 공간이 없어 1단으로 쌓고(viz-grid2·cols2와 같은
+     모바일 우선 패턴) 다이얼로그 전체가 스크롤되는 기존 방식으로 되돌아간다.
+     닫기 버튼은 기존 float:right 대신 absolute로 고정 — flex 컨테이너의 자식은 float이 무시되므로. */
+  .dept-dialog{max-width:820px;text-align:left;max-height:95vh;overflow-y:auto;overflow-x:hidden;position:relative}
   .dept-dialog .row{flex-wrap:wrap}
   .dept-dialog .field-label{margin-top:16px}
   .dept-dialog .field-label:first-of-type{margin-top:2px}
+  #deptCloseBtn{position:absolute;top:18px;right:20px;float:none}
+  .dept-dialog .cmp-title{padding-right:38px}
   .dept-cols{display:grid;gap:24px;align-items:start}
-  @media(min-width:760px){.dept-cols{grid-template-columns:1fr 1fr}}
   .dept-col{min-width:0}
   /* 부서 계층 힌트는 문장 하나짜리라 다른 곳의 짧은 태그형 .hint(nowrap)와 달리 줄바꿈이 필요하다 —
      2단 배치로 이 칸이 좁아지면서 nowrap 그대로 두면 옆 칸(본부 추가 등)을 침범해 겹쳐 보였다. */
   .dept-col-tree .field-label .hint{white-space:normal}
+  @media(min-width:760px){
+    .dept-dialog{display:flex;flex-direction:column}
+    .dept-dialog .cmp-title{flex:none}
+    /* 오른쪽 폼 칸(align-self:start)은 내용만큼만 차지하고, 왼쪽 부서 계층 칸은 기본값(stretch)으로
+       이 영역 전체 높이를 다 받는다 — 폼 칸이 짧다는 이유로 트리가 실제보다 더 좁은 칸에 눌려
+       불필요하게 일찍 스크롤이 생기는 것을 막는다(트리가 원래 더 긴 목록이라 폼보다 자연히 크다). */
+    .dept-cols{grid-template-columns:1fr 1fr;flex:1;min-height:0;overflow:hidden}
+    .dept-col{display:flex;flex-direction:column;min-height:0}
+    .dept-col-tree{overflow:hidden}
+    .dept-col-tree .dept-tree{flex:1;min-height:0;overflow-y:auto;padding-right:2px}
+    .dept-col-forms{overflow-y:auto;align-self:start}
+    .dept-dialog .cmp-actions{flex:none}
+  }
   .dept-input{flex:1;min-width:120px;font-family:var(--sans);font-size:13px;color:var(--ink);
     background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:8px 10px}
   /* 본부 → 팀 계층(사용자 요청) — 본부(표준·커스텀)마다 카드 하나, 그 안에 소속 팀 칩을 나열.
