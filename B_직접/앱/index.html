@@ -984,8 +984,27 @@ function projectProgressData(histProj){
     cumTotal=Math.max(cumTotal,total);
     cumDone=Math.max(cumDone,done);
     const pct=cumTotal>0?Math.round(cumDone/cumTotal*100):0;
-    return {roundNo:r.roundNo,score:pct};
+    return {roundNo:r.roundNo,score:pct,cumTotal,cumDone};
   });
+}
+// 그래프 아래 "왜 바뀌었는지" 1줄 설명(사용자 요청, 회의 품질 점수 쪽과 같은 자리에 진행률도 추가) —
+// cumTotal/cumDone(둘 다 회차마다 비감소)의 실제 증가분만 문장에 넣는다. 지어내지 않는다.
+function progressChangeReason(roundNo,prev,cur){
+  const doneAdded=cur.cumDone-prev.cumDone, totalAdded=cur.cumTotal-prev.cumTotal, delta=cur.score-prev.score;
+  const parts=[];
+  if(doneAdded>0)parts.push(`완료 ${doneAdded}건 추가`);
+  if(totalAdded>0)parts.push(`전체 항목 ${totalAdded}건 증가`);
+  const tail=parts.length?parts.join(', '):'항목 변화 없음';
+  if(delta>0)return `${roundNo}차에서 ${delta}%p 상승 — ${tail}`;
+  if(delta<0)return `${roundNo}차에서 ${Math.abs(delta)}%p 하락 — ${tail}(신규 항목이 완료 속도보다 빠르게 늘어남)`;
+  return `${roundNo}차 — ${cur.score}% 유지 — ${tail}`;
+}
+function progressChangeListHtml(histProj){
+  const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
+  if(rounds.length<2) return '';
+  const pts=projectProgressData(histProj);
+  const lines=pts.map((p,i)=>i===0?`${p.roundNo}차 — 누적 완료 ${p.cumDone}건 / 전체 ${p.cumTotal}건 (${p.score}%)`:progressChangeReason(p.roundNo,pts[i-1],p));
+  return `<div class="trend-reasons">`+lines.map(t=>`<div class="trend-reason-row">${esc(t)}</div>`).join('')+`</div>`;
 }
 // 두 그래프가 그리는 방식(선+점+라벨)만 공유하는 렌더러 — 계산 로직(위 두 함수)은 완전히 분리돼 있어
 // 여기서 절대 섞이지 않는다. 좌우 50% 배치(사용자 요청)에 맞춰 기존 640×120보다 좁고 낮은 뷰박스 사용.
@@ -1892,7 +1911,7 @@ function renderBoard(d, raw){
   hCompare+=secH('01','회차별 추이 비교');
   hCompare+='<div class="change-digest insights"><div class="viz-grid2">'
     +'<div class="viz-block"><div class="viz-title">회의 품질 점수 추이</div>'+qualityTrendHtml(histProj)+qualityChangeListHtml(histProj)+'</div>'
-    +'<div class="viz-block"><div class="viz-title">프로젝트 진행률</div>'+projectProgressHtml(histProj)+'</div>'
+    +'<div class="viz-block"><div class="viz-title">프로젝트 진행률</div>'+projectProgressHtml(histProj)+progressChangeListHtml(histProj)+'</div>'
     +'</div></div>';
   // 02(미결→진행중→완료 흐름)·03(이전 회차 대비 변경점)을 좌우 2단으로 합침(사용자 요청) — 두 카드
   // 모두 이전보다 확실히 낮아지도록 cmp-card로 높이를 공통 상한(300px)까지 캡핑하고, 넘치는 내용은
