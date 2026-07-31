@@ -936,34 +936,24 @@ function qualityScoreTrendData(histProj){
   const boards=rounds.map(r=>normalize(r.raw));
   return rounds.map((r,i)=>({roundNo:r.roundNo,score:BoardDerive.qualityScore(boards[i]).score,factor:qualityPointFactor(i,boards)}));
 }
-// 그래프 데이터 포인트 옆에 붙는 짧은 변동 요인 라벨(사용자 요청) — qualityScore()의 세 감점 항목과
-// '확인필요'(미결) 상태 건수, 총 네 후보 중 가장 큰 값 하나만 "라벨 N건"으로 보여준다. 1차는 비교
-// 대상이 없어 그 회차 자체의 절대 건수로, 2차부터는 직전 회차 대비 변화량(절대값)으로 고른다 —
-// qualityChangeReason()이 아래 상세 설명 문장을 만들 때 쓰는 것과 같은 네 후보·같은 우선순위 기준이라
-// 그래프 라벨(요약)과 그 아래 문장(상세)이 서로 다른 이야기를 하지 않는다.
-function topFactorLabel(items,zeroText){
-  const maxN=Math.max(...items.map(i=>i.n));
-  if(maxN<=0)return zeroText;
-  const top=items.filter(i=>i.n===maxN)[0];
-  return `${top.label} ${top.n}건`;
+// "회의 품질 점수" 카드의 감점 근거 한 줄(qualityScoreReasonLine)과 "회차 비교" 그래프의 요인
+// 라벨(qualityPointFactor)이 정확히 같은 숫자를 가리켜야 한다(사용자 요청, 신뢰도 버그 수정) —
+// 그래서 두 곳 모두 이 함수 하나로 "그 회차 자신의" 절대값만 쓴다. 이전엔 그래프 라벨이 회차
+// 간 증감폭(절대값이 아니라 직전 회차와의 차이)을 찍고 있어서, 절대값이 그대로인 회차끼리 라벨
+// 숫자가 우연히 같거나, 문제가 해소된 회차에 오히려 큰 숫자가 찍히는 혼동이 실측으로 확인됐다.
+function dominantQsFactors(qs){
+  return [
+    {label:'담당자 미정',n:qs.ownerMissing},
+    {label:'기한 미확정',n:qs.dueMissing},
+    {label:'의사결정 미완',n:qs.decisionOpen}
+  ];
 }
 function qualityPointFactor(i,boards){
   const qs=BoardDerive.qualityScore(boards[i]);
-  if(i===0){
-    return topFactorLabel([
-      {label:'미결',n:reviewPendingCount(boards[0])},
-      {label:'담당자 미정',n:qs.ownerMissing},
-      {label:'기한 미확정',n:qs.dueMissing},
-      {label:'의사결정 미완',n:qs.decisionOpen}
-    ],'완료 다수');
-  }
-  const prevQs=BoardDerive.qualityScore(boards[i-1]);
-  return topFactorLabel([
-    {label:'미결',n:Math.abs(reviewPendingCount(boards[i-1])-reviewPendingCount(boards[i]))},
-    {label:'담당자 미정',n:Math.abs(prevQs.ownerMissing-qs.ownerMissing)},
-    {label:'기한 미확정',n:Math.abs(prevQs.dueMissing-qs.dueMissing)},
-    {label:'의사결정 미완',n:Math.abs(prevQs.decisionOpen-qs.decisionOpen)}
-  ],'항목 변경');
+  const items=dominantQsFactors(qs);
+  const maxN=Math.max(...items.map(x=>x.n));
+  if(maxN<=0)return '완료 다수';
+  return items.filter(x=>x.n===maxN).map(x=>`${x.label} ${x.n}건`).join(', ');
 }
 function projectProgressData(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
@@ -1072,11 +1062,7 @@ function projectProgressHtml(histProj){
 // 미정/기한 미확정/의사결정 미완) 중 개수가 가장 많은 것을 근거로 삼는다. 지어내지 않는다 — 이미
 // 배지로 보여주는 세 숫자를 그대로 비교해 요약할 뿐, 새로운 판단을 추가하지 않는다. 동점이면 모두 나열.
 function qualityScoreReasonLine(qs){
-  const items=[
-    {label:'담당자 미정',n:qs.ownerMissing},
-    {label:'기한 미확정',n:qs.dueMissing},
-    {label:'의사결정 미완',n:qs.decisionOpen}
-  ];
+  const items=dominantQsFactors(qs);
   const maxN=Math.max(...items.map(i=>i.n));
   if(maxN<=0) return '감점 요인 없음';
   const top=items.filter(i=>i.n===maxN).map(i=>`${i.label}(${i.n}건)`).join(', ');
