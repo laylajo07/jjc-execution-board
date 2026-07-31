@@ -1,7 +1,9 @@
-/* 조정치 · 부서 커스터마이징 — 사용자 설정(customDepts/customTeams/customMappings) → 프롬프트 블록 +
-   localStorage 저장. customTeams: 본부(표준 6본부 또는 customDepts) 아래 소속되거나(parent) 소속 미정으로
-   독립 등록되는 "팀" 계층(사용자 요청). 순수(DOM 접근 없음; load/save만 브라우저 스토리지를 씀).
-   file:// 더블클릭 지원을 위해 클래식 스크립트. A·B 바이트 동일. 보드 표시 유틸(fmtUpdatedAt 등)도 이 모듈이 겸한다. */
+/* 조정치 · 부서 커스터마이징 — 사용자 설정(customDepts/customTeams/customMappings/removedStdDepts) →
+   프롬프트 블록 + localStorage 저장. customTeams: 본부(표준 6본부 또는 customDepts) 아래 소속되거나(parent)
+   소속 미정으로 독립 등록되는 "팀" 계층(사용자 요청). removedStdDepts: 사용자가 제외한 표준 본부(사용자 요청
+   — 표준 본부도 삭제 가능해야 함; 실제로는 STD_DEPTS 자체를 건드리지 않고 제외 목록만 관리). 순수(DOM 접근
+   없음; load/save만 브라우저 스토리지를 씀). file:// 더블클릭 지원을 위해 클래식 스크립트. A·B 바이트 동일.
+   보드 표시 유틸(fmtUpdatedAt 등)도 이 모듈이 겸한다. */
 (function (root) {
   'use strict';
 
@@ -42,25 +44,46 @@
 
   // 본부 → 팀 계층(사용자 요청) — 팀은 등록된 본부(표준 6본부 또는 customDepts) 중 하나에 소속되거나,
   // parent를 비워 "소속 미정" 팀으로 독립 등록될 수 있다. depts는 이미 sanitizeDepts를 거친
-  // customDepts 목록 — parent가 표준 본부·customDepts 어디에도 없으면 소속 미정으로 강등한다
-  // (끊긴 참조 방지). 팀명이 본부명과 겹치면 버린다(드롭다운·프롬프트에서 모호해지므로).
-  function sanitizeTeams(arr, depts) {
+  // customDepts 목록, removedStd는 사용자가 제외한 표준 본부 목록 — parent가 "현재 소속 가능한"
+  // 본부(표준 6본부 중 제외되지 않은 것·customDepts) 어디에도 없으면 소속 미정으로 강등한다
+  // (끊긴 참조 방지). 팀명은 제외 여부와 무관하게 표준 6본부·customDepts 전체와 겹치면 버린다
+  // (드롭다운·프롬프트에서 모호해지는 것과, 나중에 표준 본부가 복원됐을 때 이름이 충돌하는 것을 방지).
+  function sanitizeTeams(arr, depts, removedStd) {
     if (!Array.isArray(arr)) return [];
-    var deptSet = Object.create(null);
-    STD_DEPTS.forEach(function (d) { deptSet[d] = true; });
-    (depts || []).forEach(function (d) { deptSet[d] = true; });
+    var nameSet = Object.create(null);
+    STD_DEPTS.forEach(function (d) { nameSet[d] = true; });
+    (depts || []).forEach(function (d) { nameSet[d] = true; });
+    var removedSet = Object.create(null);
+    (removedStd || []).forEach(function (d) { removedSet[d] = true; });
+    var parentSet = Object.create(null);
+    STD_DEPTS.forEach(function (d) { if (!removedSet[d]) parentSet[d] = true; });
+    (depts || []).forEach(function (d) { parentSet[d] = true; });
     var seen = Object.create(null), out = [], i, item, name, parent;
     for (i = 0; i < arr.length && out.length < MAX_CUSTOM_TEAMS; i++) {
       item = arr[i];
       if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
       name = sanitizeName(item.name);
-      if (!name || deptSet[name] || seen[name]) continue;
+      if (!name || nameSet[name] || seen[name]) continue;
       parent = sanitizeName(item.parent);
-      if (parent && !deptSet[parent]) parent = '';
+      if (parent && !parentSet[parent]) parent = '';
       seen[name] = true;
       out.push({ name: name, parent: parent });
     }
     return out;
+  }
+
+  // 사용자가 제외한 표준 본부 목록 — 표준 6본부 중 값만 남기고, 표준 6본부의 고정 순서로 정렬해
+  // 반환한다(입력 순서에 의존하지 않는 결정적 결과). 개수 제한은 표준 6본부 개수로 자연히 한정된다.
+  function sanitizeRemovedStdDepts(arr) {
+    if (!Array.isArray(arr)) return [];
+    var stdSet = Object.create(null);
+    STD_DEPTS.forEach(function (d) { stdSet[d] = true; });
+    var seen = Object.create(null), i, name;
+    for (i = 0; i < arr.length; i++) {
+      name = sanitizeName(arr[i]);
+      if (name && stdSet[name]) seen[name] = true;
+    }
+    return STD_DEPTS.filter(function (d) { return seen[d]; });
   }
 
   function sanitizeMappings(arr) {
@@ -78,14 +101,17 @@
     return out;
   }
 
-  // 방어적 정규화(순수 — 입력을 변형하지 않는다). 항상 {customDepts:[], customTeams:[], customMappings:[]}를 반환한다.
+  // 방어적 정규화(순수 — 입력을 변형하지 않는다). 항상
+  // {customDepts:[], customTeams:[], customMappings:[], removedStdDepts:[]}를 반환한다.
   function sanitize(config) {
     var src = (config && typeof config === 'object' && !Array.isArray(config)) ? config : {};
     var depts = sanitizeDepts(src.customDepts);
+    var removedStd = sanitizeRemovedStdDepts(src.removedStdDepts);
     return {
       customDepts: depts,
-      customTeams: sanitizeTeams(src.customTeams, depts),
-      customMappings: sanitizeMappings(src.customMappings)
+      customTeams: sanitizeTeams(src.customTeams, depts, removedStd),
+      customMappings: sanitizeMappings(src.customMappings),
+      removedStdDepts: removedStd
     };
   }
 
@@ -110,7 +136,7 @@
   // 앞뒤 개행 없이 블록만 반환 — 호출자가 '\n\n'으로 이어붙인다.
   function deptConfigToPrompt(config) {
     var c = sanitize(config);
-    if (!c.customDepts.length && !c.customTeams.length && !c.customMappings.length) return '';
+    if (!c.customDepts.length && !c.customTeams.length && !c.customMappings.length && !c.removedStdDepts.length) return '';
     var lines = ['[사용자 추가 부서 — 표준 본부와 동일하게 취급]'];
     if (c.customDepts.length) lines.push('- 추가 부서: ' + c.customDepts.join(', '));
     if (c.customTeams.length) lines.push('- 등록된 팀: ' + teamsLine(c.customTeams));
@@ -119,10 +145,15 @@
         return '"' + m.raw + '"→' + m.dept;
       }).join(', '));
     }
-    lines.push('표준 6본부 + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다.');
+    // 사용자 요청(표준 본부도 삭제 가능하게): 제외된 표준 본부는 별도로 명시하고, 요약 문장도 그에 맞춰 바꾼다.
+    if (c.removedStdDepts.length) lines.push('- 제외된 표준 본부: ' + c.removedStdDepts.join(', '));
+    lines.push(c.removedStdDepts.length
+      ? '표준 6본부(제외된 표준 본부는 제외) + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다.'
+      : '표준 6본부 + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다.');
     // 신뢰도 버그 수정(사용자 요청): 등록된 팀은 원문 그대로의 팀명을 dept 값으로 쓰게 해
     // 임의로 상위 본부명에 뭉개 넣지 않도록 한다(예: "영업팀"이 "고객솔루션본부"로만 표시되던 문제).
     if (c.customTeams.length) lines.push('등록된 팀은 원문에 나오면 그 팀명을 그대로 dept 값에 쓴다(소속 본부가 있으면 "본부명(팀명)" 형식).');
+    if (c.removedStdDepts.length) lines.push('제외된 표준 본부는 더 이상 매핑 대상이 아니다. 원문에 나와도 다른 표준 본부나 추가 부서로 재분류하거나, 마땅한 곳이 없으면 원문 표기 그대로 쓰고 "[본부 확인필요]"를 병기한다.');
     return lines.join('\n');
   }
 

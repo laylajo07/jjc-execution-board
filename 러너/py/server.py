@@ -64,13 +64,16 @@ def sanitize_depts(arr):
     return out
 
 
-def sanitize_teams(arr, depts):
+def sanitize_teams(arr, depts, removed_std):
     """본부 → 팀 계층(board-custom.js sanitizeTeams 와 동일 규칙). depts는 이미 sanitize_depts를
-    거친 customDepts 목록 — parent가 표준 본부·customDepts 어디에도 없으면 소속 미정으로 강등한다.
-    팀명이 본부명과 겹치면 버린다."""
+    거친 customDepts 목록, removed_std는 사용자가 제외한 표준 본부 목록 — parent가 "현재 소속
+    가능한" 본부(표준 6본부 중 제외되지 않은 것·customDepts) 어디에도 없으면 소속 미정으로
+    강등한다. 팀명은 제외 여부와 무관하게 표준 6본부·customDepts 전체와 겹치면 버린다."""
     if not isinstance(arr, list):
         return []
-    dept_set = set(DEPT_STD_DEPTS) | set(depts or [])
+    name_set = set(DEPT_STD_DEPTS) | set(depts or [])
+    removed_set = set(removed_std or [])
+    parent_set = (set(DEPT_STD_DEPTS) - removed_set) | set(depts or [])
     seen = set()
     out = []
     for item in arr:
@@ -79,14 +82,28 @@ def sanitize_teams(arr, depts):
         if not isinstance(item, dict):
             continue
         name = sanitize_dept_name(item.get('name'))
-        if not name or name in dept_set or name in seen:
+        if not name or name in name_set or name in seen:
             continue
         parent = sanitize_dept_name(item.get('parent'))
-        if parent and parent not in dept_set:
+        if parent and parent not in parent_set:
             parent = ''
         seen.add(name)
         out.append({'name': name, 'parent': parent})
     return out
+
+
+def sanitize_removed_std_depts(arr):
+    """사용자가 제외한 표준 본부 목록 — 표준 6본부 중 값만 남기고, 표준 6본부의 고정 순서로
+    정렬해 반환한다(입력 순서에 의존하지 않는 결정적 결과)."""
+    if not isinstance(arr, list):
+        return []
+    std_set = set(DEPT_STD_DEPTS)
+    seen = set()
+    for item in arr:
+        name = sanitize_dept_name(item)
+        if name and name in std_set:
+            seen.add(name)
+    return [d for d in DEPT_STD_DEPTS if d in seen]
 
 
 def sanitize_mappings(arr):
@@ -109,13 +126,16 @@ def sanitize_mappings(arr):
 
 
 def sanitize_dept_config(config):
-    """방어적 정규화(순수). 항상 {'customDepts': [], 'customTeams': [], 'customMappings': []} 모양을 반환한다."""
+    """방어적 정규화(순수). 항상 {'customDepts': [], 'customTeams': [], 'customMappings': [],
+    'removedStdDepts': []} 모양을 반환한다."""
     src = config if isinstance(config, dict) else {}
     depts = sanitize_depts(src.get('customDepts'))
+    removed_std = sanitize_removed_std_depts(src.get('removedStdDepts'))
     return {
         'customDepts': depts,
-        'customTeams': sanitize_teams(src.get('customTeams'), depts),
+        'customTeams': sanitize_teams(src.get('customTeams'), depts, removed_std),
         'customMappings': sanitize_mappings(src.get('customMappings')),
+        'removedStdDepts': removed_std,
     }
 
 
@@ -139,9 +159,10 @@ def teams_line(teams):
 
 
 def dept_config_to_prompt(config):
-    """설정 → 프롬프트 블록(board-custom.js deptConfigToPrompt 과 문구·형식 동일, 팀 계층 포함). 비어 있으면 ''."""
+    """설정 → 프롬프트 블록(board-custom.js deptConfigToPrompt 과 문구·형식 동일, 팀 계층·표준 본부
+    제외 포함). 비어 있으면 ''."""
     c = sanitize_dept_config(config)
-    if not c['customDepts'] and not c['customTeams'] and not c['customMappings']:
+    if not c['customDepts'] and not c['customTeams'] and not c['customMappings'] and not c['removedStdDepts']:
         return ''
     lines = ['[사용자 추가 부서 — 표준 본부와 동일하게 취급]']
     if c['customDepts']:
@@ -151,9 +172,17 @@ def dept_config_to_prompt(config):
     if c['customMappings']:
         lines.append('- 매핑(우선 적용): ' + ', '.join(
             '"' + m['raw'] + '"→' + m['dept'] for m in c['customMappings']))
-    lines.append('표준 6본부 + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다.')
+    if c['removedStdDepts']:
+        lines.append('- 제외된 표준 본부: ' + ', '.join(c['removedStdDepts']))
+    lines.append(
+        '표준 6본부(제외된 표준 본부는 제외) + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다.'
+        if c['removedStdDepts']
+        else '표준 6본부 + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다.'
+    )
     if c['customTeams']:
         lines.append('등록된 팀은 원문에 나오면 그 팀명을 그대로 dept 값에 쓴다(소속 본부가 있으면 "본부명(팀명)" 형식).')
+    if c['removedStdDepts']:
+        lines.append('제외된 표준 본부는 더 이상 매핑 대상이 아니다. 원문에 나와도 다른 표준 본부나 추가 부서로 재분류하거나, 마땅한 곳이 없으면 원문 표기 그대로 쓰고 "[본부 확인필요]"를 병기한다.')
     return '\n'.join(lines)
 
 

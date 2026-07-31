@@ -191,6 +191,47 @@ test('deptConfigToPrompt: 팀이 하나도 없으면 "등록된 팀" 줄도, 팀
   assert.ok(!block.includes('등록된 팀'));
 });
 
+// ── 표준 본부 제외(removedStdDepts, 사용자 요청 — "표준 본부도 삭제 가능하게 해줘") ──
+
+test('removedStdDepts: 표준 본부만 남고, 표준 6본부 고정 순서로 정렬된다(입력 순서 무시)', () => {
+  const result = sanitize({ removedStdDepts: ['사업성장본부', '법무실', 'CB본부'] });
+  assert.deepEqual(result.removedStdDepts, ['CB본부', '법무실', '사업성장본부']);
+});
+
+test('removedStdDepts: 중복 제거 + 표준 본부가 아닌 값(커스텀 부서명·비문자열)은 버린다', () => {
+  const result = sanitize({ removedStdDepts: ['법무실', '법무실', '신설본부', 123, null, {}] });
+  assert.deepEqual(result.removedStdDepts, ['법무실']);
+});
+
+test('removedStdDepts: 제외된 표준 본부를 parent로 둔 팀은 소속 미정으로 강등된다', () => {
+  const result = sanitize({
+    customTeams: [{ name: '법무팀', parent: '법무실' }],
+    removedStdDepts: ['법무실']
+  });
+  assert.deepEqual(result.customTeams, [{ name: '법무팀', parent: '' }]);
+});
+
+test('removedStdDepts: 팀명은 제외 여부와 무관하게 표준 본부명과 겹치면 여전히 버려진다', () => {
+  const result = sanitize({
+    removedStdDepts: ['CB본부'],
+    customTeams: [{ name: 'CB본부', parent: '' }, { name: '정상팀', parent: '' }]
+  });
+  assert.deepEqual(result.customTeams, [{ name: '정상팀', parent: '' }]);
+});
+
+test('deptConfigToPrompt: 제외된 표준 본부가 있으면 전용 줄 + 바뀐 요약 문장 + 재분류 지시문이 붙는다', () => {
+  const block = deptConfigToPrompt({ removedStdDepts: ['법무실'] });
+  assert.ok(block.includes('- 제외된 표준 본부: 법무실'));
+  assert.ok(block.includes('표준 6본부(제외된 표준 본부는 제외) + 위 추가 부서를 모두 사용 가능.'));
+  assert.ok(block.includes('제외된 표준 본부는 더 이상 매핑 대상이 아니다'));
+});
+
+test('deptConfigToPrompt: 제외된 표준 본부가 없으면 기존 요약 문장 문구가 그대로 유지된다(회귀 방지)', () => {
+  const block = deptConfigToPrompt({ customDepts: ['신설본부'], customMappings: [] });
+  assert.ok(block.includes('표준 6본부 + 위 추가 부서를 모두 사용 가능. 매핑 규칙을 표준화보다 우선한다.'));
+  assert.ok(!block.includes('제외된 표준 본부'));
+});
+
 test('sanitize는 입력 객체를 변형하지 않는다', () => {
   const original = { customDepts: ['A', 'B', 'C'], customMappings: [{ raw: 'x', dept: 'CB본부' }] };
   sanitize(original);
@@ -201,7 +242,7 @@ test('sanitize는 입력 객체를 변형하지 않는다', () => {
 });
 
 test('sanitize: null·배열·문자열·undefined 입력도 예외 없이 빈 config를 반환한다', () => {
-  const empty = { customDepts: [], customTeams: [], customMappings: [] };
+  const empty = { customDepts: [], customTeams: [], customMappings: [], removedStdDepts: [] };
   assert.deepEqual(sanitize(null), empty);
   assert.deepEqual(sanitize(undefined), empty);
   assert.deepEqual(sanitize([1, 2, 3]), empty);
@@ -219,7 +260,7 @@ test('STD_DEPTS는 동결되어 호출자가 배열을 깨뜨릴 수 없다', ()
 test('load()는 Node(localStorage 없음)에서 예외 없이 빈 config를 반환한다', () => {
   assert.equal(typeof localStorage, 'undefined');
   const c = load();
-  assert.deepEqual(c, { customDepts: [], customTeams: [], customMappings: [] });
+  assert.deepEqual(c, { customDepts: [], customTeams: [], customMappings: [], removedStdDepts: [] });
 });
 
 test('save()는 Node(localStorage 없음)에서 예외 없이 false를 반환한다', () => {

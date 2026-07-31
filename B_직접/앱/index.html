@@ -197,6 +197,8 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .team-chip button{width:16px;height:16px;flex:none;border:none;background:none;color:var(--faint);
     cursor:pointer;border-radius:50%;font-size:10px;line-height:1;display:grid;place-items:center}
   .team-chip button:hover{color:var(--chk);background:var(--chk-bg)}
+  .dept-tree-removed{margin-top:2px;padding:9px 11px;border:1px dashed var(--line);border-radius:var(--radius-sm)}
+  .dept-tree-removed .team-chip{opacity:.7}
   .dept-list{display:flex;flex-direction:column;gap:6px;margin-top:8px}
   .dept-row{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface2);
     border:1px solid var(--line);border-radius:var(--radius-sm);font-size:13px}
@@ -784,7 +786,7 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     <button class="np-close" id="deptCloseBtn" aria-label="닫기">✕</button>
     <div class="cmp-title">⚙️ 부서 설정</div>
 
-    <div class="field-label">부서 계층 <span class="hint">본부 → 팀 · 본부는 추가만 가능·삭제 불가</span></div>
+    <div class="field-label">부서 계층 <span class="hint">본부 → 팀 · 표준 본부도 제외(삭제) 가능 — 기존 데이터는 유지되고 신규 분석에서만 제외, 언제든 복원 가능</span></div>
     <div class="dept-tree" id="deptTree"></div>
 
     <div class="field-label">본부 추가</div>
@@ -1238,9 +1240,13 @@ const statusIcon = st => ({'확정':'✓','확인필요':'⚠','추정':'~'}[st]
 /* ⚙️ 부서 설정 패널 — 로컬 임시 상태에서 편집, [저장] 눌러야 localStorage에 반영.
    본부 → 팀 계층(사용자 요청): deptTempTeams={name,parent}[] — parent는 본부명(표준·커스텀) 또는
    ''(소속 미정). 팀은 본부처럼 삭제 불가 제약이 없고, 소속 본부가 지워지면 삭제 대신 소속
-   미정으로 강등한다(board-custom.js sanitizeTeams와 같은 완화된 방향 — 데이터 유실 최소화). */
-let deptTempDepts=[], deptTempTeams=[], deptTempMaps=[];
-function deptAllDepts(){ return BoardCustom.STD_DEPTS.concat(deptTempDepts); }
+   미정으로 강등한다(board-custom.js sanitizeTeams와 같은 완화된 방향 — 데이터 유실 최소화).
+   표준 본부도 삭제 가능(사용자 요청): STD_DEPTS 자체는 건드리지 않고 deptTempRemovedStd에
+   "제외됨" 표시만 남긴다 — 기존에 분석된 보드 데이터는 dept 문자열을 그대로 렌더링하므로 영향
+   없고, 앞으로의 팀 소속 선택·매핑 드롭다운·AI 프롬프트에서만 제외된다. 언제든 복원 가능. */
+let deptTempDepts=[], deptTempTeams=[], deptTempMaps=[], deptTempRemovedStd=[];
+function activeStdDepts(){ return BoardCustom.STD_DEPTS.filter(d=>!deptTempRemovedStd.includes(d)); }
+function deptAllDepts(){ return activeStdDepts().concat(deptTempDepts); }
 // 팀의 "표준 표시 형식" — 매핑 드롭다운 값·매핑 정리(cascade) 양쪽에서 같은 기준으로 쓴다.
 function teamDisplay(t){ return t.parent ? `${t.parent}(${t.name})` : t.name; }
 function deptRenderTree(){
@@ -1249,18 +1255,21 @@ function deptRenderTree(){
     if(!teams.length) return '<div class="dept-tree-empty">등록된 팀 없음</div>';
     return teams.map(t=>`<span class="team-chip">${esc(t.name)}<button type="button" data-act="rmTeam" data-name="${esc(t.name)}" aria-label="${esc(t.name)} 삭제">✕</button></span>`).join('');
   };
-  const deptCards=deptAllDepts().map(d=>{
+  const deptCards=deptAllDepts().length?deptAllDepts().map(d=>{
     const isStd=BoardCustom.STD_DEPTS.includes(d);
     const idx=deptTempDepts.indexOf(d);
     const head=isStd
-      ? `<span class="pill" aria-disabled="true">${esc(d)}</span>`
+      ? `<span class="dept-tree-name">${esc(d)}</span><button type="button" class="btn mini" data-act="rmStd" data-name="${esc(d)}" aria-label="${esc(d)} 제외">✕</button>`
       : `<span class="dept-tree-name">${esc(d)}</span><button type="button" class="btn mini" data-act="rmDept" data-i="${idx}" aria-label="${esc(d)} 삭제">✕</button>`;
     return `<div class="dept-tree-item"><div class="dept-tree-h">${head}</div><div class="dept-tree-teams">${teamChips(d)}</div></div>`;
-  }).join('');
+  }).join(''):'<div class="dept-tree-empty">등록된 본부가 없습니다</div>';
   const unassigned=deptTempTeams.filter(t=>!t.parent);
   const unassignedCard=`<div class="dept-tree-item dept-tree-unassigned"><div class="dept-tree-h"><span class="dept-tree-name">소속 미정 팀</span></div>`+
     `<div class="dept-tree-teams">${unassigned.length?unassigned.map(t=>`<span class="team-chip">${esc(t.name)}<button type="button" data-act="rmTeam" data-name="${esc(t.name)}" aria-label="${esc(t.name)} 삭제">✕</button></span>`).join(''):'<div class="dept-tree-empty">없음</div>'}</div></div>`;
-  $('#deptTree').innerHTML = deptCards + unassignedCard;
+  const removedStrip=deptTempRemovedStd.length
+    ? `<div class="dept-tree-removed"><span class="hint">제외된 표준 본부</span><div class="dept-tree-teams">${deptTempRemovedStd.map(d=>`<span class="team-chip">${esc(d)}<button type="button" data-act="restoreStd" data-name="${esc(d)}" aria-label="${esc(d)} 복원">↺</button></span>`).join('')}</div></div>`
+    : '';
+  $('#deptTree').innerHTML = deptCards + unassignedCard + removedStrip;
 }
 function deptRenderTeamParentSelect(){
   const sel=$('#deptTeamParentSelect'), cur=sel.value;
@@ -1285,6 +1294,7 @@ function deptOpen(){
   deptTempDepts=cfg.customDepts.slice();
   deptTempTeams=cfg.customTeams.map(t=>({name:t.name,parent:t.parent}));
   deptTempMaps=cfg.customMappings.map(m=>({raw:m.raw,dept:m.dept}));
+  deptTempRemovedStd=cfg.removedStdDepts.slice();
   $('#deptCustomInput').value=''; $('#deptTeamInput').value=''; $('#deptMapRawInput').value='';
   deptRenderAll();
   $('#deptOverlay').classList.add('on');
@@ -1302,6 +1312,21 @@ function deptRemoveCustom(i){
   deptTempMaps=deptTempMaps.filter(m=>m.dept!==name); // 부서 삭제 시 그 부서를 가리키던 매핑도 정리(유령 부서 방지)
   // 본부가 삭제돼도 소속 팀은 지우지 않고 소속 미정으로 강등(sanitizeTeams와 같은 완화 방향).
   deptTempTeams=deptTempTeams.map(t=>t.parent===name?{name:t.name,parent:''}:t);
+  deptRenderAll();
+}
+// 표준 본부 제외(사용자 요청) — STD_DEPTS 자체는 건드리지 않고 "제외됨" 표시만 남긴다.
+// 기존에 이미 분석된 보드 데이터는 그대로 남고, 팀 소속·매핑 드롭다운과 다음 AI 분석에서만 빠진다.
+function deptRemoveStd(name){
+  if(!BoardCustom.STD_DEPTS.includes(name) || deptTempRemovedStd.includes(name)) return;
+  if(!confirm(`"${name}"을(를) 표준 본부에서 제외할까요?\n기존에 분석된 데이터는 그대로 유지되고, 앞으로의 분석·팀 소속 지정에서만 제외됩니다. 언제든 다시 복원할 수 있습니다.`)) return;
+  deptTempRemovedStd=[...deptTempRemovedStd, name];
+  deptTempTeams=deptTempTeams.map(t=>t.parent===name?{name:t.name,parent:''}:t);
+  deptTempMaps=deptTempMaps.filter(m=>m.dept!==name);
+  deptRenderAll();
+}
+function deptRestoreStd(name){
+  const i=deptTempRemovedStd.indexOf(name); if(i===-1) return;
+  deptTempRemovedStd=deptTempRemovedStd.filter(d=>d!==name);
   deptRenderAll();
 }
 function deptAddTeam(){
@@ -1323,7 +1348,7 @@ function deptAddMapping(){
 }
 function deptRemoveMapping(i){ if(deptTempMaps[i]===undefined) return; deptTempMaps.splice(i,1); deptRenderMaps(); }
 function deptSave(){
-  BoardCustom.save({customDepts:deptTempDepts, customTeams:deptTempTeams, customMappings:deptTempMaps});
+  BoardCustom.save({customDepts:deptTempDepts, customTeams:deptTempTeams, customMappings:deptTempMaps, removedStdDepts:deptTempRemovedStd});
   toast('부서 설정이 저장되었습니다');
   deptClose();
 }
@@ -1339,7 +1364,9 @@ $('#deptTeamInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preven
 $('#deptMapRawInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();deptAddMapping();} });
 $('#deptTree').addEventListener('click',e=>{
   const rd=e.target.closest('button[data-act="rmDept"]'); if(rd){ deptRemoveCustom(+rd.dataset.i); return; }
-  const rt=e.target.closest('button[data-act="rmTeam"]'); if(rt){ deptRemoveTeam(rt.dataset.name); }
+  const rt=e.target.closest('button[data-act="rmTeam"]'); if(rt){ deptRemoveTeam(rt.dataset.name); return; }
+  const rs=e.target.closest('button[data-act="rmStd"]'); if(rs){ deptRemoveStd(rs.dataset.name); return; }
+  const rr=e.target.closest('button[data-act="restoreStd"]'); if(rr){ deptRestoreStd(rr.dataset.name); }
 });
 $('#deptMapList').addEventListener('click',e=>{ const b=e.target.closest('button[data-act="rmMap"]'); if(b)deptRemoveMapping(+b.dataset.i); });
 // Esc: 부서 패널이 열려 있을 때만 그것만 닫는다(node-panel·cmp-overlay의 기존 Esc 핸들러와 겹쳐서 여러 개가 같이 닫히는 것 방지).
