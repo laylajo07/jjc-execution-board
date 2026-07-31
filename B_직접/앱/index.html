@@ -967,7 +967,7 @@ function qualityPointFactor(i,boards){
 }
 function projectProgressData(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
-  let cumTotal=0,cumDone=0,runningPct=0;
+  let cumTotal=0,cumDone=0;
   return rounds.map(r=>{
     const board=normalize(r.raw);
     let total=0,done=0;
@@ -976,14 +976,15 @@ function projectProgressData(histProj){
         (d[k]||[]).forEach(it=>{ total++; if(it.status==='확정')done++; });
       });
     });
+    // 분자(누적 완료)·분모(누적 전체) 각각 "그 회차 자신의 수치"와 "지금까지의 최댓값" 중 큰
+    // 쪽으로 갱신 — done≤total이 회차마다 성립하므로 cumDone≤cumTotal도 항상 성립(100% 초과 없음).
+    // 분자는 절대 줄지 않지만(사용자 확정 규칙), 새 회차에서 신규 항목이 대거 늘어나 분모가 분자보다
+    // 먼저 커지면 "비율" 자체는 이전 회차보다 낮게 나올 수 있다 — 이는 버그가 아니라 그 시점 기준
+    // 실제 완료 비율을 정직하게 보여주는 정상 결과다(사용자 명시 요청, 강제 우상향 클램프 제거).
     cumTotal=Math.max(cumTotal,total);
-    cumDone=Math.max(cumDone,done);   // done≤total이 회차마다 성립하므로 cumDone≤cumTotal도 항상 성립(100% 초과 없음).
+    cumDone=Math.max(cumDone,done);
     const pct=cumTotal>0?Math.round(cumDone/cumTotal*100):0;
-    // 분모(cumTotal)가 분자(cumDone)보다 먼저 커지는 회차(신규 미결 항목 다수 유입)엔 비율 자체가
-    // 일시적으로 내려갈 수 있다 — "반드시 우상향(또는 유지)"(사용자 명시 요청)를 위해 비율에도
-    // 직전 회차 값과 max를 취한다.
-    runningPct=Math.max(runningPct,pct);
-    return {roundNo:r.roundNo,score:runningPct};
+    return {roundNo:r.roundNo,score:pct};
   });
 }
 // 두 그래프가 그리는 방식(선+점+라벨)만 공유하는 렌더러 — 계산 로직(위 두 함수)은 완전히 분리돼 있어
