@@ -185,11 +185,20 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   .cmp-dialog .cmp-actions{display:flex;gap:8px}
   .cmp-dialog .cmp-actions .btn{flex:1;justify-content:center}
   .cmp-remember{display:flex;align-items:center;gap:7px;margin-top:12px;font-size:13px;color:var(--muted);cursor:pointer}
-  /* 부서 설정 패널 — cmp-dialog 패턴 재사용 */
-  .dept-dialog{max-width:480px;text-align:left;max-height:86vh;overflow:auto}
+  /* 부서 설정 패널 — cmp-dialog 패턴 재사용. 좌(부서 계층)·우(본부/팀 추가·매핑 규칙) 2단 배치로
+     세로 길이를 줄여 다이얼로그 자체는 좌우·위아래 스크롤이 필요 없게 하고(사용자 요청), 부서 계층
+     쪽만 항목이 아주 많아질 때를 대비한 내부 스크롤을 안전장치로 둔다. 좁은 화면(<760px)에서는
+     2단이 나란히 들어갈 공간이 없어 1단으로 쌓는다(viz-grid2·cols2와 같은 모바일 우선 패턴). */
+  .dept-dialog{max-width:820px;text-align:left;max-height:95vh;overflow-y:auto;overflow-x:hidden}
   .dept-dialog .row{flex-wrap:wrap}
   .dept-dialog .field-label{margin-top:16px}
   .dept-dialog .field-label:first-of-type{margin-top:2px}
+  .dept-cols{display:grid;gap:24px;align-items:start}
+  @media(min-width:760px){.dept-cols{grid-template-columns:1fr 1fr}}
+  .dept-col{min-width:0}
+  /* 부서 계층 힌트는 문장 하나짜리라 다른 곳의 짧은 태그형 .hint(nowrap)와 달리 줄바꿈이 필요하다 —
+     2단 배치로 이 칸이 좁아지면서 nowrap 그대로 두면 옆 칸(본부 추가 등)을 침범해 겹쳐 보였다. */
+  .dept-col-tree .field-label .hint{white-space:normal}
   .dept-input{flex:1;min-width:120px;font-family:var(--sans);font-size:13px;color:var(--ink);
     background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:8px 10px}
   /* 본부 → 팀 계층(사용자 요청) — 본부(표준·커스텀)마다 카드 하나, 그 안에 소속 팀 칩을 나열.
@@ -794,29 +803,34 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     <button class="np-close" id="deptCloseBtn" aria-label="닫기">✕</button>
     <div class="cmp-title">⚙️ 부서 설정</div>
 
-    <div class="field-label">부서 계층 <span class="hint">본부 → 팀 · 표준 본부도 제외(삭제) 가능 — 기존 데이터는 유지되고 신규 분석에서만 제외, 언제든 복원 가능</span></div>
-    <div class="dept-tree" id="deptTree"></div>
+    <div class="dept-cols">
+      <div class="dept-col dept-col-tree">
+        <div class="field-label">부서 계층 <span class="hint">본부 → 팀 · 표준 본부도 제외(삭제) 가능 — 기존 데이터는 유지되고 신규 분석에서만 제외, 언제든 복원 가능</span></div>
+        <div class="dept-tree" id="deptTree"></div>
+      </div>
+      <div class="dept-col dept-col-forms">
+        <div class="field-label">본부 추가</div>
+        <div class="row">
+          <input type="text" class="dept-input" id="deptCustomInput" placeholder="예: R&D센터" maxlength="40">
+          <button class="btn" id="deptAddCustomBtn">추가</button>
+        </div>
 
-    <div class="field-label">본부 추가</div>
-    <div class="row">
-      <input type="text" class="dept-input" id="deptCustomInput" placeholder="예: R&D센터" maxlength="40">
-      <button class="btn" id="deptAddCustomBtn">추가</button>
-    </div>
+        <div class="field-label">팀 추가 <span class="hint">소속 본부 선택, 없으면 미지정</span></div>
+        <div class="row">
+          <input type="text" class="dept-input" id="deptTeamInput" placeholder="예: 영업팀" maxlength="40">
+          <span class="selwrap"><select class="model" id="deptTeamParentSelect"></select></span>
+          <button class="btn" id="deptAddTeamBtn">추가</button>
+        </div>
 
-    <div class="field-label">팀 추가 <span class="hint">소속 본부 선택, 없으면 미지정</span></div>
-    <div class="row">
-      <input type="text" class="dept-input" id="deptTeamInput" placeholder="예: 영업팀" maxlength="40">
-      <span class="selwrap"><select class="model" id="deptTeamParentSelect"></select></span>
-      <button class="btn" id="deptAddTeamBtn">추가</button>
+        <div class="field-label">매핑 규칙 <span class="hint">원문 표기 → 부서/팀, 표준화보다 우선 적용</span></div>
+        <div class="row">
+          <input type="text" class="dept-input" id="deptMapRawInput" placeholder="원문 표기 (예: AI실)" maxlength="40">
+          <span class="selwrap"><select class="model" id="deptMapDeptSelect"></select></span>
+          <button class="btn" id="deptAddMapBtn">추가</button>
+        </div>
+        <div class="dept-list" id="deptMapList"></div>
+      </div>
     </div>
-
-    <div class="field-label">매핑 규칙 <span class="hint">원문 표기 → 부서/팀, 표준화보다 우선 적용</span></div>
-    <div class="row">
-      <input type="text" class="dept-input" id="deptMapRawInput" placeholder="원문 표기 (예: AI실)" maxlength="40">
-      <span class="selwrap"><select class="model" id="deptMapDeptSelect"></select></span>
-      <button class="btn" id="deptAddMapBtn">추가</button>
-    </div>
-    <div class="dept-list" id="deptMapList"></div>
 
     <div class="cmp-actions" style="margin-top:16px">
       <button class="btn primary" id="deptSaveBtn">저장</button>
