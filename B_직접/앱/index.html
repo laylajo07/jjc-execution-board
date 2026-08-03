@@ -1625,10 +1625,31 @@ function canonStatus(v){
   if(/확인|검토|보류|review|pending/i.test(s))return '확인필요';
   return '추정';
 }
+// 신뢰도 버그 재요청 수정: "본부명(설명)" 표기(예: "고객솔루션본부(영업)")는 원래 [부서 표준화]
+// 표에 있는 그 본부 자체의 고정 별칭인데, 그 본부 아래 팀이 실제로 등록되면 "본부명(팀명)"
+// (예: "고객솔루션본부(영업팀)")과 글자 모양이 똑같아 서로 다른 뜻이 헷갈린다("영업"과 "영업팀"은
+// 다른 사람·다른 일일 수 있는데 같은 형식으로 보임). 프롬프트 지시만으로는 이 케이스가 매번
+// 걸러지지 않는 게 재현됐으므로(owner 미지정 문제와 같은 종류의 재발), 표시 직전 결정론적으로
+// 정리한다 — 그 본부 아래 등록된 팀이 있는데 괄호 안 문구가 그 팀명과 정확히 같지 않으면(=옛
+// 설명 표기로 추정) 괄호를 떼고 본부명만 남긴다. 그 본부에 등록된 팀이 아예 없으면 기존 표기를
+// 그대로 둔다(하위 호환 — 이 경우는 모호함이 없다).
+function cleanDeptLabel(dept,teamParents,teamNames){
+  const s=(dept==null?'':String(dept)).trim();
+  const m=s.match(/^(.+?)\((.+)\)$/);
+  if(!m)return s;
+  const base=m[1].trim(),paren=m[2].trim();
+  if(teamNames.has(paren))return s;
+  if(teamParents.has(base))return base;
+  return s;
+}
 function normalize(d){
   if(!d)return d;const mt=d.meeting||{};
+  const customTeams=(typeof BoardCustom!=='undefined'?BoardCustom.load().customTeams:[])||[];
+  const teamNames=new Set(customTeams.map(t=>t.name));
+  const teamParents=new Set(customTeams.filter(t=>t.parent).map(t=>t.parent));
+  const cleanDept=v=>cleanDeptLabel(v,teamParents,teamNames);
   const deps=(d.by_department||d.departments||[]).map(x=>({
-    dept:x.dept||x.name||'[미상]',
+    dept:cleanDept(x.dept||x.name||'[미상]'),
     action_items:(x.action_items||x.tasks||[]).map(a=>({what:a.what||a.content||'',owner:a.owner||'',due:a.due||a.deadline||'',status:canonStatus(a.status),basis:a.basis||''})),
     documents:(x.documents||[]).map(dd=>typeof dd==='string'?{doc:dd}:({doc:dd.doc||dd.name||dd.title||'',owner:dd.owner||'',due:dd.due||dd.deadline||'',purpose:dd.purpose||'',status:canonStatus(dd.status)})),
     decisions_needed:(x.decisions_needed||x.decisions||[]).map(dc=>({topic:dc.topic||dc.item||'',decider:dc.decider||'',due:dc.due||dc.deadline||'',precondition:dc.precondition||'',status:canonStatus(dc.status)})),
@@ -1644,11 +1665,14 @@ function normalize(d){
     pairs.forEach(p=>{ensure(p.after,p.dept);if(p.before){ensure(p.before,'');nm[p.after].blocked_by.push(p.before);}});
     seq=Object.keys(nm).map(function(k){return nm[k];});
   }
+  seq=seq.map(n=>({...n,dept:cleanDept(n.dept)}));
   let sm=d.share_messages;
   if(!sm||!sm.length){sm=(d.by_department||d.departments||[]).filter(x=>x.share_message).map(x=>({dept:x.dept||x.name||'',chat:x.share_message.chat||'',email_subject:x.share_message.email_subject||'',email_body:x.share_message.email||x.share_message.email_body||''}));}
   else sm=sm.map(m=>({dept:m.dept||'',chat:m.chat||'',email_subject:m.email_subject||'',email_body:m.email_body||m.email||''}));
+  sm=sm.map(m=>({...m,dept:cleanDept(m.dept)}));
+  const topActions=(d.top_actions||[]).map(t=>({what:t.what||'',owner:t.owner||'',due:t.due||'',dept:cleanDept(t.dept)}));
   return {meeting:{title:mt.title||'',datetime:mt.datetime||mt.date||'',attendees:mt.attendees||[]},
-    headline:d.headline||'',top_actions:d.top_actions||[],by_department:deps,sequence:seq,share_messages:sm,
+    headline:d.headline||'',top_actions:topActions,by_department:deps,sequence:seq,share_messages:sm,
     assumptions:d.assumptions||[],gaps:d.gaps||[]};
 }
 
