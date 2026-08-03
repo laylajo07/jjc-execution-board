@@ -1136,11 +1136,19 @@ function qualityScoreReasonLine(qs){
 // (담당자 미정·기한 미확정·의사결정 미확정 수)와 '확인필요' 상태 항목 수를 전/현재 회차 사이에서
 // 비교해 문구를 만든다. 지어내지 않는다 — 실제로 움직인 지표만 문장에 넣고, 아무것도 안 움직였으면
 // 점수만 그대로 알린다.
+// 신뢰도 버그 재요청 수정: "미결 사항 N건 해소" 문구의 N이 "미결→진행중→완료 흐름" 카드(바로
+// 아래 progressFlowHtml)가 세는 "미결" 수치와 반드시 같아야 한다(사용자 요청 — 화면에 보이는
+// 모든 수치가 그 카드와 대조 가능해야 함). progressFlowHtml의 bucket()은 action_items·documents·
+// decisions_needed 세 카테고리 전부에서 상태가 "확인필요"인 항목을 센다 — 이 함수는 그중
+// decisions_needed를 빠뜨리고 있어서, 의사결정 항목의 확인필요 건수가 회차 사이에 바뀌면
+// "해소" 문구의 숫자가 실제 미결 감소폭보다 작게 나오는 불일치가 있었다. 세 카테고리 전부를
+// 똑같이 세도록 맞춘다.
 function reviewPendingCount(board){
   let n=0;
   (board.by_department||[]).forEach(dep=>{
     (dep.action_items||[]).forEach(a=>{ if(a.status==='확인필요')n++; });
     (dep.documents||[]).forEach(x=>{ if(x.status==='확인필요')n++; });
+    (dep.decisions_needed||[]).forEach(x=>{ if(x.status==='확인필요')n++; });
   });
   return n;
 }
