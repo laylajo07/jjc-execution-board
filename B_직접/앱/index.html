@@ -417,7 +417,13 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   /* 두 카드 모두 이전보다 확실히 낮아지도록 공통 높이 상한을 두고, 넘치는 내용은 카드 각자
      내부 스크롤로만 처리(전체 행이 늘어나지 않게). 회차·항목이 적으면 스크롤 없이 그대로 보임. */
   .cmp-card{max-height:300px;overflow-y:auto}
-  .trend-svg{width:100%;height:auto;display:block}
+  /* 신뢰도 버그 재요청 수정: viewBox="0 0 440 165"(trendSvg)인데 SVG를 width:100%로 렌더링하면,
+     실제 렌더 폭이 440px보다 넓어지는 만큼 그 비율대로 내부 좌표계 전체(텍스트 font-size 포함)가
+     함께 확대된다 — 아래 .trend-val 등에 18/13/12px을 정확히 적어 둬도 실측 화면에선 그보다
+     크게 보이는 이유(실측: 카드 폭 491px에서 배율 1.2275배로 확대됨, 더 넓은 화면일수록 심해짐).
+     max-width를 viewBox 폭과 같은 값으로 못박아 렌더 폭이 그 값을 넘지 않게 해야, 이 배율이
+     항상 1 이하로 고정되어 font-size 값이 실제 화면에서도 정확히 그 크기로 보인다. */
+  .trend-svg{width:100%;max-width:440px;height:auto;display:block}
   .trend-axis{stroke:var(--line);stroke-width:1}
   /* 텍스트 위계(사용자 요청, #31-텍스트위계): 값(18/500/primary) > 회차 라벨(13/400/secondary)
      > 요인 라벨(12/400/muted). 굵기는 400·500만 사용, 크기는 11px 밑으로 내려가지 않음. */
@@ -1070,9 +1076,11 @@ function progressChangeListHtml(histProj){
 function trendSvg(pts,ariaLabel,color,unit){
   // 점수 텍스트가 18px로 커져(#31-텍스트위계) 상단 여백(PADY)과 데이터 포인트 간 가로 폭(W)을
   // 함께 넓힘 — 그대로 두면 회차 4개일 때 인접 포인트의 요인 라벨끼리 간격이 너무 좁아진다. 실측
-  // getBBox()로 재확인하며 320→360으로는 여전히 3유닛까지 좁혀지는 지점이 남아 400까지 늘림.
+  // getBBox()로 재확인하며 320→360→400까지 늘렸었으나, 가장 흔한 요인 라벨 "담당자 미정 N건"
+  // (dominantQsFactors)류의 실제 텍스트 폭으로 다시 실측하니 400에서도 첫째/둘째, 셋째/넷째
+  // 점 사이 라벨이 약 5유닛 겹치는 게 확인돼 440까지 늘림(신뢰도 버그 재요청 수정 중 함께 발견).
   // 모바일(좁은 화면)에서도 렌더 배율이 11px 미만으로 내려가지 않을 정도까지만 조정.
-  const W=400,H=165,PADX=24,PADY=44;
+  const W=440,H=165,PADX=24,PADY=44;
   const n=pts.length;
   const xAt=i=>PADX+(n>1?i*((W-2*PADX)/(n-1)):0);
   const yAt=s=>H-PADY-(Math.max(0,Math.min(100,s))/100)*(H-2*PADY);
