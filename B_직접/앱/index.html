@@ -417,19 +417,24 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   /* 두 카드 모두 이전보다 확실히 낮아지도록 공통 높이 상한을 두고, 넘치는 내용은 카드 각자
      내부 스크롤로만 처리(전체 행이 늘어나지 않게). 회차·항목이 적으면 스크롤 없이 그대로 보임. */
   .cmp-card{max-height:300px;overflow-y:auto}
-  /* 신뢰도 버그 재요청 수정: viewBox="0 0 440 165"(trendSvg)인데 SVG를 width:100%로 렌더링하면,
-     실제 렌더 폭이 440px보다 넓어지는 만큼 그 비율대로 내부 좌표계 전체(텍스트 font-size 포함)가
-     함께 확대된다 — 아래 .trend-val 등에 18/13/12px을 정확히 적어 둬도 실측 화면에선 그보다
-     크게 보이는 이유(실측: 카드 폭 491px에서 배율 1.2275배로 확대됨, 더 넓은 화면일수록 심해짐).
-     max-width를 viewBox 폭과 같은 값으로 못박아 렌더 폭이 그 값을 넘지 않게 해야, 이 배율이
-     항상 1 이하로 고정되어 font-size 값이 실제 화면에서도 정확히 그 크기로 보인다. */
-  .trend-svg{width:100%;max-width:440px;height:auto;display:block}
+  /* 신뢰도 버그 재요청(재발) 수정: max-width로 SVG 렌더 폭을 viewBox와 맞췄더니, "카드 크기 그대로
+     + 글자만 작게"가 아니라 그래프 전체(카드 크기)가 함께 작아져 옆 "프로젝트 진행률" 카드와
+     높이가 어긋났다 — SVG는 viewBox 배율이 요소 전부(선·점·글자)에 똑같이 걸리는 구조라, "그래프는
+     반응형으로 그대로 늘어나되 글자 px만 고정"은 SVG 안에 <text>로 넣는 한 애초에 불가능하다.
+     그래서 글자를 SVG 밖으로 빼서 HTML(.trend-overlay)로 절대위치 오버레이한다 — 위치(left/top)는
+     그래프 좌표를 퍼센트로 따라가 그래프 크기가 달라져도 점 위에 그대로 붙어 있지만, font-size는
+     일반 CSS 값이라 그래프가 얼마나 늘어나든 항상 이 값 그대로 렌더링된다. .trend-svg는 원래처럼
+     width:100%(제한 없음)로 되돌려 카드 폭이 옆 카드와 같은 비율로 늘어나게 유지한다. */
+  .trend-svg{width:100%;height:auto;display:block}
   .trend-axis{stroke:var(--line);stroke-width:1}
+  .trend-wrap{position:relative}
+  .trend-overlay{position:absolute;inset:0;pointer-events:none}
+  .trend-pt{position:absolute;white-space:nowrap;display:flex;flex-direction:column}
   /* 텍스트 위계(사용자 요청, #31-텍스트위계): 값(18/500/primary) > 회차 라벨(13/400/secondary)
      > 요인 라벨(12/400/muted). 굵기는 400·500만 사용, 크기는 11px 밑으로 내려가지 않음. */
-  .trend-val{font-size:18px;font-weight:500;fill:var(--text-primary)}
-  .trend-factor{font-size:12px;font-weight:400;fill:var(--text-muted)}
-  .trend-lab{font-size:13px;font-weight:400;fill:var(--text-secondary)}
+  .trend-val{font-size:18px;font-weight:500;color:var(--text-primary)}
+  .trend-factor{font-size:12px;font-weight:400;color:var(--text-muted)}
+  .trend-lab{font-size:13px;font-weight:400;color:var(--text-secondary)}
   .trend-reasons{margin-top:10px;display:flex;flex-direction:column;gap:5px}
   .trend-reason-row{font-size:13.5px;color:var(--muted);line-height:1.5;word-break:keep-all;overflow-wrap:break-word}
   /* 프로젝트 진행률 전용 렌더러(#31-재수정): 회의 품질 점수 그래프와 절대 재사용하지 않는 별도 컴포넌트.
@@ -1085,20 +1090,27 @@ function trendSvg(pts,ariaLabel,color,unit){
   const xAt=i=>PADX+(n>1?i*((W-2*PADX)/(n-1)):0);
   const yAt=s=>H-PADY-(Math.max(0,Math.min(100,s))/100)*(H-2*PADY);
   const line=pts.map((p,i)=>xAt(i)+','+yAt(p.score)).join(' ');
-  const marks=pts.map((p,i)=>{
-    const hasFactor=p.factor!=null&&p.factor!=='';
-    // 양 끝 점은 라벨을 중앙 정렬하면 텍스트 절반이 viewBox 밖으로 나가 잘린다(루트 svg는 기본
-    // overflow:hidden) — 첫 점은 왼쪽 정렬, 마지막 점은 오른쪽 정렬로 안쪽을 향해 자라게 한다.
-    const anchor=i===0?'start':(i===n-1?'end':'middle');
-    return `<circle cx="${xAt(i)}" cy="${yAt(p.score)}" r="4" fill="${color}"/>`+
-    `<text x="${xAt(i)}" y="${yAt(p.score)-(hasFactor?21:10)}" class="trend-val" text-anchor="${anchor}">${p.score}${unit}</text>`+
-    (hasFactor?`<text x="${xAt(i)}" y="${yAt(p.score)-9}" class="trend-factor" text-anchor="${anchor}">${esc(p.factor)}</text>`:'')+
-    `<text x="${xAt(i)}" y="${H-8}" class="trend-lab" text-anchor="${anchor}">${p.roundNo}차</text>`;
-  }).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="${esc(ariaLabel)}">`+
+  const dots=pts.map((p,i)=>`<circle cx="${xAt(i)}" cy="${yAt(p.score)}" r="4" fill="${color}"/>`).join('');
+  const svg=`<svg viewBox="0 0 ${W} ${H}" class="trend-svg" role="img" aria-label="${esc(ariaLabel)}">`+
     `<line x1="${PADX}" y1="${yAt(0)}" x2="${W-PADX}" y2="${yAt(0)}" class="trend-axis"/>`+
     `<polyline points="${line}" fill="none" stroke="${color}" stroke-width="2.5"/>`+
-    marks+`</svg>`;
+    dots+`</svg>`;
+  // 글자는 SVG viewBox 배율의 영향을 받지 않도록 HTML 오버레이로 그린다(위 .trend-overlay 주석
+  // 참고) — 위치(left/top)만 그래프 좌표를 퍼센트로 따라가고 font-size는 고정 px를 쓴다.
+  const overlay=pts.map((p,i)=>{
+    const hasFactor=p.factor!=null&&p.factor!=='';
+    // 양 끝 점은 중앙 정렬하면 텍스트 절반이 카드 밖으로 나가 잘린다 — 첫 점은 왼쪽 정렬,
+    // 마지막 점은 오른쪽 정렬로 안쪽을 향해 자라게 한다(기존 SVG text-anchor와 같은 규칙).
+    const align=i===0?'left':(i===n-1?'right':'center');
+    const xform=i===0?'translateX(0)':(i===n-1?'translateX(-100%)':'translateX(-50%)');
+    const leftPct=(xAt(i)/W*100).toFixed(2), valTopPct=(yAt(p.score)/H*100).toFixed(2), labTopPct=((H-16)/H*100).toFixed(2);
+    return `<div class="trend-pt" style="left:${leftPct}%;top:${valTopPct}%;text-align:${align};transform:${xform} translateY(calc(-100% - 8px))">`+
+      `<span class="trend-val">${p.score}${unit}</span>`+
+      (hasFactor?`<span class="trend-factor">${esc(p.factor)}</span>`:'')+
+    `</div>`+
+    `<div class="trend-pt trend-lab" style="left:${leftPct}%;top:${labTopPct}%;text-align:${align};transform:${xform}">${p.roundNo}차</div>`;
+  }).join('');
+  return `<div class="trend-wrap">${svg}<div class="trend-overlay">${overlay}</div></div>`;
 }
 function qualityTrendHtml(histProj){
   const rounds=histProj?ProjectStore.roundsSortedByNo(histProj):[];
