@@ -1682,7 +1682,18 @@ function isBlankV(v){v=(v==null?'':String(v)).trim();return !v||v==='미정'||v=
 function isUnsetDueV(v){return isBlankV(v)||/예시/.test(String(v==null?'':v));}
 // 담당자·결정자 표시 통일(사용자 요청): 값이 비었거나 미정·미상·[미상]·- 류(=isBlankV)면
 // 화면엔 "미지정 상태"로만 보여준다 — data-owner 필터·isBlankV 판정 등 원본 값 비교 로직은 그대로.
-function ownerLabel(v){ return isBlankV(v)?'미지정 상태':String(v==null?'':v); }
+// 신뢰도 버그 재요청(미해결) 수정: status가 "확정"(완료)인데 owner가 비어 있으면 "미지정 상태"만
+// 덩그러니 보여 "담당자 없이 저절로 완료됨"처럼 보였다(신고 사례: "경영본부는 ~를 확정했다"처럼
+// 원문 주어가 부서 자체인 문장). AI 프롬프트 보정만으로는 이 케이스가 매번 걸러지지 않는 게
+// 재현됐으므로(같은 문제 재발), 여기서 결정론적으로 안전판을 둔다 — 완료 항목에 한해 이미 확정적으로
+// 아는 값인 소속 부서명을 담당자 대신 보여준다(새 정보를 지어내는 게 아니라 이미 있는 dept를 쓰는 것).
+// status가 확정이 아니면(확인필요·추정) 기존대로 "미지정 상태"를 유지 — 그 경우는 실제로 불확실한
+// 상태라 모순이 없다. dept가 없을 때도 기존 동작 그대로.
+function ownerLabel(v,status,dept){
+  if(!isBlankV(v)) return String(v==null?'':v);
+  if(status==='확정' && dept) return dept;
+  return '미지정 상태';
+}
 // data-miss: 품질점수 클릭 하이라이트용. data-owner: 담당자 이름 클릭 필터용(비어있지 않을 때만).
 function rowMetaAttrs(owner,due){
   const f=[];if(isBlankV(owner))f.push('owner');if(isUnsetDueV(due))f.push('due');
@@ -1700,15 +1711,15 @@ function filterByOwner(items,getOwner){
 function tblAI(items,deptIdx,dept,diffTags){
   const rows=filterByOwner(items,a=>a.owner); if(!rows.length)return '';
   return `<div class="block"><div class="block__l">할 일</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-tag"></colgroup><tr><th>내용</th><th>담당</th><th>기한</th><th>상태</th></tr>`+
-    rows.map(({it:a,i})=>`<tr${rowMetaAttrs(a.owner,a.due)}><td title="${esc(a.what)}"><span class="clip2">${esc(a.what)}</span>${diffBadge(diffTags,deptIdx,dept,'action',i)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who" title="${esc(ownerLabel(a.owner))}"><span class="clip2">${esc(ownerLabel(a.owner))}</span></td><td class="when" title="${esc(a.due||'미정')}"><span class="clip2">${esc(a.due||'미정')}</span></td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
+    rows.map(({it:a,i})=>`<tr${rowMetaAttrs(a.owner,a.due)}><td title="${esc(a.what)}"><span class="clip2">${esc(a.what)}</span>${diffBadge(diffTags,deptIdx,dept,'action',i)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who" title="${esc(ownerLabel(a.owner,a.status,dept))}"><span class="clip2">${esc(ownerLabel(a.owner,a.status,dept))}</span></td><td class="when" title="${esc(a.due||'미정')}"><span class="clip2">${esc(a.due||'미정')}</span></td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
 function tblDoc(items,deptIdx,dept,diffTags){
   const rows=filterByOwner(items,d=>d.owner); if(!rows.length)return '';
   return `<div class="block"><div class="block__l">작성 문서</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-note"></colgroup><tr><th>문서</th><th>담당</th><th>기한</th><th>목적</th></tr>`+
-    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.owner,d.due)}><td title="${esc(d.doc)}"><span class="clip2">${esc(d.doc)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'doc',i)}</td><td class="who" title="${esc(ownerLabel(d.owner))}"><span class="clip2">${esc(ownerLabel(d.owner))}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.purpose||'')}</td></tr>`).join('')+`</table></div>`;}
+    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.owner,d.due)}><td title="${esc(d.doc)}"><span class="clip2">${esc(d.doc)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'doc',i)}</td><td class="who" title="${esc(ownerLabel(d.owner,d.status,dept))}"><span class="clip2">${esc(ownerLabel(d.owner,d.status,dept))}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.purpose||'')}</td></tr>`).join('')+`</table></div>`;}
 function tblDec(items,deptIdx,dept,diffTags){
   const rows=filterByOwner(items,d=>d.decider); if(!rows.length)return '';
   return `<div class="block"><div class="block__l">의사결정 필요</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-note"></colgroup><tr><th>안건</th><th>결정자</th><th>기한</th><th>선행조건</th></tr>`+
-    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.decider,d.due)}><td title="${esc(d.topic)}"><span class="clip2">${esc(d.topic)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'decision',i)}</td><td class="who" title="${esc(ownerLabel(d.decider))}"><span class="clip2">${esc(ownerLabel(d.decider))}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
+    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.decider,d.due)}><td title="${esc(d.topic)}"><span class="clip2">${esc(d.topic)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'decision',i)}</td><td class="who" title="${esc(ownerLabel(d.decider,d.status,dept))}"><span class="clip2">${esc(ownerLabel(d.decider,d.status,dept))}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
 function secH(n,t){return `<div class="sec-h"><span class="n mono">${n}</span><h3>${t}</h3><span class="rule"></span></div>`;}
 
 /* 노드 상세 팝업 (#2) — 가운데 모달 + 이전/다음 탐색(#3) */
