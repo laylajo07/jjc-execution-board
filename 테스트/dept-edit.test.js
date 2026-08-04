@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
-  renameDept, moveDept, setHideDept, deleteDept, mergeDepts, addDept, visibleBoard
+  renameDept, moveDept, setHideDept, deleteDept, mergeDepts, addDept, setItemOwner, visibleBoard
 } = require('../B_직접/앱/dept-edit.js');
 const { buildGraph } = require('../B_직접/앱/graph.js');
 
@@ -466,6 +466,80 @@ test('반환 board는 meeting·gaps 등 다른 필드를 그대로 보존한다'
   const out = renameDept(board, 1, '리스크본부');
   assert.deepEqual(out.meeting, board.meeting);
   assert.deepEqual(out.gaps, board.gaps);
+});
+
+// ---------------------------------------------------------------------------
+// 9. setItemOwner — 담당자/결정자 지정(지시사항 35~42)
+// ---------------------------------------------------------------------------
+
+test('setItemOwner: action 항목의 owner를 지정한다', () => {
+  const board = makeBoard();
+  const out = setItemOwner(board, 0, 'action', 0, '법무실 · 계약팀 · 홍길동');
+  assert.equal(out.by_department[0].action_items[0].owner, '법무실 · 계약팀 · 홍길동');
+  assert.equal(board.by_department[0].action_items[0].owner, '법무1', '원본은 안 바뀐다');
+});
+
+test('setItemOwner: doc 항목의 owner를 지정한다', () => {
+  const board = makeBoard();
+  const out = setItemOwner(board, 1, 'doc', 0, 'CB본부 · · 김본부');
+  assert.equal(out.by_department[1].documents[0].owner, 'CB본부 · · 김본부');
+});
+
+test('setItemOwner: decision 항목은 decider 필드에 지정한다', () => {
+  const board = makeBoard();
+  const out = setItemOwner(board, 2, 'decision', 0, '경영본부');
+  assert.equal(out.by_department[2].decisions_needed[0].decider, '경영본부');
+});
+
+test('setItemOwner: 팀만 지정하고 이름은 비워도 그대로 저장된다(지시 42)', () => {
+  const board = makeBoard();
+  const out = setItemOwner(board, 0, 'action', 0, '법무실 · 계약팀');
+  assert.equal(out.by_department[0].action_items[0].owner, '법무실 · 계약팀');
+});
+
+test('setItemOwner: 앞뒤 공백은 trim된다', () => {
+  const board = makeBoard();
+  const out = setItemOwner(board, 0, 'action', 0, '  홍길동  ');
+  assert.equal(out.by_department[0].action_items[0].owner, '홍길동');
+});
+
+test('setItemOwner: 값이 그대로면 원본 board를 그대로 반환한다', () => {
+  const board = makeBoard();
+  const out = setItemOwner(board, 0, 'action', 0, '법무1');
+  assert.equal(out, board);
+});
+
+test('setItemOwner: kind가 잘못되면 조용히 원본을 반환한다', () => {
+  const board = makeBoard();
+  assert.equal(setItemOwner(board, 0, 'nope', 0, '이름'), board);
+});
+
+test('setItemOwner: deptIdx·itemIdx가 범위 밖이면 조용히 원본을 반환한다', () => {
+  const board = makeBoard();
+  assert.equal(setItemOwner(board, 99, 'action', 0, '이름'), board);
+  assert.equal(setItemOwner(board, -1, 'action', 0, '이름'), board);
+  assert.equal(setItemOwner(board, 0, 'action', 99, '이름'), board);
+  assert.equal(setItemOwner(board, 0, 'action', -1, '이름'), board);
+});
+
+test('setItemOwner: board가 null/undefined면 조용히 원본을 반환한다', () => {
+  assert.equal(setItemOwner(null, 0, 'action', 0, '이름'), null);
+  assert.equal(setItemOwner(undefined, 0, 'action', 0, '이름'), undefined);
+});
+
+test('setItemOwner: sequence·다른 부서·다른 항목은 건드리지 않는다', () => {
+  const board = makeBoard();
+  const out = setItemOwner(board, 0, 'action', 0, '홍길동');
+  assert.equal(out.sequence, board.sequence, 'sequence 참조는 그대로여야 한다(담당자 지정은 선후행에 영향 없음)');
+  assert.equal(out.by_department[1], board.by_department[1], '건드리지 않은 부서는 참조를 공유해도 된다');
+  assert.notEqual(out.by_department[0], board.by_department[0], '수정된 부서는 사본이어야 한다');
+});
+
+test('setItemOwner: 입력 board를 변형하지 않는다', () => {
+  const board = makeBoard();
+  const before = snapshot(board);
+  setItemOwner(board, 0, 'action', 0, '홍길동');
+  assert.equal(snapshot(board), before);
 });
 
 // ---------------------------------------------------------------------------

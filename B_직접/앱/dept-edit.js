@@ -1,4 +1,4 @@
-/* 조정치 · 부서 편집 — 실행보드에 적용하는 6종 편집(이름변경/이동/숨김/삭제/병합/추가) + 표시용 헬퍼 1종.
+/* 조정치 · 부서 편집 — 실행보드에 적용하는 7종 편집(이름변경/이동/숨김/삭제/병합/추가/담당자지정) + 표시용 헬퍼 1종.
    순수(DOM·localStorage 접근 없음): 입력 board와 그 중첩 배열·객체를 변형하지 않고 새 board를 반환한다.
    file:// 더블클릭 지원을 위해 클래식 스크립트다. A·B 바이트 동일. */
 (function (root) {
@@ -216,6 +216,36 @@
     return cloneBoard(board, newDepts, seqOf(board)); // sequence는 안 건드린다
   }
 
+  // kind→담당 필드 매핑(사용자 요청: 담당자 지정 기능, 지시사항 35~42). action/doc은 owner,
+  // decision은 decider — qualityScore의 ownerMissing 집계도 이미 이 셋을 같은 개념으로 묶어 세므로
+  // (board-derive.js) 여기서도 셋 다 대상으로 다룬다.
+  var OWNER_FIELD = { action: 'owner', doc: 'owner', decision: 'decider' };
+  var OWNER_LIST = { action: 'action_items', doc: 'documents', decision: 'decisions_needed' };
+
+  // 담당자/결정자 지정(팝오버 저장) — sequence는 안 건드린다(담당자 배정은 선후행 관계에 영향 없음).
+  // ownerValue는 이미 조립된 표시 문자열("본부 · 팀 · 이름" 또는 그 일부)을 그대로 저장한다.
+  function setItemOwner(board, deptIdx, kind, itemIdx, ownerValue) {
+    if (!isBoard(board)) return board;
+    var field = OWNER_FIELD[kind], listKey = OWNER_LIST[kind];
+    if (!field) return board;
+    var depts = board.by_department;
+    if (!isValidIdx(deptIdx, depts.length)) return board;
+    var dept = depts[deptIdx];
+    var list = Array.isArray(dept[listKey]) ? dept[listKey] : [];
+    if (!isValidIdx(itemIdx, list.length)) return board;
+
+    var value = typeof ownerValue === 'string' ? ownerValue.trim() : '';
+    var item = list[itemIdx];
+    if ((item[field] || '') === value) return board; // 변화 없음 — 원본 그대로
+
+    var newList = list.slice();
+    newList[itemIdx] = assign({}, item, (function () { var o = {}; o[field] = value; return o; })());
+    var newDept = assign({}, dept, (function () { var o = {}; o[listKey] = newList; return o; })());
+    var newDepts = depts.slice();
+    newDepts[deptIdx] = newDept;
+    return cloneBoard(board, newDepts, seqOf(board));
+  }
+
   // 헬퍼(설계 2-1엔 없는 7번째 함수): 숨긴 부서를 실제로 제외한 board를 만든다.
   // 렌더·MD·JSON 출력이 이 하나를 공유해 "숨김 → DAG 노드도 제외" 규칙이 세 곳에서 어긋나지 않게 한다.
   // 원본 board는 그대로 둔다(숨김은 되돌릴 수 있어야 하므로) — 항상 새 board를 반환.
@@ -237,6 +267,7 @@
     deleteDept: deleteDept,
     mergeDepts: mergeDepts,
     addDept: addDept,
+    setItemOwner: setItemOwner,
     visibleBoard: visibleBoard
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

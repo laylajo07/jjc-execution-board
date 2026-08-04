@@ -511,6 +511,18 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
   /* 담당자 이름 클릭 필터(#11) */
   tr[data-owner] .who{cursor:pointer}
   tr[data-owner] .who:hover .clip2{text-decoration:underline;text-decoration-color:var(--primary)}
+  /* 담당자 지정 팝오버 트리거(지시 35~42) — "미지정 상태" 배지 자체를 버튼으로 만든다 */
+  .who-assign{all:unset;cursor:pointer;display:inline-block;max-width:100%;color:var(--primary);border-bottom:1px dashed var(--primary)}
+  .who-assign:hover{color:var(--primary-ink);border-bottom-style:solid}
+  .who-assign .clip2{color:inherit}
+  /* 담당자 지정 팝오버 본체 — 클릭한 배지 옆에 뜨는 인라인 폼(지시 37) */
+  .assign-popover{position:fixed;z-index:80;width:260px;max-width:calc(100vw - 16px);background:var(--surface);
+    border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px 16px;text-align:left}
+  .assign-popover .field-label{font-size:12.5px;color:var(--muted);margin:10px 0 4px}
+  .assign-popover .field-label:first-of-type{margin-top:0}
+  .assign-popover select,.assign-popover input{width:100%}
+  .assign-goto{display:block;font-size:12.5px;margin-top:6px;color:var(--primary)}
+  .assign-popover .cmp-actions{display:flex;gap:8px;justify-content:flex-end}
   .owner-filter-bar{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink2);
     background:var(--primary-soft);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;transition:box-shadow .3s}
   .owner-filter-bar.flash{box-shadow:0 0 0 3px var(--primary)}
@@ -864,6 +876,19 @@ STEP 7. 검증: JSON 유효성, 부서 누락 여부, "확정"으로 잘못 단�
     <div class="cmp-actions" style="margin-top:16px">
       <button class="btn primary" id="deptSaveBtn">저장</button>
     </div>
+  </div>
+</div>
+<div class="assign-popover" id="assignPopover" role="dialog" aria-label="담당자 지정" hidden>
+  <div class="field-label">본부</div>
+  <select class="model" id="assignHqSelect"></select>
+  <div class="field-label">팀 <span class="hint">없으면 미지정</span></div>
+  <select class="model" id="assignTeamSelect"></select>
+  <a href="#" id="assignGotoDeptSettings" class="assign-goto">＋ 부서 설정에서 추가하기</a>
+  <div class="field-label">이름 <span class="hint">비워두면 팀 단위 담당으로 저장</span></div>
+  <input type="text" class="dept-input" id="assignNameInput" maxlength="40" placeholder="예: 홍길동">
+  <div class="cmp-actions" style="margin-top:14px">
+    <button type="button" class="btn" id="assignCancelBtn">취소</button>
+    <button type="button" class="btn primary" id="assignSaveBtn">저장</button>
   </div>
 </div>
 <div class="np-overlay" id="npOverlay"></div>
@@ -1368,7 +1393,21 @@ function deptOpen(){
   $('#deptOverlay').classList.add('on');
   $('#deptCloseBtn').focus();
 }
-function deptClose(){ $('#deptOverlay').classList.remove('on'); $('#deptCfgBtn').focus(); }
+function deptClose(){
+  $('#deptOverlay').classList.remove('on'); $('#deptCfgBtn').focus();
+  // 담당자 지정 팝오버 → "+ 부서 설정에서 추가하기"로 넘어온 경우, 저장/취소 어느 쪽으로 닫히든
+  // 원래 항목의 팝오버로 복귀한다(지시 40) — deptClose는 저장·닫기버튼·바깥클릭·Esc 네 경로가 모두 거친다.
+  // setTimeout으로 한 틱 미루는 이유: deptClose를 부른 원래 클릭 이벤트(예: 저장 버튼)가 이 함수
+  // 리턴 후 document까지 버블링을 계속하는데, 그 버블링 도중 "팝오버 바깥 클릭 시 닫기" 리스너가
+  // 지금 막 연 팝오버를 같은 이벤트 안에서 즉시 닫혀버리는 문제가 있었다(실제 재현·수정).
+  if(pendingAssignReopen){
+    const t=pendingAssignReopen; pendingAssignReopen=null;
+    setTimeout(()=>{
+      const btn=document.querySelector(`.who-assign[data-dept-idx="${t.deptIdx}"][data-kind="${t.kind}"][data-item-idx="${t.itemIdx}"]`);
+      if(btn) openAssignPopover(t.deptIdx,t.kind,t.itemIdx,btn,t.draft);
+    },0);
+  }
+}
 function deptAddCustom(){
   const v=$('#deptCustomInput').value.trim();
   if(!v || BoardCustom.STD_DEPTS.includes(v) || deptTempDepts.includes(v)){ $('#deptCustomInput').value=''; return; }
@@ -1442,6 +1481,95 @@ $('#deptMapList').addEventListener('click',e=>{ const b=e.target.closest('button
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape' && $('#deptOverlay').classList.contains('on')){ deptClose(); e.stopImmediatePropagation(); }
 });
+
+/* 담당자 지정 팝오버(지시사항 35~42) — '부서별 실행 항목' 탭의 "미지정 상태" 배지 클릭 시
+   본부/팀/이름 인라인 폼을 배지 옆에 띄우고, 저장 시 DeptEdit.setItemOwner로 board를 갱신한다.
+   본부·팀 드롭다운은 '부서 설정' 데이터를 읽기 전용으로 참조한다(지시 39) — BoardCustom.load()로
+   매번 새로 읽어서, 팝오버가 세션 중 한 번도 '부서 설정'을 안 열어봤어도 최신값을 보여준다. */
+let assignTarget=null;          // {deptIdx,kind,itemIdx} — 팝오버가 열려 있는 동안의 대상
+let pendingAssignReopen=null;   // {deptIdx,kind,itemIdx,draft} — "+ 부서 설정에서 추가하기"로 나갔다가 돌아올 대상(지시 40)
+
+function assignHqOptions(){
+  const cfg=BoardCustom.load();
+  return BoardCustom.STD_DEPTS.filter(d=>!cfg.removedStdDepts.includes(d)).concat(cfg.customDepts);
+}
+function assignTeamOptions(hq){
+  return BoardCustom.load().customTeams.filter(t=>t.parent===hq).map(t=>t.name);
+}
+// 항목이 속한 섹션명을 본부 드롭다운 기본값으로 추정한다(지시 38) — 표준화 단계에서 dept가
+// "본부명(팀명)" 형태로 합성될 수 있어(cleanDeptLabel) 괄호 앞부분으로도 한 번 더 시도한다.
+// 어느 쪽도 등록된 본부와 안 맞으면(팀명 자체가 섹션명인 경우 등) 첫 옵션으로 물러난다.
+function guessAssignHq(deptLabel,options){
+  if(options.includes(deptLabel)) return deptLabel;
+  const base=String(deptLabel||'').replace(/\(.*$/,'').trim();
+  if(options.includes(base)) return base;
+  return options[0]||'';
+}
+function renderAssignHqSelect(selected){
+  const opts=assignHqOptions();
+  $('#assignHqSelect').innerHTML=opts.map(d=>`<option value="${esc(d)}"${d===selected?' selected':''}>${esc(d)}</option>`).join('');
+}
+function renderAssignTeamSelect(hq,selected){
+  const teams=assignTeamOptions(hq);
+  $('#assignTeamSelect').innerHTML='<option value="">(미지정)</option>'+
+    teams.map(t=>`<option value="${esc(t)}"${t===selected?' selected':''}>${esc(t)}</option>`).join('');
+}
+// 뷰포트 안에 들어오도록 배지 아래(공간 없으면 위)에 붙인다. 크기 측정을 위해 먼저 표시한 뒤 좌표를 잡는다.
+function positionAssignPopover(anchorEl){
+  const pop=$('#assignPopover');
+  const r=anchorEl.getBoundingClientRect();
+  const margin=8, gap=6, pw=pop.offsetWidth||260, ph=pop.offsetHeight||220;
+  let left=r.left, top=r.bottom+gap;
+  if(left+pw>window.innerWidth-margin) left=window.innerWidth-margin-pw;
+  if(left<margin) left=margin;
+  if(top+ph>window.innerHeight-margin) top=Math.max(margin, r.top-ph-gap);
+  pop.style.left=left+'px'; pop.style.top=top+'px';
+}
+function openAssignPopover(deptIdx,kind,itemIdx,anchorEl,draft){
+  assignTarget={deptIdx,kind,itemIdx};
+  const dep=lastBoard && Array.isArray(lastBoard.by_department) ? lastBoard.by_department[deptIdx] : null;
+  const opts=assignHqOptions();
+  const hq=draft?draft.hq:guessAssignHq(dep?dep.dept:'',opts);
+  renderAssignHqSelect(hq);
+  renderAssignTeamSelect(hq,draft?draft.team:'');
+  $('#assignNameInput').value=draft?draft.name:'';
+  $('#assignPopover').hidden=false;
+  positionAssignPopover(anchorEl);
+  $('#assignHqSelect').focus();
+}
+function closeAssignPopover(){ $('#assignPopover').hidden=true; assignTarget=null; }
+$('#assignHqSelect').onchange=()=>renderAssignTeamSelect($('#assignHqSelect').value,'');
+$('#assignCancelBtn').onclick=()=>closeAssignPopover();
+$('#assignSaveBtn').onclick=()=>{
+  if(!assignTarget) return;
+  const hq=$('#assignHqSelect').value.trim();
+  const team=$('#assignTeamSelect').value.trim();
+  const name=$('#assignNameInput').value.trim();
+  const ownerValue=[hq,team,name].filter(Boolean).join(' · ');
+  const {deptIdx,kind,itemIdx}=assignTarget;
+  closeAssignPopover();
+  applyEdit(DeptEdit.setItemOwner(lastBoard,deptIdx,kind,itemIdx,ownerValue));
+  toast('담당자가 지정되었습니다');
+};
+$('#assignGotoDeptSettings').onclick=e=>{
+  e.preventDefault();
+  if(!assignTarget) return;
+  pendingAssignReopen={
+    deptIdx:assignTarget.deptIdx, kind:assignTarget.kind, itemIdx:assignTarget.itemIdx,
+    draft:{hq:$('#assignHqSelect').value, team:$('#assignTeamSelect').value, name:$('#assignNameInput').value}
+  };
+  closeAssignPopover();
+  deptOpen();
+};
+document.addEventListener('click',e=>{
+  if($('#assignPopover').hidden) return;
+  if(e.target.closest('#assignPopover') || e.target.closest('.who-assign')) return;
+  closeAssignPopover();
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape' && !$('#assignPopover').hidden){ closeAssignPopover(); e.stopImmediatePropagation(); }
+});
+window.addEventListener('scroll',()=>{ if(!$('#assignPopover').hidden) closeAssignPopover(); },true);
 
 /* theme toggle */
 (function(){const saved=localStorage.getItem('jjc-theme');if(saved)document.documentElement.setAttribute('data-theme',saved);})();
@@ -1746,6 +1874,13 @@ function ownerLabel(v,status,dept){
   if(status==='확정' && dept) return dept;
   return '미지정 상태';
 }
+// 담당자 지정 팝오버(지시 35~42) 트리거 — "미지정 상태" 배지로 실제 표시될 때만 클릭 가능하게 만든다.
+// (확정 항목이 dept로 대체 표시되는 경우는 이미 알려진 값이라 팝오버 대상이 아니다.)
+function whoCell(ownerVal,status,dept,deptIdx,kind,i){
+  const label=ownerLabel(ownerVal,status,dept);
+  if(label!=='미지정 상태') return `<span class="clip2">${esc(label)}</span>`;
+  return `<button type="button" class="who-assign" data-dept-idx="${deptIdx}" data-kind="${kind}" data-item-idx="${i}"><span class="clip2">${esc(label)}</span></button>`;
+}
 // data-miss: 품질점수 클릭 하이라이트용. data-owner: 담당자 이름 클릭 필터용(비어있지 않을 때만).
 function rowMetaAttrs(owner,due){
   const f=[];if(isBlankV(owner))f.push('owner');if(isUnsetDueV(due))f.push('due');
@@ -1763,15 +1898,15 @@ function filterByOwner(items,getOwner){
 function tblAI(items,deptIdx,dept,diffTags){
   const rows=filterByOwner(items,a=>a.owner); if(!rows.length)return '';
   return `<div class="block"><div class="block__l">할 일</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-tag"></colgroup><tr><th>내용</th><th>담당</th><th>기한</th><th>상태</th></tr>`+
-    rows.map(({it:a,i})=>`<tr${rowMetaAttrs(a.owner,a.due)}><td title="${esc(a.what)}"><span class="clip2">${esc(a.what)}</span>${diffBadge(diffTags,deptIdx,dept,'action',i)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who" title="${esc(ownerLabel(a.owner,a.status,dept))}"><span class="clip2">${esc(ownerLabel(a.owner,a.status,dept))}</span></td><td class="when" title="${esc(a.due||'미정')}"><span class="clip2">${esc(a.due||'미정')}</span></td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
+    rows.map(({it:a,i})=>`<tr${rowMetaAttrs(a.owner,a.due)}><td title="${esc(a.what)}"><span class="clip2">${esc(a.what)}</span>${diffBadge(diffTags,deptIdx,dept,'action',i)}${a.basis?`<div class="basis">↳ ${esc(a.basis)}</div>`:''}</td><td class="who" title="${esc(ownerLabel(a.owner,a.status,dept))}">${whoCell(a.owner,a.status,dept,deptIdx,'action',i)}</td><td class="when" title="${esc(a.due||'미정')}"><span class="clip2">${esc(a.due||'미정')}</span></td><td>${tag(a.status)}</td></tr>`).join('')+`</table></div>`;}
 function tblDoc(items,deptIdx,dept,diffTags){
   const rows=filterByOwner(items,d=>d.owner); if(!rows.length)return '';
   return `<div class="block"><div class="block__l">작성 문서</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-note"></colgroup><tr><th>문서</th><th>담당</th><th>기한</th><th>목적</th></tr>`+
-    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.owner,d.due)}><td title="${esc(d.doc)}"><span class="clip2">${esc(d.doc)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'doc',i)}</td><td class="who" title="${esc(ownerLabel(d.owner,d.status,dept))}"><span class="clip2">${esc(ownerLabel(d.owner,d.status,dept))}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.purpose||'')}</td></tr>`).join('')+`</table></div>`;}
+    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.owner,d.due)}><td title="${esc(d.doc)}"><span class="clip2">${esc(d.doc)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'doc',i)}</td><td class="who" title="${esc(ownerLabel(d.owner,d.status,dept))}">${whoCell(d.owner,d.status,dept,deptIdx,'doc',i)}</td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.purpose||'')}</td></tr>`).join('')+`</table></div>`;}
 function tblDec(items,deptIdx,dept,diffTags){
   const rows=filterByOwner(items,d=>d.decider); if(!rows.length)return '';
   return `<div class="block"><div class="block__l">의사결정 필요</div><table class="t"><colgroup><col><col class="c-who"><col class="c-when"><col class="c-note"></colgroup><tr><th>안건</th><th>결정자</th><th>기한</th><th>선행조건</th></tr>`+
-    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.decider,d.due)}><td title="${esc(d.topic)}"><span class="clip2">${esc(d.topic)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'decision',i)}</td><td class="who" title="${esc(ownerLabel(d.decider,d.status,dept))}"><span class="clip2">${esc(ownerLabel(d.decider,d.status,dept))}</span></td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
+    rows.map(({it:d,i})=>`<tr${rowMetaAttrs(d.decider,d.due)}><td title="${esc(d.topic)}"><span class="clip2">${esc(d.topic)}</span> ${tag(d.status)}${diffBadge(diffTags,deptIdx,dept,'decision',i)}</td><td class="who" title="${esc(ownerLabel(d.decider,d.status,dept))}">${whoCell(d.decider,d.status,dept,deptIdx,'decision',i)}</td><td class="when" title="${esc(d.due||'미정')}"><span class="clip2">${esc(d.due||'미정')}</span></td><td>${esc(d.precondition||'')}</td></tr>`).join('')+`</table></div>`;}
 function secH(n,t){return `<div class="sec-h"><span class="n mono">${n}</span><h3>${t}</h3><span class="rule"></span></div>`;}
 
 /* 노드 상세 팝업 (#2) — 가운데 모달 + 이전/다음 탐색(#3) */
@@ -2346,6 +2481,10 @@ function renderBoard(d, raw){
     card.onclick=()=>{ ownerFilter=(ownerFilter===card.dataset.owner)?null:card.dataset.owner; renderBoard(lastBoard); };
   });
   if($('#ownerFilterClear')) $('#ownerFilterClear').onclick=()=>{ ownerFilter=null; renderBoard(lastBoard); };
+  // 담당자 지정 팝오버(지시 35~42) — "미지정 상태" 배지 클릭 시 오픈.
+  document.querySelectorAll('.who-assign').forEach(btn=>{
+    btn.onclick=e=>{ e.stopPropagation(); openAssignPopover(+btn.dataset.deptIdx, btn.dataset.kind, +btn.dataset.itemIdx, btn); };
+  });
   if($('#checklistCopyBtn')) $('#checklistCopyBtn').onclick=()=>copy(checklistText);
   // 신규/변경/완료 필터(변경점 카드): 클릭한 태그의 항목만 표시, 같은 태그 재클릭 시 전체 표시로 해제.
   let cdActiveFilter=null;
