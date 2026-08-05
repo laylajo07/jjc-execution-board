@@ -1526,7 +1526,7 @@ function positionAssignPopover(anchorEl){
   pop.style.left=left+'px'; pop.style.top=top+'px';
 }
 function openAssignPopover(deptIdx,kind,itemIdx,anchorEl,draft){
-  assignTarget={deptIdx,kind,itemIdx};
+  assignTarget={deptIdx,kind,itemIdx,anchorEl};
   const dep=lastBoard && Array.isArray(lastBoard.by_department) ? lastBoard.by_department[deptIdx] : null;
   const opts=assignHqOptions();
   const hq=draft?draft.hq:guessAssignHq(dep?dep.dept:'',opts);
@@ -1537,15 +1537,28 @@ function openAssignPopover(deptIdx,kind,itemIdx,anchorEl,draft){
   positionAssignPopover(anchorEl);
   $('#assignHqSelect').focus();
 }
-function closeAssignPopover(){ $('#assignPopover').hidden=true; assignTarget=null; }
+// 닫힐 때 트리거였던 배지로 포커스를 되돌린다(다른 다이얼로그의 닫기 관례와 일관 — deptClose가
+// deptCfgBtn을 되돌리는 것과 동일). 저장 경로는 곧이어 renderBoard가 이 배지를 통째로 교체하므로
+// 포커스 복귀가 즉시 무의미해지지만, 그 자체로 해로울 건 없어 분기 없이 공용으로 둔다.
+function closeAssignPopover(){
+  const t=assignTarget;
+  $('#assignPopover').hidden=true; assignTarget=null;
+  if(t && t.anchorEl && document.contains(t.anchorEl)) t.anchorEl.focus();
+}
 $('#assignHqSelect').onchange=()=>renderAssignTeamSelect($('#assignHqSelect').value,'');
 $('#assignCancelBtn').onclick=()=>closeAssignPopover();
+$('#assignNameInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); $('#assignSaveBtn').click(); } });
 $('#assignSaveBtn').onclick=()=>{
   if(!assignTarget) return;
   const hq=$('#assignHqSelect').value.trim();
   const team=$('#assignTeamSelect').value.trim();
   const name=$('#assignNameInput').value.trim();
   const ownerValue=[hq,team,name].filter(Boolean).join(' · ');
+  // 표준 본부를 전부 제외하고 추가 부서도 없으면 본부 드롭다운이 비어 ownerValue가 빈 문자열이
+  // 될 수 있다 — 이때 그냥 진행하면 setItemOwner가 무변화 no-op을 반환하는데도 "지정되었습니다"
+  // 토스트가 떠서 실제로는 아무 것도 안 바뀐 채 성공한 것처럼 보인다(자체감사 발견) — 저장을
+  // 막고 원인을 안내한다.
+  if(!ownerValue){ toast('본부를 최소 1개 등록해야 담당자를 지정할 수 있습니다'); return; }
   const {deptIdx,kind,itemIdx}=assignTarget;
   closeAssignPopover();
   applyEdit(DeptEdit.setItemOwner(lastBoard,deptIdx,kind,itemIdx,ownerValue));
